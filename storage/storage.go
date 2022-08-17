@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/LovePelmeni/Intra/exceptions"
+	"github.com/LovePelmeni/Infrastructure/exceptions"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/types"
 )

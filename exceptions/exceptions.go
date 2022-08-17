@@ -25,3 +25,11 @@ func VMDeployFailure() error {
 func VMShutdownFailure() error {
 	return errors.New("Failed to Shutdown Virtual Machine")
 }
+
+func DeployFromLibraryFailure() error {
+	return errors.New("Failed to Deploy Virtual Machine from the Library")
+}
+
+func NoResourceAvailable() error {
+	return errors.New("No That Amount of Resource available Now :(")
+}

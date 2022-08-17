@@ -2,6 +2,8 @@ package rest
 
 import (
 	"context"
+	_ "net"
+	_ "net/smtp"
 	"net/url"
 	"os"
 	"time"
@@ -9,8 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/vapi/rest"
+	_ "github.com/xhit/go-simple-mail/v2"
 )
 
+// Insfrastructure API Environment Variables
 var (
 	APIIp    = os.Getenv("API_SOURCE_IP")
 	Username = os.Getenv("API_SOURCE_USERNAME")
@@ -22,6 +26,14 @@ var (
 		Host:   APIIp,
 		User:   url.UserPassword(Username, Password),
 	}
+)
+
+var (
+	SUPPORT_EMAIL_ADDRESS  = os.Getenv("SUPPORT_EMAIL_ADDRESS")
+	SUPPORT_EMAIL_PASSWORD = os.Getenv("SUPPORT_EMAIL_PASSWORD")
+
+	SUPPORT_CLIENT_EMAIL_ADDRESS  = os.Getenv("SUPPORT_CLIENT_EMAIL_ADDRESS")
+	SUPPORT_CLIENT_EMAIL_PASSWORD = os.Getenv("SUPPORT_CLIENT_EMAIL_PASSWORD")
 )
 
 func init() {
@@ -84,5 +96,4 @@ func RemoveVirtualMachineRestController(context *gin.Context) {
 }
 
 func SupportRestController(context *gin.Context) {
-
 }
