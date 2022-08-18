@@ -2,12 +2,15 @@ package rest
 
 import (
 	"context"
+	"encoding/json"
 	_ "net"
+	"net/http"
 	_ "net/smtp"
 	"net/url"
 	"os"
 	"time"
 
+	"github.com/LovePelmeni/Infrastructure/suggestions"
 	"github.com/gin-gonic/gin"
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/vapi/rest"
@@ -95,5 +98,38 @@ func RemoveVirtualMachineRestController(context *gin.Context) {
 
 }
 
+// Support Rest API Endpoints
+
 func SupportRestController(context *gin.Context) {
+}
+
+// Resources Rest API Endpoints
+
+func GetAvailableResourcesInfoRestController(context *gin.Context) {
+
+	// Rest Endpoint, Returns All Available Resources, to Configure the Virtual Machine Server
+
+	ResourceTypes := map[string]suggestions.SuggestManagerInterface{
+		"DataCenters": suggestions.NewDataCenterSuggestManager(),
+		"DataStores":  suggestions.NewDatastoreSuggestManager(),
+		"Networks":    suggestions.NewNetworkSuggestManager(),
+		"Resources":   suggestions.NewResourceSuggestManager(),
+		"Folders":     suggestions.NewFolderSuggestManager(),
+	}
+
+	var Resources map[string][]suggestions.ResourceSuggestion
+	for ResourceName, ResourceManager := range ResourceTypes {
+		Resources[ResourceName] = ResourceManager.GetSuggestions()
+	}
+	SerializedResources, SerializeError := json.Marshal(Resources)
+	switch {
+	case SerializeError != nil: // If Failed to Serialize Resource Suggestions
+		context.JSON(http.StatusOK, gin.H{"Resources": Resources})
+
+	case SerializeError == nil:
+		context.JSON(http.StatusOK, gin.H{"Resources": SerializedResources})
+
+	default:
+		context.JSON(http.StatusOK, gin.H{"Resources": SerializedResources})
+	}
 }

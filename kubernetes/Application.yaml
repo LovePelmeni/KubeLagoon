@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: Service 
+metadata:
+  name: application-internal-service 
+  namespace: app-namespace 
+spec:
+  selector:
+    app: application-service 
+  ports:
+    - name: http 
+      port: 8000 
+      protocol: TCP 
+      targetPort: 8000 
+
+--- 
+
+apiVersion: v1
+kind: Deployment 
+metadata:
+  name: application-deployment 
+  namespace: app-namespace 
+spec:
+  selector:
+    matchLabels:
+      app: application-service 
+  template:
+    metadata:
+      labels:
+        app: application-service 
+    spec:
+      containers:
+        - name: application-container 
+          image: crazycoderrr/infrastracture 
+          ports:
+            - containerPort: 8000 
+              protocol: TCP 
+          envFrom:
+            - configMapRef:
+                - name: application-config-map 
+          imagePullPolicy: IfNotPresent 
+
+--- 
+
+apiVersion: v1
+kind: ConfigMap 
+metadata:
+  name: application-config-map 
+  namespace: app-namespace 
+data: 
+  APPLICATION_HOST: localhost 
+  APPLICATION_PORT: 8000 
+
+--- 

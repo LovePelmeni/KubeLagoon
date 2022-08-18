@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress 
+metadata:
+  name: infrastracture-ingress-network 
+  namespace: ingress-nginx 
+  annotations:
+    kubernetes.io/class: infra-network 
+spec:
+  rules:
+    host: www.cloud-infrastructure.com 
+      http:
+        paths:
+          path: / 
+          pathType: Prefix 
+            backend: 
+              serviceName: application-internal-service 
+              servicePort:
+                number: 8000 
+    
