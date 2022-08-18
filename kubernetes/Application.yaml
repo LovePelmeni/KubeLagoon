@@ -39,7 +39,6 @@ spec:
             - configMapRef:
                 - name: application-config-map 
           imagePullPolicy: IfNotPresent 
-
 --- 
 
 apiVersion: v1
@@ -51,4 +50,9 @@ data:
   APPLICATION_HOST: localhost 
   APPLICATION_PORT: 8000 
 
---- 
+  FRONT_APPLICATION_HOST: frontapp 
+  FRONT_APPLICATION_PORT: 3000
+
+  SUPPORT_EMAIL_ADDRESS: email_manager@gmail.com 
+  SUPPORT_EMAIL_PASSWORD: email_manager_password 
+

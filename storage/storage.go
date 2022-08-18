@@ -52,8 +52,13 @@ func NewVirtualMachineStorageManager() *VirtualMachineStorageManager {
 	return &VirtualMachineStorageManager{}
 }
 
-func (this *VirtualMachineStorageManager) SetupStorage(VirtualMachine *object.VirtualMachine,
-	StorageCredentials VirtualMachineStorage, DataStore *types.ManagedObjectReference) (*VirtualMachineStorage, error) {
+func (this *VirtualMachineStorageManager) SetupStorageDisk(
+
+	VirtualMachine *object.VirtualMachine,
+	StorageCredentials VirtualMachineStorage,
+	DataStore *types.ManagedObjectReference,
+
+) (*types.VirtualDeviceConfigSpec, error) {
 
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
@@ -62,6 +67,9 @@ func (this *VirtualMachineStorageManager) SetupStorage(VirtualMachine *object.Vi
 	Devices, DeviceError := VirtualMachine.Device(TimeoutContext)
 	DiskController, ControllerError := Devices.FindDiskController("scsi")
 
+	if DeviceError != nil || ControllerError != nil {
+		return nil, exceptions.StorageSetupFailure()
+	}
 	// Initializing New Virtual Disk
 
 	DeviceDisk := types.VirtualDisk{
@@ -87,26 +95,5 @@ func (this *VirtualMachineStorageManager) SetupStorage(VirtualMachine *object.Vi
 		Device:        &DeviceDisk,
 	}
 
-	// Initializing Specification for the Disk
-	Specification := types.VirtualMachineConfigSpec{}
-	Specification.DeviceChange = append(Specification.DeviceChange, DeviceSpec)
-
-	// Applying new Configuration
-	NewTask, CustomizationError := VirtualMachine.Reconfigure(TimeoutContext, Specification)
-	AppliedError := NewTask.Wait(TimeoutContext)
-
-	// Checking For Applyment Feedback
-	switch {
-	case CustomizationError != nil || AppliedError != nil || DeviceError != nil || ControllerError != nil:
-		ErrorLogger.Printf("Failed to Apply Storage Configuraion, Errors: [%s, %s, %s, %s]",
-			CustomizationError, AppliedError, DeviceError, ControllerError)
-		return &StorageCredentials, nil
-
-	case CustomizationError != nil && AppliedError != nil && DeviceError != nil && ControllerError != nil:
-		DebugLogger.Printf("Storage Configuration has been Applied to the Virtual Machine")
-		return nil, exceptions.StorageSetupFailure()
-
-	default:
-		return &StorageCredentials, nil
-	}
+	return DeviceSpec, nil
 }

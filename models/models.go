@@ -17,7 +17,7 @@ var (
 )
 
 var (
-	Database *gorm.DB 
+	Database *gorm.DB
 )
 
 var (
@@ -36,7 +36,7 @@ func init() {
 	if ConnectionError != nil {
 		panic(ConnectionError)
 	}
-	Database = DatabaseInstance 
+	Database = DatabaseInstance
 	Database.AutoMigrate(&Customer{}, &VirtualMachine{}, &Configuration{})
 }
 
@@ -52,6 +52,12 @@ type Customer struct {
 func NewCustomer() *Customer {
 	return &Customer{}
 }
+func (this *Customer) Create() {
+}
+
+func (this *Customer) Delete() {
+
+}
 
 type VirtualMachine struct {
 	gorm.Model
@@ -66,29 +72,33 @@ type VirtualMachine struct {
 
 func NewVirtualMachine(
 
-	OwnerId string, // ID Of the Customer, who Owns this Virtual Machine 
-	ExternalIP string, // ExternalIP of the Virtual Machine 
-    ExternalPort string,  // ExternalPort of the Virtual Machine 
+	OwnerId string, // ID Of the Customer, who Owns this Virtual Machine
+	ExternalIP string, // ExternalIP of the Virtual Machine
+	ExternalPort string, // ExternalPort of the Virtual Machine
 	NetworkIP string, // Network IP Address, the Virtual machine Is bind to
-	SshPublicKey string, // Ssh Public Key to connect externally, 
-    SshPrivateKey string, // Ssh Private Key to validate Connections via SSH Tunnel to the Virtual Machine
-	) *VirtualMachine{
+	SshPublicKey string, // Ssh Public Key to connect externally,
+	SshPrivateKey string, // Ssh Private Key to validate Connections via SSH Tunnel to the Virtual Machine
+) *VirtualMachine {
 
 	return &VirtualMachine{
-		OwnerId: OwnerId,
-		ExternalIP: ExternalIP, 
-		ExternalPort: ExternalPort,
-		NetworkIP: NetworkIP, 
-		SshPublicKey: SshPublicKey,
+		OwnerId:       OwnerId,
+		ExternalIP:    ExternalIP,
+		ExternalPort:  ExternalPort,
+		NetworkIP:     NetworkIP,
+		SshPublicKey:  SshPublicKey,
 		SshPrivateKey: SshPrivateKey,
 	}
 }
+func (this *VirtualMachine) Create() {
+}
 
+func (this *VirtualMachine) Delete() {
+}
 
 type Configuration struct {
 	gorm.Model
 
-	VirtualMachineID string         `json:"VirtualMachineID"`
+	VirtualMachineID string         `json:"VirtualMachineID" gorm:"primaryKey;unique;"`
 	VirtualMachine   VirtualMachine `gorm:"foreignKey:VirtualMachine;references:VirtualMachineID;"`
 
 	Storage      string `json:"Storage" gorm:"type:varchar(1000); not null; unique;"`
@@ -100,21 +110,26 @@ type Configuration struct {
 }
 
 func NewConfiguration(
-	SerializedStorageInfo string, 
-	SerializedNetworkInfo string, 
-	SerializedDataCenterInfo string, 
+	SerializedStorageInfo string,
+	SerializedNetworkInfo string,
+	SerializedDataCenterInfo string,
 	SerializedDatastoreInfo string,
-	SerializedResourcePoolInfo string, 
-	ItemPath string, // path of the Item (Something Like an ID), is Used as an Identifier in order 
+	SerializedResourcePoolInfo string,
+	ItemPath string, // path of the Item (Something Like an ID), is Used as an Identifier in order
 	// to receive the Object
-	) *Configuration {
+) *Configuration {
 
 	return &Configuration{
-		Storage: SerializedStorageInfo, 
-		Network: SerializedNetworkInfo, 
-		DataCenter: SerializedDataCenterInfo, 
-		DataStore: SerializedDatastoreInfo, 
+		Storage:      SerializedStorageInfo,
+		Network:      SerializedNetworkInfo,
+		DataCenter:   SerializedDataCenterInfo,
+		DataStore:    SerializedDatastoreInfo,
 		ResourcePool: SerializedResourcePoolInfo,
-		ItemPath: ItemPath,
+		ItemPath:     ItemPath,
 	}
+}
+func (this *Configuration) Create() {
+}
+
+func (this *Configuration) Delete() {
 }

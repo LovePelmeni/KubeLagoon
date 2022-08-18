@@ -15,6 +15,22 @@ func NewDefaultValueStore() *DefaultConfigValueStore {
 
 type Config struct {
 	// Represents Configuration of the Object Reference
+	Mutex sync.RWMutex
+	IP    struct {
+		Hostname string `json:"Hostname"`
+		Netmask  string `json:"Netmask"`
+		IP       string `json:"IP"`
+	} `json:"IP"`
+
+	Resources struct {
+		CpuNum            int64 `json:"CpuNum"`
+		MemoryInMegabytes int32 `json:"MemoryInMegabytes"`
+	} `json:"Resources"`
+
+	Ssh struct {
+		User     string `json:"User"`
+		Password string `json:"Password"`
+	} `json:"Ssh"`
 }
 
 func NewConfig() *Config {
@@ -68,7 +84,8 @@ func (this *ConfigurationParser) ConfigParse(SerializedConfiguration []byte) (ma
 func NewBaseParser() *BaseParser {
 	return &BaseParser{}
 }
-func (this *BaseParser) ConfigParse(Configuration Config) map[string]any
+
+func (this *BaseParser) ConfigParse(SerializedConfiguraton string) Config
 
 type NetworkConfigurationParser struct {
 	ConfigurationParserInterface

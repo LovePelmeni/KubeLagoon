@@ -93,14 +93,32 @@ func DeployNewVirtualMachineRestController(RequestContext *gin.Context) {
 
 	switch {
 	case ParseError == nil:
-		DeployedVm := VirtualMachineDeployer.DeployVirtualMachine()
+		InitializedMachine, InitializeError := VirtualMachineDeployer.InitializeNewVirtualMachine()
+		DeployedVm := VirtualMachineDeployer.StartVirtualMachine()
 	}
 }
 
 func UpdateVirtualMachineConfigurationRestController(RequestContext *gin.Context) {
+
 	VirtualMachineId := RequestContext.Query("VirtualMachineId")
 	CustomerId := RequestContext.Query("CustomerId")
+
+	NewVirtualMachineDeployer := deploy.NewVirtualMachineDeployer()
 	NewConfigurationParser := parsers.NewConfigurationParser()
+
+	ParsedConfiguration, ParserError := NewConfigurationParser.ConfigParse([]byte(RequestContext.PostForm("Configuration")))
+	VirtualMachine, NotExistsError := NewVirtualMachineDeployer.GetVirtualMachine(RequestContext.Query("VirtualMachineId"), RequestContext.Query("CustomerId"))
+
+	if ParserError == nil {
+
+		go func() {
+			group.Add(1)
+			InitializedMachine, InitializeError := NewVirtualMachineDeployer.InitializeNewVirtualMachine()
+			DeployedError := NewVirtualMachineDeployer.StartVirtualMachine(InitializedMachine)
+			group.Done()
+		}()
+
+	}
 }
 
 func ShutdownVirtualMachineRestController(RequestContext *gin.Context) {

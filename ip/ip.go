@@ -1,14 +1,9 @@
 package ip
 
 import (
-	"context"
-	"time"
-
 	"log"
 	"os"
 
-	"github.com/LovePelmeni/Infrastructure/exceptions"
-	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/types"
 )
 
@@ -35,9 +30,18 @@ type VirtualMachineIPAddress struct {
 	Hostname string `json:"Hostname"`
 }
 
+func NewVirtualMachineIPAddress(IP string, Netmask string, Gateway string, Hostname string) *VirtualMachineIPAddress {
+	return &VirtualMachineIPAddress{
+		IP:       IP,
+		Netmask:  Netmask,
+		Gateway:  Gateway,
+		Hostname: Hostname,
+	}
+}
+
 type VirtualMachineIPManagerInterface interface {
 	// Interface of the Class, that setting Up IP Address to the Virtual Machine
-	SetIPAddress(Vm *object.VirtualMachine)
+	SetupAddress(IPCredentials *VirtualMachineIPAddress) (*VirtualMachineIPAddress, error)
 }
 
 type VirtualMachineIPManager struct {
@@ -49,7 +53,11 @@ func NewVirtualMachineIPManager() *VirtualMachineIPManager {
 }
 
 func (this *VirtualMachineIPManager) SetupAddress(
-	IPCredentials *VirtualMachineIPAddress, VirtualMachine *object.VirtualMachine) (*VirtualMachineIPAddress, error) {
+
+	VmConfig *types.VirtualMachineConfigSpec,
+	IPCredentials *VirtualMachineIPAddress,
+
+) (*types.CustomizationSpec, error) {
 
 	// Setting up Customized IP Credentials for the Virtual Machine
 
@@ -71,26 +79,5 @@ func (this *VirtualMachineIPManager) SetupAddress(
 			HostName: &types.CustomizationFixedName{Name: IPCredentials.Hostname}, // Setting up Identity Hostname
 		}}
 
-	// Applying Customization
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	defer CancelFunc()
-
-	NewTask, CustomizationException := VirtualMachine.Customize(TimeoutContext, *CustomizedIPSettings)
-	AppliedError := NewTask.Wait(TimeoutContext)
-
-	// Waiting For Feeback Response
-	switch {
-	case CustomizationException != nil || AppliedError != nil:
-		ErrorLogger.Printf(
-			"Failed to Apply New IP Address to the Virtual Machine, Exceptions: %s, %s",
-			CustomizationException, AppliedError)
-		return nil, exceptions.IPSetupFailure()
-
-	case CustomizationException == nil && AppliedError == nil:
-		DebugLogger.Printf("IP Address has been Applied Successfully.")
-		return IPCredentials, nil
-
-	default:
-		return IPCredentials, nil
-	}
+	return CustomizedIPSettings, nil
 }

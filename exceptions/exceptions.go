@@ -37,3 +37,7 @@ func NoResourceAvailable() error {
 func ItemDoesNotExist() error {
 	return errors.New("Resource Item does not Exist.")
 }
+
+func DestroyFailure() error {
+	return errors.New("Failed to Destroy Virtual Machine")
+}

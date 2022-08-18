@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: Service 
+metadata:
+  name: postgres 
+  namespace: app-namespace 
+spec:
+  selector:
+    app: postgres-app 
+  ports:
+    - name: http 
+      port: 5432
+      targetPort: 5432
+      protocol: TCP 
+
+--- 
+
+apiVersion: v1
+kind: StatefulSet 
+metadata:
+  name: postgres-database 
+  namespace: app-namespace 
+spec:
+  selector:
+    matchLabels:
+      app: postgres-app 
+  template:
+    metadata:
+      labels:
+        app: postgres-app 
+    spec:
+      terminationGracePeriodSeconds: 60 
+      containers:
+        - name: postgres-container 
+          image: postgres:latest 
+          ports:
+            - containerPort: 5432
+              protocol: TCP 
+          envFrom:
+            - configMapRef:
+                - name:  postgres-config-map 
+          imagePullPolicy: IfNotPresent 
+
+--- 
+
+apiVersion: v1
+kind: ConfigMap 
+metadata:
+  name: postgres-config-map 
+  namespace: app-namespace 
+data:
+  POSTGRES_DB: intra_db 
+  POSTGRES_USER: postgres-user 
+  POSTGRES_PASSWORD: postgres-password 
+
+--- 
+
+apiVersion: v1
+kind: PersistentVolumeClaim 
+metadata: 
+  name: postgres-claim 
+  namespace: app-namespace 
+spec:
+  accessModes:
+    - ReadWriteOnce 
+  storageClassName: manual 
+  resources:
+    limits:
+      storage: 5Gi 
+    
+--- 
+
+apiVersion: v1
+kind: PersistentVolume 
+metadata:
+  name: postgres-volume 
+  namespace: app-namespace 
+spec:
+  accessModes:
+    - ReadWriteOnce 
+  storageClassName: manual 
+  capacity: 
+    storage: 5Gi 
+  claimRef:
+    - name: postgres-claim 
+      namespace: app-namespace 
+
