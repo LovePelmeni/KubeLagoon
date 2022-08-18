@@ -8,7 +8,10 @@ import (
 	"time"
 
 	"github.com/LovePelmeni/Infrastructure/exceptions"
+	"github.com/LovePelmeni/Infrastructure/models"
+
 	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/vim25"
 
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vapi/rest"
@@ -48,7 +51,16 @@ type VirtualMachineDeployKeyManagerInterface interface {
 
 type VirtualMachineDeployerInterface interface {
 	// Interface, that Deploys new Virtual Machine
-	DeployVirtualMachine() *object.VirtualMachine
+
+	StartVirtualMachine(*object.VirtualMachine) *object.VirtualMachine
+
+	ShutdownVirtualMachine(*object.VirtualMachine) bool
+
+	InitializeNewVirtualMachine(
+		VimClient vim25.Client, APIClient rest.Client,
+		Datastore *object.Datastore, Datacenter *object.Datacenter,
+		Folder *object.Folder, ResourcePool *object.ResourcePool,
+	) *object.VirtualMachine
 }
 
 type VirtualMachineDeployKeyManager struct {
@@ -63,17 +75,62 @@ func NewVirtualMachineDeployKeyManager() *VirtualMachineDeployKeyManager {
 	return &VirtualMachineDeployKeyManager{}
 }
 func (this *VirtualMachineDeployKeyManager) GetDeployResourceKeys() (DeployResourceKeys, error) {
+
 }
 
 type VirtualMachineDeployer struct {
+
+	// Class, that Is Taking care of the Virtual Machine Deployment Process
+	// It is responsible for Deploying/ Starting / Stopping / Updating Virtual Machines
+	// Owned by Customers
+	// Provides Following Methods in order to Fullfill the Needs and make the Process comfortable and easier
+
 	VirtualMachineDeployerInterface
+	VimClient vim25.Client
 }
 
 func NewVirtualMachineDeployer() *VirtualMachineDeployer {
 	return &VirtualMachineDeployer{}
 }
 
+func (this *VirtualMachineDeployer) GetVirtualMachine(VmId string, CustomerId string) (*object.VirtualMachine, error) {
+
+	// Method Retunrs Prepared Virtual Machine Instance, (That Already Exists, and has been created by Customer)
+
+	// Initializing Timeout Context
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
+	defer CancelFunc()
+
+	// Receiving Virtual Machine Configuration Instance from the Database
+
+	var VirtualMachineConfiguration models.Configuration
+
+	VirtualMachineGormRef := models.Database.Model(
+		&models.VirtualMachine{}).Where(
+		"owner_id = ? AND id = ?",
+		CustomerId, VmId).Association(
+		"Configuration").Find(&VirtualMachineConfiguration)
+
+	if VirtualMachineGormRef.Error != nil {
+		return nil, exceptions.ItemDoesNotExist()
+	}
+
+	// Receiving Prepared Virtual Machine Instance by using API
+	Finder := find.NewFinder(&this.VimClient)
+	VirtualRef, FindError := Finder.VirtualMachine(TimeoutContext, VirtualMachineConfiguration.ItemPath)
+
+	switch {
+	case FindError != nil:
+		return nil, exceptions.ItemDoesNotExist()
+	case FindError == nil:
+		return VirtualRef, nil
+	default:
+		return VirtualRef, nil
+	}
+}
+
 func (this *VirtualMachineDeployer) InitializeNewVirtualMachine(
+	VimClient vim25.Client,
 	APIClient rest.Client, // Rest Client for API Calls
 	Datastore *object.Datastore, // Datastore, that has been chosen by Customer where the want to Store Data
 	Datacenter *object.Datacenter, // Datacenter, that has been chosen by Customer, where they want to deploy their Application
@@ -82,7 +139,7 @@ func (this *VirtualMachineDeployer) InitializeNewVirtualMachine(
 	Resource *object.ResourcePool, // Resource, (Memory and CPU Num's) that Customer want to Allocate, according to their Requirements
 
 ) (*object.VirtualMachine, error) {
-	// Initializes Virtual Machine Configuration
+	// Initializes Virtual Machine Configuration (That does not exist yet)
 
 	ResourceAllocationManager := NewVirtualMachineDeployKeyManager()
 	ResourceCredentials, ResourceKeysError := ResourceAllocationManager.GetDeployResourceKeys()
@@ -131,7 +188,7 @@ func (this *VirtualMachineDeployer) InitializeNewVirtualMachine(
 
 		case DeployError == nil:
 			DebugLogger.Printf("Virtual Machine Has been Deployed Successfully from Library, Obtaining Reference Resource")
-			newFinder := find.NewFinder(APIClient)
+			newFinder := find.NewFinder(&VimClient)
 			VmRef, FindError := newFinder.ObjectReference(DeployTimeoutContext, *VirtualMachineInstanceReference)
 
 			if FindError != nil {

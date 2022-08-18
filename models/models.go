@@ -17,6 +17,10 @@ var (
 )
 
 var (
+	Database *gorm.DB 
+)
+
+var (
 	DATABASE_NAME     = os.Getenv("DATABASE_NAME")
 	DATABASE_HOST     = os.Getenv("DATABASE_HOST")
 	DATABASE_PORT     = os.Getenv("DATABASE_PORT")
@@ -25,13 +29,14 @@ var (
 )
 
 func init() {
-	Database, ConnectionError := gorm.Open(postgres.New(postgres.Config{
+	DatabaseInstance, ConnectionError := gorm.Open(postgres.New(postgres.Config{
 		DSN: fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s",
 			DATABASE_HOST, DATABASE_PORT, DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME),
 	}))
 	if ConnectionError != nil {
 		panic(ConnectionError)
 	}
+	Database = DatabaseInstance 
 	Database.AutoMigrate(&Customer{}, &VirtualMachine{}, &Configuration{})
 }
 
@@ -42,6 +47,10 @@ type Customer struct {
 	Email    string           `json:"Email" gorm:"type:varchar(100); not null; unique;"`
 	Password string           `json:"Password" gorm:"type:varchar(100); not null;"`
 	Vms      []VirtualMachine `json:"Vms" gorm:"many2many:VirtualMachine;"`
+}
+
+func NewCustomer() *Customer {
+	return &Customer{}
 }
 
 type VirtualMachine struct {
@@ -55,15 +64,57 @@ type VirtualMachine struct {
 	SshPrivateKey string `json:"SshPrivateKey" gorm:"type:varchar(100); not null; unique;"`
 }
 
+func NewVirtualMachine(
+
+	OwnerId string, // ID Of the Customer, who Owns this Virtual Machine 
+	ExternalIP string, // ExternalIP of the Virtual Machine 
+    ExternalPort string,  // ExternalPort of the Virtual Machine 
+	NetworkIP string, // Network IP Address, the Virtual machine Is bind to
+	SshPublicKey string, // Ssh Public Key to connect externally, 
+    SshPrivateKey string, // Ssh Private Key to validate Connections via SSH Tunnel to the Virtual Machine
+	) *VirtualMachine{
+
+	return &VirtualMachine{
+		OwnerId: OwnerId,
+		ExternalIP: ExternalIP, 
+		ExternalPort: ExternalPort,
+		NetworkIP: NetworkIP, 
+		SshPublicKey: SshPublicKey,
+		SshPrivateKey: SshPrivateKey,
+	}
+}
+
+
 type Configuration struct {
 	gorm.Model
 
 	VirtualMachineID string         `json:"VirtualMachineID"`
-	VirtualMachine   VirtualMachine `gorm:"foreignKey:VirtualMachine;references:"`
+	VirtualMachine   VirtualMachine `gorm:"foreignKey:VirtualMachine;references:VirtualMachineID;"`
 
 	Storage      string `json:"Storage" gorm:"type:varchar(1000); not null; unique;"`
 	Network      string `json:"Network" gorm:"type:varchar(1000); not null;"`
 	DataCenter   string `json:"DataCenter" gorm:"type:varchar(1000); not null;"`
 	DataStore    string `json:"DataStore" gorm:"type:varchar(1000); not null;"`
 	ResourcePool string `json:"ResourcePool" gorm:"type:varchar(1000); not null;"`
+	ItemPath     string `json:"ItemPath" gorm:"type:varchar(100); not null;"`
+}
+
+func NewConfiguration(
+	SerializedStorageInfo string, 
+	SerializedNetworkInfo string, 
+	SerializedDataCenterInfo string, 
+	SerializedDatastoreInfo string,
+	SerializedResourcePoolInfo string, 
+	ItemPath string, // path of the Item (Something Like an ID), is Used as an Identifier in order 
+	// to receive the Object
+	) *Configuration {
+
+	return &Configuration{
+		Storage: SerializedStorageInfo, 
+		Network: SerializedNetworkInfo, 
+		DataCenter: SerializedDataCenterInfo, 
+		DataStore: SerializedDatastoreInfo, 
+		ResourcePool: SerializedResourcePoolInfo,
+		ItemPath: ItemPath,
+	}
 }

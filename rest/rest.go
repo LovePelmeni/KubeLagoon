@@ -10,6 +10,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/LovePelmeni/Infrastructure/deploy"
+	"github.com/LovePelmeni/Infrastructure/parsers"
 	"github.com/LovePelmeni/Infrastructure/suggestions"
 	"github.com/gin-gonic/gin"
 	"github.com/vmware/govmomi"
@@ -84,10 +86,21 @@ func DeleteCustomerRestController(RequestContext *gin.Context) {
 
 func DeployNewVirtualMachineRestController(RequestContext *gin.Context) {
 
+	ConfigurationParser := parsers.NewConfigurationParser()
+	VirtualMachineDeployer := deploy.NewVirtualMachineDeployer()
+	ParsedConfiguration, ParseError := ConfigurationParser.ConfigParse(
+		[]byte(RequestContext.PostForm("NewConfiguration")))
+
+	switch {
+	case ParseError == nil:
+		DeployedVm := VirtualMachineDeployer.DeployVirtualMachine()
+	}
 }
 
 func UpdateVirtualMachineConfigurationRestController(RequestContext *gin.Context) {
-
+	VirtualMachineId := RequestContext.Query("VirtualMachineId")
+	CustomerId := RequestContext.Query("CustomerId")
+	NewConfigurationParser := parsers.NewConfigurationParser()
 }
 
 func ShutdownVirtualMachineRestController(RequestContext *gin.Context) {
@@ -132,4 +145,16 @@ func GetAvailableResourcesInfoRestController(context *gin.Context) {
 	default:
 		context.JSON(http.StatusOK, gin.H{"Resources": SerializedResources})
 	}
+}
+
+// Virtual Machine INFO Rest API Endpoints
+
+func GetCustomerVirtualMachinesRestController(context *gin.Context) {
+	// Rest Controller, that returns Info about all Virtual Machines, that Customer
+	// Have, Including Current health, SshCredentials, Status, CPU/Memory etc....
+}
+
+func GetCustomerVirtualMachineInfoRestController(context *gin.Context) {
+	// Rest Controller, that returns Info about Specific Customer Virtual Machine,
+	// Including Current Health, Status, Ssh Credentials, CPU/memory usage, etc...
 }

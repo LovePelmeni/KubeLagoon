@@ -14,4 +14,3 @@ COPY . .
 RUN go mod tidy && go mod vendor && go mod test -v ./tests/.. 
 RUN go build -o ./main/. 
 ENTRYPOINT ["go", "run", "./main/main.go"]
-

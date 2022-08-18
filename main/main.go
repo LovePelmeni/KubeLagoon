@@ -11,13 +11,19 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/LovePelmeni/Infrastructure/middlewares"
 	"github.com/LovePelmeni/Infrastructure/rest"
+
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 var (
 	APPLICATION_HOST = os.Getenv("APPLICATION_HOST")
 	APPLICATION_PORT = os.Getenv("APPLICATION_PORT")
+
+	FRONT_APPLICATION_HOST = os.Getenv("FRONT_APPLICATION_HOST")
+	FRONT_APPLICATION_PORT = os.Getenv("FRONT_APPLICATION_PORT")
 )
 
 type Server struct {
@@ -39,6 +45,22 @@ func (this *Server) Run() {
 		Addr:    fmt.Sprintf("%s:%s", this.ServerHost, this.ServerPort),
 		Handler: Router,
 	}
+
+	// Setting Up Cross Origin Resource Sharing Policy
+
+	Router.Use(cors.New(cors.Config{
+		AllowOrigins: []string{
+			fmt.Sprintf("%s:%s", APPLICATION_HOST, APPLICATION_PORT),
+			fmt.Sprintf("%s:%s", FRONT_APPLICATION_HOST, FRONT_APPLICATION_PORT),
+		},
+		AllowMethods:     []string{"POST", "PUT", "DELETE", "GET", "OPTIONS"},
+		AllowCredentials: true,
+		AllowHeaders:     []string{"*"},
+		AllowWebSockets:  false,
+	}))
+
+	// Setting up Healthcheck Rest Endpoint
+
 	Router.GET("/ping/", func(context *gin.Context) {
 		context.JSON(http.StatusOK, nil)
 	})
@@ -58,23 +80,39 @@ func (this *Server) Run() {
 	// Virtual Machines Rest API Endpoints
 	Router.Group("/vm/")
 	{
-		Router.POST("/deploy/", rest.DeployNewVirtualMachineRestController)
-		Router.PUT("/update/config/", rest.UpdateVirtualMachineConfigurationRestController)
-		Router.DELETE("/shutdown/", rest.ShutdownVirtualMachineRestController)
-		Router.DELETE("/remove/", rest.RemoveVirtualMachineRestController)
+		Router.Use(middlewares.JwtAuthenticationMiddleware())
+		{
+			Router.POST("/deploy/", rest.DeployNewVirtualMachineRestController)
+			Router.PUT("/update/config/", rest.UpdateVirtualMachineConfigurationRestController)
+			Router.DELETE("/shutdown/", rest.ShutdownVirtualMachineRestController)
+			Router.DELETE("/remove/", rest.RemoveVirtualMachineRestController)
+		}
+
+		Router.Use(middlewares.IsVirtualMachineOwnerMiddleware())
+		{
+			Router.GET("/get/list/", rest.GetCustomerVirtualMachinesRestController)
+			Router.GET("/get/", rest.GetCustomerVirtualMachineInfoRestController)
+		}
 	}
 
 	Router.Group("/resources/")
 	{
-		Router.POST("/get/suggestions/")
+		Router.Use(middlewares.JwtAuthenticationMiddleware())
+		{
+			Router.POST("/get/suggestions/")
+		}
 	}
 
 	// Support Rest API Endpoints
 
 	Router.Group("/support/")
 	{
-		Router.POST("/feedback/", rest.SupportRestController)
+		Router.Use(middlewares.JwtAuthenticationMiddleware())
+		{
+			Router.POST("/feedback/", rest.SupportRestController)
+		}
 	}
+
 	NotifyContext, CancelFunc := signal.NotifyContext(
 		context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGSTOP)
 
