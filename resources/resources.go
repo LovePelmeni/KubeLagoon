@@ -1,14 +1,9 @@
 package resources
 
 import (
-	"context"
-	"time"
-
 	"log"
 	"os"
 
-	"github.com/LovePelmeni/Infrastructure/exceptions"
-	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/types"
 )
 
@@ -51,39 +46,22 @@ type VirtualMachineResourceManagerInterface interface {
 	SetupResources(Resources VirtualMachineResources) (VirtualMachineResources, error)
 }
 
-type VirtualMachineResourceManager struct{}
+type VirtualMachineResourceManager struct {
+	VirtualMachineResourceManagerInterface
+}
 
 func NewVirtualMachineResourceManager() VirtualMachineResourceManager {
 	return VirtualMachineResourceManager{}
 }
 
-func SetupResources(VirtualMachine *object.VirtualMachine, Resources VirtualMachineResources) (*VirtualMachineResources, error) {
+func SetupResources(Resources VirtualMachineResources) (*types.VirtualMachineConfigSpec, error) {
 
-	CustomizedSpecification := types.VirtualMachineConfigSpec{
-		NumCPUs:             Resources.CpuNum, // Setting up Numbers of CPU's
+	ResourceSpecification := types.VirtualMachineConfigSpec{
+		NumCPUs:             Resources.CpuNum,
 		NumCoresPerSocket:   Resources.CpuNum / 2,
-		MemoryMB:            Resources.MemoryInMegabytes * 1024, // setting up Memory In Megabytes
+		MemoryMB:            1024 * Resources.MemoryInMegabytes,
 		CpuHotAddEnabled:    types.NewBool(true),
 		MemoryHotAddEnabled: types.NewBool(true),
 	}
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	defer CancelFunc()
-
-	NewTask, CustomizeError := VirtualMachine.Reconfigure(
-		TimeoutContext, CustomizedSpecification)
-
-	AppliedError := NewTask.Wait(TimeoutContext)
-
-	switch {
-	case CustomizeError != nil || AppliedError != nil:
-		ErrorLogger.Printf("Failed to Apply Custom Resources for CPUs and Memory, Errors: [%s, %s]",
-			CustomizeError, AppliedError)
-		return nil, exceptions.ResourcesSetupFailure()
-
-	case CustomizeError == nil && AppliedError == nil:
-		DebugLogger.Printf("Customized CPU's and Memory has been Applied Successfully.")
-		return &Resources, nil
-	default:
-		return &Resources, nil
-	}
+	return &ResourceSpecification, nil
 }

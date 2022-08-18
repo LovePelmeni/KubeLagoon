@@ -45,9 +45,9 @@ type VirtualMachineDeployKeyManagerInterface interface {
 type VirtualMachineManagerInterface interface {
 	// Interface, that Deploys new Virtual Machine
 
-	StartVirtualMachine(VmId string, CustomerId string) (bool, error)
+	StartVirtualMachine(VirtualMachine *object.VirtualMachine) (bool, error)
 
-	ShutdownVirtualMachine(VmId string, CustomerId string) (bool, error)
+	ShutdownVirtualMachine(VirtualMachine *object.VirtualMachine) (bool, error)
 
 	ApplyConfiguration(VmId string, CustomerId string, Configuration parsers.Config) (bool, error)
 
@@ -229,32 +229,27 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 	return nil, exceptions.VMDeployFailure()
 }
 
-func (this *VirtualMachineManager) ApplyConfiguration(VmId string, CustomerId string, Configuration parsers.Config) {
+func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.VirtualMachine, Configuration parsers.Config) {
 	// Applies Custom Configuration: Num's of CPU's, Memory etc... onto the Initialized Virtual Machine
 
 	// Initializing Applier Managers
 	// Configurations
 }
 
-func (this *VirtualMachineManager) StartVirtualMachine(VmId string, CustomerId string) error {
+func (this *VirtualMachineManager) StartVirtualMachine(VirtualMachine *object.VirtualMachine) error {
 
 	// Starts Virtual Machine Server..
 
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
-	VirtualMachine, VmError := this.GetVirtualMachine(VmId, CustomerId)
-	if VmError != nil {
-		return VmError
-	}
-
 	Newtask, DeployError := VirtualMachine.PowerOn(TimeoutContext)
 	AppliedError := Newtask.Wait(TimeoutContext)
 
 	switch {
 	case DeployError != nil || AppliedError != nil:
-		ErrorLogger.Printf("Failed to Start Virtual Machine, with ID: %s, of Owner: %s Errors: [%s, %s]",
-			VmId, CustomerId, DeployError, AppliedError)
+		ErrorLogger.Printf("Failed to Start Virtual Machine, Errors: [%s, %s]",
+			DeployError, AppliedError)
 		return exceptions.VMDeployFailure()
 
 	case DeployError == nil && AppliedError == nil:

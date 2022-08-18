@@ -68,6 +68,7 @@ type VirtualMachine struct {
 	NetworkIP     string `json:"NetworkIP" gorm:"type:varchar(100); not null;"`
 	SshPublicKey  string `json:"SshPublicKey" gorm:"type:varchar(100); not null; unique;"`
 	SshPrivateKey string `json:"SshPrivateKey" gorm:"type:varchar(100); not null; unique;"`
+	ItemPath      string `json:"ItemPath" gorm:"type:varchar(100); not null;"`
 }
 
 func NewVirtualMachine(
@@ -78,6 +79,7 @@ func NewVirtualMachine(
 	NetworkIP string, // Network IP Address, the Virtual machine Is bind to
 	SshPublicKey string, // Ssh Public Key to connect externally,
 	SshPrivateKey string, // Ssh Private Key to validate Connections via SSH Tunnel to the Virtual Machine
+	ItemPath string,
 ) *VirtualMachine {
 
 	return &VirtualMachine{
@@ -87,6 +89,7 @@ func NewVirtualMachine(
 		NetworkIP:     NetworkIP,
 		SshPublicKey:  SshPublicKey,
 		SshPrivateKey: SshPrivateKey,
+		ItemPath:      ItemPath,
 	}
 }
 func (this *VirtualMachine) Create() {
@@ -115,8 +118,6 @@ func NewConfiguration(
 	SerializedDataCenterInfo string,
 	SerializedDatastoreInfo string,
 	SerializedResourcePoolInfo string,
-	ItemPath string, // path of the Item (Something Like an ID), is Used as an Identifier in order
-	// to receive the Object
 ) *Configuration {
 
 	return &Configuration{
@@ -125,7 +126,6 @@ func NewConfiguration(
 		DataCenter:   SerializedDataCenterInfo,
 		DataStore:    SerializedDatastoreInfo,
 		ResourcePool: SerializedResourcePoolInfo,
-		ItemPath:     ItemPath,
 	}
 }
 func (this *Configuration) Create() {

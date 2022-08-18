@@ -3,19 +3,27 @@ package rest
 import (
 	"context"
 	"encoding/json"
+	"sync"
+
 	_ "net"
 	"net/http"
+
 	_ "net/smtp"
 	"net/url"
+
 	"os"
 	"time"
 
-	"github.com/LovePelmeni/Infrastructure/deploy"
-	"github.com/LovePelmeni/Infrastructure/parsers"
+	"github.com/LovePelmeni/Infrastructure/models"
+
 	"github.com/LovePelmeni/Infrastructure/suggestions"
+
 	"github.com/gin-gonic/gin"
 	"github.com/vmware/govmomi"
+
+	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vapi/rest"
+	"github.com/vmware/govmomi/vim25"
 	_ "github.com/xhit/go-simple-mail/v2"
 )
 
@@ -85,40 +93,9 @@ func DeleteCustomerRestController(RequestContext *gin.Context) {
 // Virtual Machine Rest API Endpoints
 
 func DeployNewVirtualMachineRestController(RequestContext *gin.Context) {
-
-	ConfigurationParser := parsers.NewConfigurationParser()
-	VirtualMachineDeployer := deploy.NewVirtualMachineDeployer()
-	ParsedConfiguration, ParseError := ConfigurationParser.ConfigParse(
-		[]byte(RequestContext.PostForm("NewConfiguration")))
-
-	switch {
-	case ParseError == nil:
-		InitializedMachine, InitializeError := VirtualMachineDeployer.InitializeNewVirtualMachine()
-		DeployedVm := VirtualMachineDeployer.StartVirtualMachine()
-	}
 }
 
 func UpdateVirtualMachineConfigurationRestController(RequestContext *gin.Context) {
-
-	VirtualMachineId := RequestContext.Query("VirtualMachineId")
-	CustomerId := RequestContext.Query("CustomerId")
-
-	NewVirtualMachineDeployer := deploy.NewVirtualMachineDeployer()
-	NewConfigurationParser := parsers.NewConfigurationParser()
-
-	ParsedConfiguration, ParserError := NewConfigurationParser.ConfigParse([]byte(RequestContext.PostForm("Configuration")))
-	VirtualMachine, NotExistsError := NewVirtualMachineDeployer.GetVirtualMachine(RequestContext.Query("VirtualMachineId"), RequestContext.Query("CustomerId"))
-
-	if ParserError == nil {
-
-		go func() {
-			group.Add(1)
-			InitializedMachine, InitializeError := NewVirtualMachineDeployer.InitializeNewVirtualMachine()
-			DeployedError := NewVirtualMachineDeployer.StartVirtualMachine(InitializedMachine)
-			group.Done()
-		}()
-
-	}
 }
 
 func ShutdownVirtualMachineRestController(RequestContext *gin.Context) {
@@ -167,12 +144,87 @@ func GetAvailableResourcesInfoRestController(context *gin.Context) {
 
 // Virtual Machine INFO Rest API Endpoints
 
-func GetCustomerVirtualMachinesRestController(context *gin.Context) {
+func GetCustomerVirtualMachinesRestController(RequestContext *gin.Context) {
+
 	// Rest Controller, that returns Info about all Virtual Machines, that Customer
 	// Have, Including Current health, SshCredentials, Status, CPU/Memory etc....
+
+	CustomerId := RequestContext.Query("customerId")
+	var Queryset []struct {
+		Vm     models.VirtualMachine
+		Status string
+	}
+
+	var CustomerVirtualMachines []models.VirtualMachine
+
+	models.Database.Model(&models.VirtualMachine{}).Where(
+		"owner_id = ?", CustomerId).Preload("Vms").Find(&CustomerVirtualMachines)
+
+	group := sync.WaitGroup{}
+
+	for _, VirtualMachine := range CustomerVirtualMachines {
+
+		go func() {
+			group.Add(1)
+			TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*20)
+			defer CancelFunc()
+
+			Finder := object.NewSearchIndex(&vim25.Client{})
+			VmEntity, _ := Finder.FindByInventoryPath(TimeoutContext, VirtualMachine.ItemPath)
+			PowerState, _ := VmEntity.(*object.VirtualMachine).PowerState(TimeoutContext)
+
+			VirtualMachineQuerySet := struct {
+				Vm     models.VirtualMachine
+				Status string
+			}{
+				Vm:     VirtualMachine,
+				Status: string(PowerState),
+			}
+
+			Queryset = append(Queryset, VirtualMachineQuerySet)
+			group.Done()
+		}()
+		group.Wait()
+	}
+	RequestContext.JSON(http.StatusOK, gin.H{"Queryset": Queryset})
 }
 
-func GetCustomerVirtualMachineInfoRestController(context *gin.Context) {
+func GetCustomerVirtualMachineInfoRestController(RequestContext *gin.Context) {
 	// Rest Controller, that returns Info about Specific Customer Virtual Machine,
 	// Including Current Health, Status, Ssh Credentials, CPU/memory usage, etc...
+
+	CustomerId := RequestContext.Query("customerId")
+	VirtualMachineId := RequestContext.Query("virtualMachineId")
+
+	var VirtualMachine models.VirtualMachine
+	var PowerState string
+
+	models.Database.Model(&models.Customer{}).Where(
+		"id = ?", CustomerId).Preload("Vms").Where("id = ?",
+		VirtualMachineId).Find(&VirtualMachine)
+
+	group := sync.WaitGroup{}
+
+	go func() { // Receiving the State of the Virtual Machine
+		group.Add(1)
+		Timeout, CancelFunc := context.WithTimeout(context.Background(), time.Second*20)
+		defer CancelFunc()
+
+		Finder := object.NewSearchIndex(&vim25.Client{})
+		Vm, _ := Finder.FindByInventoryPath(Timeout, VirtualMachine.ItemPath)
+		Pw, _ := Vm.(*object.VirtualMachine).PowerState(Timeout)
+		PowerState = string(Pw)
+		group.Done()
+	}()
+
+	group.Wait()
+
+	Vm := struct {
+		VirtualMachine models.VirtualMachine
+		Status         string
+	}{
+		VirtualMachine: VirtualMachine,
+		Status:         string(PowerState),
+	}
+	RequestContext.JSON(http.StatusOK, gin.H{"Vm": Vm})
 }

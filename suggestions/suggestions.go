@@ -62,19 +62,19 @@ func NewNetworkSuggestManager() *NetworkSuggestManager {
 	return &NetworkSuggestManager{}
 }
 
-func (this *NetworkSuggestManager) GetResource(ItemPath string) (*object.Common, error) {
+func (this *NetworkSuggestManager) GetResource(ItemPath string) (*object.Reference, error) {
 	// Method Receiving Instance of the Resource, that Customer has chosen, during Configuration Setup
 
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
-	Finder := find.NewFinder(&this.Client)
-	Resource, FindError := Finder.NetworkList(TimeoutContext, ItemPath)
+	Finder := object.NewSearchIndex(&this.Client)
+	Resource, FindError := Finder.FindByInventoryPath(TimeoutContext, ItemPath)
 	switch {
 	case FindError == nil:
 		return nil, exceptions.ItemDoesNotExist()
 	case FindError != nil:
-		return &Resource[0].(*object.Network).Common, nil
+		return &Resource, nil
 	default:
 		return nil, exceptions.ItemDoesNotExist()
 	}
@@ -126,21 +126,21 @@ func NewDatastoreSuggestManager() *DataCenterSuggestManager {
 	return &DataCenterSuggestManager{}
 }
 
-func (this *DatastoreSuggestManager) GetResource(ItemPath string) (*object.Common, error) {
+func (this *DatastoreSuggestManager) GetResource(ItemPath string) (*object.Reference, error) {
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
-	Finder := find.NewFinder(&this.Client)
-	Datastore, FindError := Finder.Datastore(TimeoutContext, ItemPath)
+	Finder := object.NewSearchIndex(&this.Client)
+	Datastore, FindError := Finder.FindByInventoryPath(TimeoutContext, ItemPath)
 	switch {
 	case FindError != nil:
 		return nil, exceptions.ItemDoesNotExist()
 
 	case FindError == nil:
-		return &Datastore.Common, nil
+		return &Datastore, nil
 
 	default:
-		return &Datastore.Common, nil
+		return &Datastore, nil
 	}
 }
 
@@ -184,21 +184,22 @@ func NewDataCenterSuggestManager() *DataCenterSuggestManager {
 	return &DataCenterSuggestManager{}
 }
 
-func (this *DataCenterSuggestManager) GetResource(ItemPath string) (*object.Common, error) {
+func (this *DataCenterSuggestManager) GetResource(ItemPath string) (*object.Reference, error) {
+
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
-	Finder := find.NewFinder(this.Client)
-	Datacenter, FindError := Finder.Datacenter(TimeoutContext, ItemPath)
+	Finder := object.NewSearchIndex(this.Client)
+	Datacenter, FindError := Finder.FindByInventoryPath(TimeoutContext, ItemPath)
 	switch {
 	case FindError != nil:
 		return nil, exceptions.ItemDoesNotExist()
 
 	case FindError == nil:
-		return &Datacenter.Common, nil
+		return &Datacenter, nil
 
 	default:
-		return &Datacenter.Common, nil
+		return &Datacenter, nil
 	}
 }
 
@@ -243,21 +244,21 @@ func NewResourceSuggestManager() *ResourceSuggestManager {
 	return &ResourceSuggestManager{}
 }
 
-func (this *ResourceSuggestManager) GetResource(ItemPath string) (*object.Common, error) {
+func (this *ResourceSuggestManager) GetResource(ItemPath string) (*object.Reference, error) {
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
-	Finder := find.NewFinder(&this.Client)
-	ResourcePool, FindError := Finder.ResourcePool(TimeoutContext, ItemPath)
+	Finder := object.NewSearchIndex(&this.Client)
+	ResourcePool, FindError := Finder.FindByInventoryPath(TimeoutContext, ItemPath)
 	switch {
 	case FindError != nil:
 		return nil, exceptions.ItemDoesNotExist()
 
 	case FindError == nil:
-		return &ResourcePool.Common, nil
+		return &ResourcePool, nil
 
 	default:
-		return &ResourcePool.Common, nil
+		return &ResourcePool, nil
 	}
 }
 
@@ -300,21 +301,21 @@ func NewFolderSuggestManager() *FolderSuggestManager {
 	return &FolderSuggestManager{}
 }
 
-func (this *FolderSuggestManager) GetResource(ItemPath string) (*object.Common, error) {
+func (this *FolderSuggestManager) GetResource(ItemPath string) (*object.Reference, error) {
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
-	Finder := find.NewFinder(&this.Client)
-	Folder, FindError := Finder.Folder(TimeoutContext, ItemPath)
+	Finder := object.NewSearchIndex(&this.Client)
+	Folder, FindError := Finder.FindByInventoryPath(TimeoutContext, ItemPath)
 	switch {
 	case FindError != nil:
 		return nil, exceptions.ItemDoesNotExist()
 
 	case FindError == nil:
-		return &Folder.Common, nil
+		return &Folder, nil
 
 	default:
-		return &Folder.Common, nil
+		return &Folder, nil
 	}
 }
 

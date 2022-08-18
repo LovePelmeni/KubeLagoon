@@ -99,7 +99,7 @@ func (this *Server) Run() {
 	{
 		Router.Use(middlewares.JwtAuthenticationMiddleware())
 		{
-			Router.POST("/get/suggestions/")
+			Router.POST("/get/suggestions/", rest.GetAvailableResourcesInfoRestController)
 		}
 	}
 

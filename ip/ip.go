@@ -52,12 +52,7 @@ func NewVirtualMachineIPManager() *VirtualMachineIPManager {
 	return &VirtualMachineIPManager{}
 }
 
-func (this *VirtualMachineIPManager) SetupAddress(
-
-	VmConfig *types.VirtualMachineConfigSpec,
-	IPCredentials *VirtualMachineIPAddress,
-
-) (*types.CustomizationSpec, error) {
+func (this *VirtualMachineIPManager) SetupAddress(IPCredentials *VirtualMachineIPAddress) (*types.CustomizationSpec, error) {
 
 	// Setting up Customized IP Credentials for the Virtual Machine
 
