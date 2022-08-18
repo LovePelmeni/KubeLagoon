@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/LovePelmeni/Infrastructure/exceptions"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25"
@@ -52,64 +53,40 @@ type SuggestManagerInterface interface {
 	GetResource(ItemID string) (*object.Reference, error) // Method, should return specific Object by the Idenitfier
 }
 
-type SuggestionsPacker struct {
-	// Packing Suggestions into Map
-	SuggestManagerInterface
-}
-
-func NewSuggestionsPacker() *SuggestionsPacker {
-	return &SuggestionsPacker{}
-}
-
-func (this *SuggestionsPacker) GetPackedSuggestions(ArrayOfObjRefs []object.Reference) []ResourceSuggestion {
-
-	var Suggestions []ResourceSuggestion
-	switch {
-	case len(ArrayOfObjRefs) != 0: // if failed to Parse list of available Datastores
-		DebugLogger.Printf("No Resources Available for Datastores has been Found")
-		return Suggestions
-
-	case len(ArrayOfObjRefs) == 0: // if
-		DebugLogger.Printf("Resources has been Parsed, Picking up the Appropriate Ones..")
-		group := sync.WaitGroup{}
-		for _, ObjectReference := range ArrayOfObjRefs {
-			go func() {
-				group.Add(1)
-				Metadata := map[string]string{ // Metadata About the Virtual Resource
-
-				}
-				ResourceSuggestion := NewResourceSuggestion(ObjectReference, Metadata)
-				Suggestions = append(Suggestions, *ResourceSuggestion)
-				group.Done()
-			}()
-			group.Wait()
-		}
-		return Suggestions
-
-	default:
-		return Suggestions
-	}
-}
-
 type NetworkSuggestManager struct {
 	SuggestManagerInterface
+	Client vim25.Client
 }
 
 func NewNetworkSuggestManager() *NetworkSuggestManager {
 	return &NetworkSuggestManager{}
 }
 
-func (this *NetworkSuggestManager) GetResource(ItemID string) (*object.Reference, error) {
+func (this *NetworkSuggestManager) GetResource(ItemPath string) (*object.NetworkReference, error) {
+	// Method Receiving Instance of the Resource, that Customer has chosen, during Configuration Setup
 
-}
-
-func (this *NetworkSuggestManager) GetSuggestions() []ResourceSuggestion {
-
-	NewSuggestPacker := NewSuggestionsPacker()
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
-	finder := find.NewFinder(&vim25.Client{})
+	Finder := find.NewFinder(&this.Client)
+	Resource, FindError := Finder.NetworkList(TimeoutContext, ItemPath)
+	switch {
+	case FindError == nil:
+		return nil, exceptions.ItemDoesNotExist()
+	case FindError != nil:
+		return &Resource[0], nil
+	default:
+		return nil, exceptions.ItemDoesNotExist()
+	}
+}
+
+func (this *NetworkSuggestManager) GetSuggestions() []ResourceSuggestion {
+	// Returns Suggested Resources, of different Types, Zones, Unique Names, etc...
+
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
+	defer CancelFunc()
+
+	finder := find.NewFinder(&this.Client)
 	var Suggestions []ResourceSuggestion
 	Networks, ParseDatastoreError := finder.NetworkList(TimeoutContext, "*")
 
@@ -118,25 +95,56 @@ func (this *NetworkSuggestManager) GetSuggestions() []ResourceSuggestion {
 		return Suggestions
 
 	case ParseDatastoreError == nil:
-		Suggestions = NewSuggestPacker.GetPackedSuggestions(Networks)
-		return Suggestions
+		// Extracting Metadata From available resources and putting it into a single `Resource Suggestion` Structure
+		group := sync.WaitGroup{}
+		for _, Network := range Networks {
+			go func() {
+				group.Add(1)
+				Resource := NewResourceSuggestion(Network,
+					map[string]string{
+						"UniqueName": Network.Reference().Value,
+						"Type":       Network.Reference().Type,
+						"Path":       Network.GetInventoryPath(),
+					})
+				Suggestions = append(Suggestions, *Resource)
+				group.Done()
+			}()
+			group.Wait()
+			return Suggestions
+		}
 	}
 	return Suggestions
 }
 
 type DatastoreSuggestManager struct {
 	SuggestManagerInterface
+	Client vim25.Client
 }
 
 func NewDatastoreSuggestManager() *DataCenterSuggestManager {
 	return &DataCenterSuggestManager{}
 }
 
-func (this *DatastoreSuggestManager) GetResource(ItemID string) (*object.Reference, error)
+func (this *DatastoreSuggestManager) GetResource(ItemPath string) (*object.Datastore, error) {
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
+	defer CancelFunc()
+
+	Finder := find.NewFinder(&this.Client)
+	Datastore, FindError := Finder.Datastore(TimeoutContext, ItemPath)
+	switch {
+	case FindError != nil:
+		return nil, exceptions.ItemDoesNotExist()
+
+	case FindError == nil:
+		return Datastore, nil
+
+	default:
+		return Datastore, nil
+	}
+}
 
 func (this *DatastoreSuggestManager) GetSuggestions() []ResourceSuggestion {
 
-	NewSuggestPacker := NewSuggestionsPacker()
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
@@ -149,7 +157,9 @@ func (this *DatastoreSuggestManager) GetSuggestions() []ResourceSuggestion {
 		return Suggestions
 
 	case ParseDatastoreError == nil:
-		Suggestions = NewSuggestPacker.GetPackedSuggestions(Datastores)
+		for _, Datastore := range Datastores {
+
+		}
 		return Suggestions
 	}
 	return Suggestions
@@ -157,17 +167,33 @@ func (this *DatastoreSuggestManager) GetSuggestions() []ResourceSuggestion {
 
 type DataCenterSuggestManager struct {
 	SuggestManagerInterface
+	Client *vim25.Client
 }
 
 func NewDataCenterSuggestManager() *DataCenterSuggestManager {
 	return &DataCenterSuggestManager{}
 }
 
-func (this *DataCenterSuggestManager) GetResource(ItemID string) (*object.Reference, error)
+func (this *DataCenterSuggestManager) GetResource(ItemPath string) (*object.Datacenter, error) {
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
+	defer CancelFunc()
+
+	Finder := find.NewFinder(this.Client)
+	Datacenter, FindError := Finder.Datacenter(TimeoutContext, ItemPath)
+	switch {
+	case FindError != nil:
+		return nil, exceptions.ItemDoesNotExist()
+
+	case FindError == nil:
+		return Datacenter, nil
+
+	default:
+		return Datacenter, nil
+	}
+}
 
 func (this *DataCenterSuggestManager) GetSuggestions() []ResourceSuggestion {
 
-	NewSuggestPacker := NewSuggestionsPacker()
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
@@ -180,7 +206,19 @@ func (this *DataCenterSuggestManager) GetSuggestions() []ResourceSuggestion {
 		return Suggestions
 
 	case ParseDatastoreError == nil:
-		Suggestions = NewSuggestPacker.GetPackedSuggestions(DataCenters)
+
+		for _, Datacenter := range DataCenters {
+			Resource := NewResourceSuggestion(
+				Datacenter,
+				map[string]string{
+					"UniqueName": Datacenter.Reference().Value,
+					"Type":       Datacenter.Reference().Type,
+					"Name":       Datacenter.Name(),
+					"Path":       Datacenter.InventoryPath,
+				})
+			Suggestions = append(Suggestions, *Resource)
+		}
+	default:
 		return Suggestions
 	}
 	return Suggestions
@@ -188,17 +226,33 @@ func (this *DataCenterSuggestManager) GetSuggestions() []ResourceSuggestion {
 
 type ResourceSuggestManager struct {
 	SuggestManagerInterface
+	Client vim25.Client
 }
 
 func NewResourceSuggestManager() *ResourceSuggestManager {
 	return &ResourceSuggestManager{}
 }
 
-func (this *ResourceSuggestManager) GetResource(ItemID string) (*object.Reference, error)
+func (this *ResourceSuggestManager) GetResource(ItemPath string) (*object.ResourcePool, error) {
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
+	defer CancelFunc()
+
+	Finder := find.NewFinder(&this.Client)
+	ResourcePool, FindError := Finder.ResourcePool(TimeoutContext, ItemPath)
+	switch {
+	case FindError != nil:
+		return nil, exceptions.ItemDoesNotExist()
+
+	case FindError == nil:
+		return ResourcePool, nil
+
+	default:
+		return ResourcePool, nil
+	}
+}
 
 func (this *ResourceSuggestManager) GetSuggestions() []ResourceSuggestion {
 
-	NewSuggestPacker := NewSuggestionsPacker()
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
@@ -211,7 +265,6 @@ func (this *ResourceSuggestManager) GetSuggestions() []ResourceSuggestion {
 		return Suggestions
 
 	case ParseDatastoreError == nil:
-		Suggestions = NewSuggestPacker.GetPackedSuggestions(Resources)
 		return Suggestions
 	}
 	return Suggestions
@@ -219,17 +272,33 @@ func (this *ResourceSuggestManager) GetSuggestions() []ResourceSuggestion {
 
 type FolderSuggestManager struct {
 	SuggestManagerInterface
+	Client vim25.Client
 }
 
 func NewFolderSuggestManager() *FolderSuggestManager {
 	return &FolderSuggestManager{}
 }
 
-func (this *FolderSuggestManager) GetResource(ItemID string) (*object.Reference, error)
+func (this *FolderSuggestManager) GetResource(ItemPath string) (*object.Folder, error) {
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
+	defer CancelFunc()
+
+	Finder := find.NewFinder(&this.Client)
+	Folder, FindError := Finder.Folder(TimeoutContext, ItemPath)
+	switch {
+	case FindError != nil:
+		return nil, exceptions.ItemDoesNotExist()
+
+	case FindError == nil:
+		return Folder, nil
+
+	default:
+		return Folder, nil
+	}
+}
 
 func (this *FolderSuggestManager) GetSuggestions() []ResourceSuggestion {
 
-	NewSuggestPacker := NewSuggestionsPacker()
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
@@ -242,7 +311,6 @@ func (this *FolderSuggestManager) GetSuggestions() []ResourceSuggestion {
 		return Suggestions
 
 	case ParseDatastoreError == nil:
-		Suggestions = NewSuggestPacker.GetPackedSuggestions(Folders)
 		return Suggestions
 	}
 	return Suggestions

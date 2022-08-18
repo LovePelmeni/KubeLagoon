@@ -28,6 +28,7 @@ spec:
       labels:
         app: application-service 
     spec:
+      terminationGracePeriodSeconds: 60
       containers:
         - name: application-container 
           image: crazycoderrr/infrastracture 

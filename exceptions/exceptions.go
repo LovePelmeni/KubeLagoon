@@ -33,3 +33,7 @@ func DeployFromLibraryFailure() error {
 func NoResourceAvailable() error {
 	return errors.New("No That Amount of Resource available Now :(")
 }
+
+func ItemDoesNotExist() error {
+	return errors.New("Resource Item does not Exist.")
+}
