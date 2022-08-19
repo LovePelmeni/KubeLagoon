@@ -47,7 +47,7 @@ type Customer struct {
 	Username string           `json:"Username" gorm:"type:varchar(100); not null; unique;"`
 	Email    string           `json:"Email" gorm:"type:varchar(100); not null; unique;"`
 	Password string           `json:"Password" gorm:"type:varchar(100); not null;"`
-	Vms      []VirtualMachine `json:"Vms" gorm:"many2many:VirtualMachine;"`
+	Vms      []VirtualMachine `json:"Vms" gorm:"many2many:VirtualMachines;"`
 }
 
 func NewCustomer() *Customer {
@@ -68,8 +68,6 @@ type VirtualMachine struct {
 	gorm.Model
 
 	OwnerId            string `json:"OwnerId" gorm:"type:varchar(100); not null; unique;"`
-	ExternalIP         string `json:"Host" gorm:"type:varchar(100); not null; unique;"`
-	ExternalPort       string `json:"Port" gorm:"type:varchar(100); not null; unique;"`
 	VirtualMachineName string `json:"VirtualMachineName" gorm:"type:varchar(100); not null;"`
 	ItemPath           string `json:"ItemPath" gorm:"type:varchar(100); not null;"`
 }
@@ -107,13 +105,15 @@ type Configuration struct {
 	VirtualMachineID string         `json:"VirtualMachineID" gorm:"primaryKey;unique;"`
 	VirtualMachine   VirtualMachine `gorm:"foreignKey:VirtualMachine;references:VirtualMachineID;"`
 
-	Disk         string `json:"Storage" gorm:"type:varchar(1000); not null; unique;"`
-	Network      string `json:"Network" gorm:"type:varchar(1000); not null;"`
-	DataCenter   string `json:"DataCenter" gorm:"type:varchar(1000); not null;"`
-	DataStore    string `json:"DataStore" gorm:"type:varchar(1000); not null;"`
-	ResourcePool string `json:"ResourcePool" gorm:"type:varchar(1000); not null;"`
-	ItemPath     string `json:"ItemPath" gorm:"type:varchar(100); not null;"`
-	Folder       string `json:"Folder" xml:"Folder" gorm:"type:varchar(1000); not null;"`
+	Disk           string `json:"Storage" gorm:"type:varchar(1000); not null; unique;"`
+	Network        string `json:"Network" gorm:"type:varchar(1000); not null;"`
+	DataCenter     string `json:"DataCenter" gorm:"type:varchar(1000); not null;"`
+	DataStore      string `json:"DataStore" gorm:"type:varchar(1000); not null;"`
+	ResourcePool   string `json:"ResourcePool" gorm:"type:varchar(1000); not null;"`
+	ItemPath       string `json:"ItemPath" gorm:"type:varchar(100); not null;"`
+	Folder         string `json:"Folder" xml:"Folder" gorm:"type:varchar(1000); not null;"`
+	ResourceConfig string `json:"ResourceConfig" xml:"ResourceConfig" gorm:"type:varchar(1000); not null;"` // Configuration of the CPU's and Memoery
+	DiskConfig     string `json:"DiskConfig" xml:"DiskConfig" gorm:"type:varchar(1000); not null;"`
 }
 
 func NewConfiguration(
