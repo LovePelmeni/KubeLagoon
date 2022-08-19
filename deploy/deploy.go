@@ -2,13 +2,13 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"log"
 
 	"os"
 	"time"
 
 	"github.com/LovePelmeni/Infrastructure/exceptions"
-	"github.com/LovePelmeni/Infrastructure/ip"
 
 	"github.com/LovePelmeni/Infrastructure/models"
 	"github.com/LovePelmeni/Infrastructure/parsers"
@@ -45,42 +45,12 @@ func init() {
 	}
 }
 
-type VirtualMachineDeployKeyManagerInterface interface {
-	// Interface, is used for obtaining necessary Resource Keys, in order To Initialize
-	// Initial Virtual Machine Instance
-	GetDeployResourceKeys(RestClient rest.Client) (ResourceKeys, error)
-}
-
-type VirtualMachineManagerInterface interface {
-	// Interface, that Deploys new Virtual Machine
-
-	DeployVirtualMachine(VimClient vim25.Client,
-		Datastore *object.Datastore, Datacenter *object.Datacenter,
-		Folder *object.Folder, ResourcePool *object.ResourcePool, Configuration parsers.Config)
-
-	GetVirtualMachine(VmId string, CustomerId string) (*object.VirtualMachine, error)
-
-	StartVirtualMachine(VirtualMachine *object.VirtualMachine) (bool, error)
-
-	ShutdownVirtualMachine(VirtualMachine *object.VirtualMachine) (bool, error)
-
-	ApplyConfiguration(VirtualMachine *object.VirtualMachine, Configuration parsers.Config) (bool, error)
-
-	InitializeNewVirtualMachine(
-		VimClient vim25.Client, APIClient rest.Client,
-		Datastore *object.Datastore, Datacenter *object.Datacenter, Network *object.Network,
-		Folder *object.Folder, ResourcePool *object.ResourcePool,
-	) *object.VirtualMachine
-
-	DestroyVirtualMachine(VirtualMachine *object.VirtualMachine) (bool, error)
-}
-
 type ResourceKeys struct {
 	// Credentials
 	// * For the Storage: `Storage Key` - represents Acccess Key to the Storage, where All the Data will Be Allocated.
 	// * For the Network: `Network Key` - represents Access Key to the Network, the Application will be Attached to.
-	NetworkKey string `json:"NetworkKey"`
-	StorageKey string `json:"StorageKey"`
+	NetworkKey string `json:"NetworkKey" xml:"NetworkKey"`
+	StorageKey string `json:"StorageKey" xml:"StorageKey"`
 }
 
 func NewDeployResourceKeys(NetworkKey string, StorageKey string) *ResourceKeys {
@@ -95,7 +65,6 @@ type VirtualMachineResourceKeyManager struct {
 	// Class, that is responsible for Obtaining Credentials, to the Storage/Network
 	// To Get the Permissions to use that Resources.
 
-	VirtualMachineDeployKeyManagerInterface
 	Client rest.Client
 }
 
@@ -104,7 +73,52 @@ func NewVirtualMachineResourceKeyManager() *VirtualMachineResourceKeyManager {
 }
 
 func (this *VirtualMachineResourceKeyManager) GetLibraryItem(Context context.Context) (*library.Item, error) {
-	// Returns Library Item
+	// Returning Library Item
+	const (
+		libName         = ""
+		libItemName     = ""
+		libraryItemType = "ovf"
+	)
+
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
+	defer CancelFunc()
+
+	m := library.NewManager(&this.Client)
+
+	libraries, Error := m.FindLibrary(TimeoutContext, library.Find{Name: libName})
+	if Error != nil {
+		return nil, Error
+	}
+
+	if len(libraries) == 0 {
+		return nil, errors.New("No Libraries Found")
+	}
+
+	if len(libraries) > 1 {
+		return nil, errors.New("Go multiple Libraries")
+	}
+
+	//  ovf   ovf
+	items, ParseError := m.FindLibraryItems(TimeoutContext, library.FindItem{Name: libItemName,
+		Type: libraryItemType, LibraryID: libraries[0]})
+
+	if ParseError != nil {
+		return nil, ParseError
+	}
+
+	if len(items) == 0 {
+		return nil, errors.New("No Items has been Found")
+	}
+
+	if len(items) > 1 {
+		return nil, errors.New("Got Multiple Items")
+	}
+
+	item, GetError := m.GetLibraryItem(TimeoutContext, items[0])
+	if GetError != nil {
+		return nil, GetError
+	}
+	return item, nil
 }
 
 func (this *VirtualMachineResourceKeyManager) GetResourceKeys(
@@ -134,6 +148,7 @@ func (this *VirtualMachineResourceKeyManager) GetResourceKeys(
 		ResourceKeys := NewDeployResourceKeys(
 			Filter.Networks[0], Filter.StorageGroups[0])
 		return ResourceKeys, nil
+
 	default:
 		return nil, exceptions.ItemDoesNotExist()
 	}
@@ -145,7 +160,6 @@ type VirtualMachineManager struct {
 	// It is responsible for Deploying/ Starting / Stopping / Updating Virtual Machines
 	// Owned by Customers
 	// Provides Following Methods in order to Fullfill the Needs and make the Process comfortable and easier
-	VirtualMachineManagerInterface
 	VimClient vim25.Client
 }
 
@@ -198,29 +212,55 @@ func (this *VirtualMachineManager) GetVirtualMachine(VmId string, CustomerId str
 
 func (this *VirtualMachineManager) DeployVirtualMachine(
 	VimClient vim25.Client,
-	Datastore *object.Datastore,
-	Datacenter *object.Datacenter,
-	Network *object.Network,
-	Folder *object.Folder,
-	ResourcePool *object.ResourcePool,
-	Configuration parsers.Config,
-) bool {
+	HardwareConfiguration parsers.HardwareConfig,
+	CustomConfiguration parsers.VirtualMachineCustomSpec,
+
+) (*object.VirtualMachine, error) {
+
+	// Initializing New Virtual Machine
+
+	InitializedMachine, InitError := this.InitializeNewVirtualMachine(
+		VimClient, CustomConfiguration.Metadata.VirtualMachineName, HardwareConfiguration,
+	)
+
+	if InitError != nil {
+		ErrorLogger.Printf("Failed to Initialize New Virtual Machine Instance")
+		return nil, exceptions.VMDeployFailure()
+	}
+
+	// Applying Configuration
+
+	ApplyError := this.ApplyConfiguration(InitializedMachine, CustomConfiguration)
+	if ApplyError != nil {
+		ErrorLogger.Printf("Failed to Apply Custom Configuration to the VM: %s",
+			InitializedMachine.Reference().Value)
+		return nil, exceptions.VMDeployFailure()
+	}
+
+	// Starting Virtual Machine Server
+	StartedError := this.StartVirtualMachine(InitializedMachine)
+	if StartedError != nil {
+		ErrorLogger.Printf("Failed to Start New VM: %s, Error: %s",
+			InitializedMachine.Reference().Value, StartedError)
+		return nil, exceptions.VMDeployFailure()
+	}
+	return InitializedMachine, nil
 }
 
 func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 	VimClient vim25.Client,
-	APIClient rest.Client, // Rest Client for API Calls
-	Datastore *object.Datastore, // Datastore, that has been chosen by Customer where the want to Store Data
-	Datacenter *object.Datacenter, // Datacenter, that has been chosen by Customer, where they want to deploy their Application
-	Network *object.Network, // Network, that has been chosen By Customer, where they want to attach their Application At,
-	Folder *object.Folder, // Folder, where the Application Item is going to be Stored.
-	Resource *object.ResourcePool, // Resource, (Memory and CPU Num's) that Customer want to Allocate, according to their Requirements
-
+	VirtualMachineName string, // Name, Customer Decided to set up for this Virtual Server
+	Configuration parsers.HardwareConfig,
 ) (*object.VirtualMachine, error) {
 	// Initializes Virtual Machine Configuration (That does not exist yet)
 
+	Resources := Configuration.GetResources()
+
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
+	defer CancelFunc()
+
 	ResourceAllocationManager := NewVirtualMachineResourceKeyManager()
-	ResourceCredentials, ResourceKeysError := ResourceAllocationManager.GetDeployResourceKeys(*rest.NewClient(&this.VimClient))
+	ResourceCredentials, ResourceKeysError := ResourceAllocationManager.GetResourceKeys(Resources["ResourcePool"], Resources["Folder"])
 
 	switch {
 
@@ -230,33 +270,44 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 		Deployment := vcenter.Deploy{
 			DeploymentSpec: vcenter.DeploymentSpec{
 
-				Name:               "test",
-				DefaultDatastoreID: Datastore.Reference().Value,
+				Name:               VirtualMachineName,
+				DefaultDatastoreID: Resources["Datastore"].Reference().Value,
 				AcceptAllEULA:      true,
 				NetworkMappings: []vcenter.NetworkMapping{{
 					Key:   ResourceCredentials.NetworkKey,
-					Value: Network.Reference().Value,
+					Value: Resources["Network"].Reference().Value,
 				}},
 
-				StorageMappings: []vcenter.StorageMapping{{
-					Key: ResourceCredentials.StorageKey,
-					Value: vcenter.StorageGroupMapping{
-						Type:         "DATASTORE",
-						DatastoreID:  Datastore.Reference().Value,
-						Provisioning: "thin",
+				StorageMappings: []vcenter.StorageMapping{
+					{
+						Key: ResourceCredentials.StorageKey,
+						Value: vcenter.StorageGroupMapping{
+							Type:         "DATASTORE",
+							DatastoreID:  Resources["Datastore"].Reference().Value,
+							Provisioning: "thin",
+						},
 					},
-				}},
+				},
+				VmConfigSpec:        &vcenter.VmConfigSpec{},
 				StorageProvisioning: "thin",
 			},
 			Target: vcenter.Target{
-				ResourcePoolID: Resource.Reference().Value,
-				FolderID:       Folder.Reference().Value,
+				ResourcePoolID: Resources["ResourcePool"].Reference().Value,
+				FolderID:       Resources["Folder"].Reference().Value,
 			},
 		}
+
 		DeployTimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
 		defer CancelFunc()
 
-		VirtualMachineInstanceReference, DeployError := vcenter.NewManager(&APIClient).DeployLibraryItem(DeployTimeoutContext, item.ID, Deployment)
+		Item, ItemError := ResourceAllocationManager.GetLibraryItem(TimeoutContext)
+
+		if ItemError != nil {
+			DebugLogger.Printf("ItemError: %s", ItemError)
+			return nil, exceptions.ItemDoesNotExist()
+		}
+
+		VirtualMachineInstanceReference, DeployError := vcenter.NewManager(rest.NewClient(&VimClient)).DeployLibraryItem(DeployTimeoutContext, Item.ID, Deployment)
 
 		switch {
 		case DeployError != nil:
@@ -289,7 +340,10 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 	return nil, exceptions.VMDeployFailure()
 }
 
-func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.VirtualMachine, Configuration parsers.Config) error {
+func (this *VirtualMachineManager) ApplyConfiguration(
+	VirtualMachine *object.VirtualMachine,
+	Configuration parsers.VirtualMachineCustomSpec,
+) error {
 	// Applies Custom Configuration: Num's of CPU's, Memory etc... onto the Initialized Virtual Machine
 
 	// Resource Manager, that allows to return Initialized Resource Instances, by ID, UniqueName, etc...
@@ -302,7 +356,6 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 	// Initializing Configurations for the Virtual Server
 	DiskConfig, DiskError := storage.NewVirtualMachineStorageManager().SetupStorageDisk(VirtualMachine, *storage.NewVirtualMachineStorage(Configuration.Disk.CapacityInKB), &DataStoreManagedReference)
 	ResourceConfig, ResourceError := resources.NewVirtualMachineResourceManager().SetupResources(resources.NewVirtualMachineResources(Configuration.Resources.CpuNum, int64(Configuration.Resources.MemoryInMegabytes)))
-	IPConfig, IPError := ip.NewVirtualMachineIPManager().SetupAddress(ip.NewVirtualMachineIPAddress(Configuration.IP.IP, Configuration.IP.Netmask, Configuration.IP.Gateway, Configuration.IP.Hostname))
 
 	// If Failed to Obtain one of the Hardware Resources, Returns Exception, that it Does Not Exist
 
@@ -311,9 +364,6 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 	}
 	if ResourceError != nil {
 		return exceptions.ComponentDoesNotExist(ResourceError.Error())
-	}
-	if IPError != nil {
-		return exceptions.ComponentDoesNotExist(IPError.Error())
 	}
 
 	// Applying Hardware Configurations, such as CPU, Memory, Disk etc....
@@ -326,16 +376,17 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 
 			NewApplyTask, ApplyError := VirtualMachine.Reconfigure(TimeoutContext, VmConfig)
 			WaitError := NewApplyTask.Wait(TimeoutContext)
+
 			switch {
 			case ApplyError != nil || WaitError != nil:
 				ErrorLogger.Printf(
-					"Hardware Configuration `%s` has been Failed to be Applied! For VM: %s",
+					"Hardware Configuration has been Failed to be Applied! For VM: %s",
 					VirtualMachine.Reference().Value)
 				return ApplyError
 
 			case ApplyError == nil && WaitError == nil:
 				DebugLogger.Printf(
-					"Hardware Configuration `%s` has been Applied Successfully! For VM: %s",
+					"Hardware Configuration has been Applied Successfully! For VM: %s",
 					VirtualMachine.Reference().Value)
 				return nil
 
@@ -352,7 +403,7 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 
 	// Applying Customization Configurations, such as IP, Profiles, etc...
 
-	for _, VmCustomizationConfig := range []types.CustomizationSpec{*IPConfig} {
+	for _, VmCustomizationConfig := range []types.CustomizationSpec{} {
 		CustomizationError := func() error {
 
 			TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
@@ -364,13 +415,13 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 			switch {
 			case ApplyError != nil || WaitError != nil:
 				ErrorLogger.Printf(
-					"Customized Configuration `%s` has been Failed to be Applied! For VM: %s",
+					"Customized Configuration has been Failed to be Applied! For VM: %s",
 					VirtualMachine.Reference().Value)
 				return ApplyError
 
 			case ApplyError == nil && WaitError == nil:
 				DebugLogger.Printf(
-					"Customized Configuration `%s` has been Applied Successfully! For VM: %s",
+					"Customized Configuration has been Applied Successfully! For VM: %s",
 					VirtualMachine.Reference().Value)
 				return nil
 			default:
@@ -407,6 +458,22 @@ func (this *VirtualMachineManager) StartVirtualMachine(VirtualMachine *object.Vi
 		return nil
 	default:
 		return nil
+	}
+}
+
+func (this *VirtualMachineManager) RebootVirtualMachine(VirtualMachine *object.VirtualMachine) bool {
+	// Rebooting Virtual Machine Server and Operational System within this VM
+
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
+	defer CancelFunc()
+
+	RebootError := VirtualMachine.RebootGuest(TimeoutContext)
+	if RebootError != nil {
+		ErrorLogger.Printf("Failed to Reboot Guest OS, on VM: %s",
+			VirtualMachine.Reference().Value)
+		return true
+	} else {
+		return false
 	}
 }
 

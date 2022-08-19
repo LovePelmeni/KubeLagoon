@@ -95,12 +95,14 @@ func (this *Server) Run() {
 	}
 
 	// Virtual Machines Rest API Endpoints
-	Router.Group("/vm/")
+	Router.Group("/vm/").Use(middlewares.JwtAuthenticationMiddleware(),
+		middlewares.IsVirtualMachineOwnerMiddleware())
 	{
-		Router.Use(middlewares.JwtAuthenticationMiddleware())
 		{
 			Router.POST("/deploy/", rest.DeployNewVirtualMachineRestController)
-			Router.PUT("/update/config/", rest.UpdateVirtualMachineConfigurationRestController)
+			Router.POST("/start/", rest.StartVirtualMachineRestController)
+			Router.PUT("/update/", rest.UpdateVirtualMachineConfigurationRestController)
+			Router.POST("/reboot/", rest.RebootVirtualMachineRestController)
 			Router.DELETE("/shutdown/", rest.ShutdownVirtualMachineRestController)
 			Router.DELETE("/remove/", rest.RemoveVirtualMachineRestController)
 		}

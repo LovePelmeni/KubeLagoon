@@ -3,7 +3,6 @@ package ip
 import (
 	"log"
 	"os"
-
 	"github.com/vmware/govmomi/vim25/types"
 )
 
@@ -64,7 +63,6 @@ func (this *VirtualMachineIPManager) SetupAddress(IPCredentials *VirtualMachineI
 			Gateway:    []string{IPCredentials.Gateway},                          // Setting up Gateway
 		},
 	}
-
 	// Updating Customized IP Setting Configuration with the Previous IP Configuration
 	CustomizedIPSettings := &types.CustomizationSpec{
 		NicSettingMap: []types.CustomizationAdapterMapping{CustomizedIP}, // Adding Previous Configuration

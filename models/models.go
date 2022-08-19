@@ -1,11 +1,13 @@
 package models
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 
 	"os"
 
+	"github.com/LovePelmeni/Infrastructure/parsers"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -42,7 +44,6 @@ func init() {
 
 type Customer struct {
 	gorm.Model
-
 	Username string           `json:"Username" gorm:"type:varchar(100); not null; unique;"`
 	Email    string           `json:"Email" gorm:"type:varchar(100); not null; unique;"`
 	Password string           `json:"Password" gorm:"type:varchar(100); not null;"`
@@ -53,63 +54,51 @@ func NewCustomer() *Customer {
 	return &Customer{}
 }
 func (this *Customer) Create() (*gorm.DB, error) {
+	CreatedCustomer := Database.Model(&Customer{}).Create(&this)
+	return CreatedCustomer, CreatedCustomer.Error
 }
 
 func (this *Customer) Delete() (*gorm.DB, error) {
-
+	DeletedCustomer := Database.Model(&Customer{}).Delete(&this)
+	Database.Model(&Customer{}).Unscoped().Delete(&this)
+	return DeletedCustomer, DeletedCustomer.Error
 }
 
 type VirtualMachine struct {
 	gorm.Model
 
-	OwnerId       string `json:"OwnerId" gorm:"type:varchar(100); not null; unique;"`
-	ExternalIP    string `json:"Host" gorm:"type:varchar(100); not null; unique;"`
-	ExternalPort  string `json:"Port" gorm:"type:varchar(100); not null; unique;"`
-	NetworkIP     string `json:"NetworkIP" gorm:"type:varchar(100); not null;"`
-	SshPublicKey  string `json:"SshPublicKey" gorm:"type:varchar(100); not null; unique;"`
-	SshPrivateKey string `json:"SshPrivateKey" gorm:"type:varchar(100); not null; unique;"`
-	ItemPath      string `json:"ItemPath" gorm:"type:varchar(100); not null;"`
+	OwnerId            string `json:"OwnerId" gorm:"type:varchar(100); not null; unique;"`
+	ExternalIP         string `json:"Host" gorm:"type:varchar(100); not null; unique;"`
+	ExternalPort       string `json:"Port" gorm:"type:varchar(100); not null; unique;"`
+	VirtualMachineName string `json:"VirtualMachineName" gorm:"type:varchar(100); not null;"`
+	ItemPath           string `json:"ItemPath" gorm:"type:varchar(100); not null;"`
 }
 
 func NewVirtualMachine(
 
 	OwnerId string, // ID Of the Customer, who Owns this Virtual Machine
-	ExternalIP string, // ExternalIP of the Virtual Machine
-	ExternalPort string, // ExternalPort of the Virtual Machine
-	NetworkIP string, // Network IP Address, the Virtual machine Is bind to
-	SshPublicKey string, // Ssh Public Key to connect externally,
-	SshPrivateKey string, // Ssh Private Key to validate Connections via SSH Tunnel to the Virtual Machine
+	VirtualMachineName string, // Virtual Machine UniqueName
 	ItemPath string,
+
 ) *VirtualMachine {
 
 	return &VirtualMachine{
-		OwnerId:       OwnerId,
-		ExternalIP:    ExternalIP,
-		ExternalPort:  ExternalPort,
-		NetworkIP:     NetworkIP,
-		SshPublicKey:  SshPublicKey,
-		SshPrivateKey: SshPrivateKey,
-		ItemPath:      ItemPath,
+		OwnerId:            OwnerId,
+		VirtualMachineName: VirtualMachineName,
+		ItemPath:           ItemPath,
 	}
 }
-func (this *VirtualMachine) Create(OwnerId string, NewConfiguration Configuration) (*gorm.DB, error) {
 
-	Created := Database.Model(&VirtualMachine{}).Create(&Vm)
-	if Created.Error != nil {
-		Created.Rollback()
-		return nil, Created.Error
-	}
-	return Created, nil
+func (this *VirtualMachine) Create() (*gorm.DB, error) {
+
+	Created := Database.Model(&VirtualMachine{}).Create(&this)
+	return Created, Created.Error
 }
 
-func (this *VirtualMachine) Delete(NewConfiguration Configuration) (*gorm.DB, error) {
-	Created := Database.Model(&VirtualMachine{}).Delete(&Vm)
-	if Created.Error != nil {
-		Created.Rollback()
-		return nil, Created.Error
-	}
-	Database.Model(&VirtualMachine{}).Unscoped().Delete(&Vm)
-	return Created, nil
+func (this *VirtualMachine) Delete() (*gorm.DB, error) {
+	Deleted := Database.Model(&VirtualMachine{}).Delete(&this)
+	Database.Model(&VirtualMachine{}).Unscoped().Delete(&this)
+	return Deleted, Deleted.Error
 }
 
 type Configuration struct {
@@ -118,32 +107,42 @@ type Configuration struct {
 	VirtualMachineID string         `json:"VirtualMachineID" gorm:"primaryKey;unique;"`
 	VirtualMachine   VirtualMachine `gorm:"foreignKey:VirtualMachine;references:VirtualMachineID;"`
 
-	Storage      string `json:"Storage" gorm:"type:varchar(1000); not null; unique;"`
+	Disk         string `json:"Storage" gorm:"type:varchar(1000); not null; unique;"`
 	Network      string `json:"Network" gorm:"type:varchar(1000); not null;"`
 	DataCenter   string `json:"DataCenter" gorm:"type:varchar(1000); not null;"`
 	DataStore    string `json:"DataStore" gorm:"type:varchar(1000); not null;"`
 	ResourcePool string `json:"ResourcePool" gorm:"type:varchar(1000); not null;"`
 	ItemPath     string `json:"ItemPath" gorm:"type:varchar(100); not null;"`
+	Folder       string `json:"Folder" xml:"Folder" gorm:"type:varchar(1000); not null;"`
 }
 
 func NewConfiguration(
-	SerializedStorageInfo string,
-	SerializedNetworkInfo string,
-	SerializedDataCenterInfo string,
-	SerializedDatastoreInfo string,
-	SerializedResourcePoolInfo string,
+	Config parsers.Config,
 ) *Configuration {
 
+	SerializedDatacenterConfig, _ := json.Marshal(Config.Datacenter)
+	SerializedDatastoreConfig, _ := json.Marshal(Config.DataStore)
+	SerializedNetworkConfig, _ := json.Marshal(Config.Network)
+	SerializedResourcePoolConfig, _ := json.Marshal(Config.Resources)
+	SerializedFolderConfig, _ := json.Marshal(Config.Folder)
+	SerializedDiskConfig, _ := json.Marshal(Config.Disk)
+
 	return &Configuration{
-		Storage:      SerializedStorageInfo,
-		Network:      SerializedNetworkInfo,
-		DataCenter:   SerializedDataCenterInfo,
-		DataStore:    SerializedDatastoreInfo,
-		ResourcePool: SerializedResourcePoolInfo,
+		Disk:         string(SerializedDiskConfig),
+		Network:      string(SerializedNetworkConfig),
+		DataCenter:   string(SerializedDatacenterConfig),
+		DataStore:    string(SerializedDatastoreConfig),
+		ResourcePool: string(SerializedResourcePoolConfig),
+		Folder:       string(SerializedFolderConfig),
 	}
 }
 func (this *Configuration) Create() (*gorm.DB, error) {
+	Created := Database.Model(&Configuration{}).Create(&this)
+	return Created, Created.Error
 }
 
 func (this *Configuration) Delete() (*gorm.DB, error) {
+	Deleted := Database.Model(&Configuration{}).Delete(&this)
+	Database.Model(&Configuration{}).Unscoped().Delete(&this)
+	return Deleted, Deleted.Error
 }

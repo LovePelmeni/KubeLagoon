@@ -107,7 +107,7 @@ func (this *NetworkSuggestManager) GetSuggestions() []ResourceSuggestion {
 					map[string]string{
 						"UniqueName": Network.Reference().Value,
 						"Type":       Network.Reference().Type,
-						"Path":       Network.GetInventoryPath(),
+						"ItemPath":       Network.GetInventoryPath(),
 					})
 				Suggestions = append(Suggestions, *Resource)
 				group.Done()
@@ -231,7 +231,7 @@ func (this *DataCenterSuggestManager) GetSuggestions() []ResourceSuggestion {
 					"UniqueName": Datacenter.Reference().Value,
 					"Type":       Datacenter.Reference().Type,
 					"Name":       Datacenter.Name(),
-					"Path":       Datacenter.InventoryPath,
+					"ItemPath":   Datacenter.InventoryPath,
 				})
 			Suggestions = append(Suggestions, *Resource)
 		}
@@ -291,7 +291,7 @@ func (this *ResourceSuggestManager) GetSuggestions() []ResourceSuggestion {
 					"UniqueName": ResourcePool.Reference().Value,
 					"Type":       ResourcePool.Reference().Type,
 					"Name":       ResourcePool.Name(),
-					"Path":       ResourcePool.InventoryPath,
+					"ItemPath":   ResourcePool.InventoryPath,
 				})
 			Suggestions = append(Suggestions, *Resource)
 		}
@@ -350,7 +350,7 @@ func (this *FolderSuggestManager) GetSuggestions() []ResourceSuggestion {
 					"UniqueName": Folder.Reference().Value,
 					"Type":       Folder.Reference().Type,
 					"Name":       Folder.Name(),
-					"Path":       Folder.InventoryPath,
+					"ItemPath":   Folder.InventoryPath,
 				})
 			Suggestions = append(Suggestions, *Resource)
 		}

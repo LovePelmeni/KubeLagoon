@@ -86,6 +86,7 @@ func init() {
 // Authorization Rest API Endpoints
 
 func LoginRestController(RequestContext *gin.Context) {
+
 }
 
 func LogoutRestController(RequestContext *gin.Context) {
@@ -109,88 +110,44 @@ func DeleteCustomerRestController(RequestContext *gin.Context) {
 
 func DeployNewVirtualMachineRestController(RequestContext *gin.Context) {
 
+	// Rest Controller, that deploys new Virtual Machine with Custom Configuration
+
 	CustomerId := RequestContext.PostForm("customerId")
 
-	Configuration, ConfigError := parsers.NewConfigurationParser().ConfigParse(
-		[]byte(RequestContext.PostForm("Configuration")))
+	HardwareConfiguration, HardwareError := parsers.NewHardwareConfig(RequestContext.PostForm("HardwareConfiguration"))
+	CustomConfiguration, CustomError := parsers.NewCustomConfig(RequestContext.PostForm("CustomConfiguration"))
 
-	if ConfigError != nil {
-		RequestContext.JSON(http.StatusBadRequest, gin.H{"Error": "Invalid Configuration"})
-		return
+	if HardwareError != nil || CustomError != nil {
+		RequestContext.JSON(
+			http.StatusBadRequest, gin.H{"Error": "Invalid Configuration"})
 	}
 
-	// Receiving Physical Instances of the Hardware, that is Going to Be Used within the Virtual Machine
-	// Based on the Configuraion
-
-	SerializedDatacenterConfig, _ := json.Marshal(Configuration.Datacenter)
-	SerializedDatastoreConfig, _ := json.Marshal(Configuration.DataStore)
-	SerializedNetworkConfig, _ := json.Marshal(Configuration.Network)
-	SerializedResourceConfig, _ := json.Marshal(Configuration.Resources)
-	SerializedFolderConfig, _ := json.Marshal(Configuration.Folder)
+	// Deploying New Virtual Server Instance
 
 	NewVirtualMachineManager := deploy.NewVirtualMachineManager(*Client.Client)
-	NewResourceManager := suggestions.NewResourceSuggestManager(*Client.Client)
+	DeployedInstance, DeployError := NewVirtualMachineManager.DeployVirtualMachine(
+		*Client.Client, *HardwareConfiguration, *CustomConfiguration)
 
-	// Obtaining Resource Instances, by Configuration Parameters
-
-	Datacenter, DatacenterError := NewResourceManager.GetResource(Configuration.Datacenter.ItemPath)
-	Datastore, DatastoreError := NewResourceManager.GetResource(Configuration.DataStore.ItemPath)
-	Network, NetworkError := NewResourceManager.GetResource(Configuration.Network.ItemPath)
-	Folder, FolderError := NewResourceManager.GetResource(Configuration.Folder.ItemPath)
-	ResourcePool, ResourcePoolError := NewResourceManager.GetResource(Configuration.Resources.ItemPath)
-
-	// if One of the Components does not exist or cannot be find, Aborting Process...
-	if DatacenterError == nil {
-		RequestContext.AbortWithStatusJSON(http.StatusBadGateway, gin.H{"Error": "Datacenter Does Not Exist"})
-		return
-	}
-	if DatastoreError == nil {
-		RequestContext.AbortWithStatusJSON(http.StatusBadGateway, gin.H{"Error": "Datastore Does Not Exist"})
-		return
-	}
-	if NetworkError == nil {
-		RequestContext.AbortWithStatusJSON(http.StatusBadGateway, gin.H{"Error": "Network Does Not Exist"})
-		return
-	}
-	if FolderError == nil {
-		RequestContext.AbortWithStatusJSON(http.StatusBadGateway, gin.H{"Error": "Folder Does Not Exist"})
-		return
-	}
-	if ResourcePoolError == nil {
-		RequestContext.AbortWithStatusJSON(http.StatusBadGateway, gin.H{"Error": "Resource Does Not Exist"})
-		return
-	}
-
-	//
-	NewConfiguration := models.NewConfiguration(
-		string(SerializedFolderConfig), string(SerializedNetworkConfig),
-		string(SerializedDatacenterConfig), string(SerializedDatastoreConfig),
-		string(SerializedResourceConfig),
-	)
-
-	// Creating New VM ORM Model Object...
-
-	Deployed := NewVirtualMachineManager.DeployVirtualMachine(
-		*Client.Client,
-		Datastore.(*object.Datastore),
-		Datacenter.(*object.Datacenter),
-		Network.(*object.Network),
-		Folder.(*object.Folder),
-		ResourcePool.(*object.ResourcePool),
-		*Configuration,
-	)
-
-	switch Deployed {
-	case true:
+	switch DeployError {
+	case nil:
 		RequestContext.JSON(http.StatusOK,
 			gin.H{"Operation": "Success"})
-	case false:
+	default:
 		RequestContext.JSON(http.StatusBadGateway,
 			gin.H{"Error": "Failed to Deploy New Virtual Server"})
 	}
 }
 
 func UpdateVirtualMachineConfigurationRestController(RequestContext *gin.Context) {
+	// Rest Controller, that is Used to Apply New Configuration to the Virtual Machine Server
+}
+
+func StartVirtualMachineRestController(RequestContext *gin.Context) {
+	// Rest Controller, that is Used to Start Virtual Machine Server
+}
+
+func RebootVirtualMachineRestController(RequestContext *gin.Context) {
+	// Rest Controller, that is Used to Reboot Virtual Machine Server
 }
 
 func ShutdownVirtualMachineRestController(RequestContext *gin.Context) {
@@ -204,7 +161,8 @@ func ShutdownVirtualMachineRestController(RequestContext *gin.Context) {
 	Vm, FindError := NewVmManager.GetVirtualMachine(VirtualMachineId, CustomerId)
 
 	if FindError != nil {
-		RequestContext.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"Error": "Server does Not Exist"})
+		RequestContext.AbortWithStatusJSON(
+			http.StatusBadRequest, gin.H{"Error": "Server does Not Exist"})
 		return
 	}
 
@@ -230,7 +188,8 @@ func RemoveVirtualMachineRestController(RequestContext *gin.Context) {
 	Vm, FindError := NewVmManager.GetVirtualMachine(VirtualMachineId, CustomerId)
 
 	if FindError != nil {
-		RequestContext.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"Error": "Server does Not Exist"})
+		RequestContext.AbortWithStatusJSON(
+			http.StatusBadRequest, gin.H{"Error": "Server does Not Exist"})
 		return
 	}
 
@@ -244,11 +203,6 @@ func RemoveVirtualMachineRestController(RequestContext *gin.Context) {
 	case StartedError == nil && Started:
 		RequestContext.JSON(http.StatusCreated, gin.H{"Operation": "Success"})
 	}
-}
-
-// Support Rest API Endpoints
-
-func SupportRestController(RequestContext *gin.Context) {
 }
 
 // Resources Rest API Endpoints
@@ -354,6 +308,7 @@ func GetCustomerVirtualMachineInfoRestController(RequestContext *gin.Context) {
 		Vm, _ := Finder.FindByInventoryPath(Timeout, VirtualMachine.ItemPath)
 		Pw, _ := Vm.(*object.VirtualMachine).PowerState(Timeout)
 		PowerState = string(Pw)
+
 		group.Done()
 	}()
 
@@ -367,4 +322,8 @@ func GetCustomerVirtualMachineInfoRestController(RequestContext *gin.Context) {
 		Status:         string(PowerState),
 	}
 	RequestContext.JSON(http.StatusOK, gin.H{"Vm": Vm})
+}
+
+func SupportRestController(RequestContext *gin.Context) {
+	// Rest Controller, that is used for sending Email Support Notifications
 }
