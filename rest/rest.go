@@ -3,6 +3,7 @@ package rest
 import (
 	"context"
 	"encoding/json"
+
 	"fmt"
 	"sync"
 
@@ -17,8 +18,8 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/deploy"
 	"github.com/LovePelmeni/Infrastructure/models"
-	"github.com/LovePelmeni/Infrastructure/parsers"
 
+	"github.com/LovePelmeni/Infrastructure/parsers"
 	"github.com/LovePelmeni/Infrastructure/suggestions"
 
 	"github.com/gin-gonic/gin"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vapi/rest"
+
 	"github.com/vmware/govmomi/vim25"
 	_ "github.com/xhit/go-simple-mail/v2"
 )
@@ -53,6 +55,9 @@ var (
 )
 
 var (
+	Client govmomi.Client
+)
+var (
 	VirtualMachine models.VirtualMachine
 	configuration  models.Configuration
 	Customer       models.Customer
@@ -75,8 +80,8 @@ func init() {
 			panic(FailedToLogin)
 		}
 	}
+	Client = *APIClient
 }
-
 
 // Authorization Rest API Endpoints
 
@@ -85,8 +90,6 @@ func LoginRestController(RequestContext *gin.Context) {
 
 func LogoutRestController(RequestContext *gin.Context) {
 }
-
-
 
 // Customers Rest API Endpoints
 
@@ -101,9 +104,6 @@ func UpdateCustomerRestController(RequestContext *gin.Context) {
 func DeleteCustomerRestController(RequestContext *gin.Context) {
 
 }
-
-
-
 
 // Virtual Machine Rest API Endpoints
 
@@ -128,8 +128,8 @@ func DeployNewVirtualMachineRestController(RequestContext *gin.Context) {
 	SerializedResourceConfig, _ := json.Marshal(Configuration.Resources)
 	SerializedFolderConfig, _ := json.Marshal(Configuration.Folder)
 
-	NewVirtualMachineManager := deploy.NewVirtualMachineManager()
-	NewResourceManager := suggestions.NewResourceSuggestManager()
+	NewVirtualMachineManager := deploy.NewVirtualMachineManager(*Client.Client)
+	NewResourceManager := suggestions.NewResourceSuggestManager(*Client.Client)
 
 	// Obtaining Resource Instances, by Configuration Parameters
 
@@ -170,53 +170,23 @@ func DeployNewVirtualMachineRestController(RequestContext *gin.Context) {
 
 	// Creating New VM ORM Model Object...
 
-	newVirtualMachine, VmError := VirtualMachine.Create(CustomerId, *NewConfiguration)
-
-	if VmError != nil {
-		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to Create new VM"})
-		return
-	}
-
-	// Initializing New Virtual Machine Instance
-
-	NewVirtualMachine, InitializeError := NewVirtualMachineManager.InitializeNewVirtualMachine(
-		VimClient, rest.NewClient(&VimClient),
-		Datastore, Datacenter,
-		Network, Folder, ResourcePool,
+	Deployed := NewVirtualMachineManager.DeployVirtualMachine(
+		*Client.Client,
+		Datastore.(*object.Datastore),
+		Datacenter.(*object.Datacenter),
+		Network.(*object.Network),
+		Folder.(*object.Folder),
+		ResourcePool.(*object.ResourcePool),
+		*Configuration,
 	)
 
-	if InitializeError != nil {
-		RequestContext.JSON(http.StatusBadGateway,
-			gin.H{"Error": fmt.Sprintf("Failed to Initialize New Server, %s", InitializeError)})
-		newVirtualMachine.Rollback()
-	}
-
-	// Applying Configuration to the New Initialized Virtual Machine
-
-	AppliedError := NewVirtualMachineManager.ApplyConfiguration(Configuration)
-
-	if AppliedError != nil {
-		RequestContext.JSON(http.StatusBadGateway,
-			gin.H{"Error": fmt.Sprintf("Failed to Apply Configuration to New Initialized Server, %s", AppliedError)})
-		newVirtualMachine.Rollback()
-	}
-
-	// Starting New Initialized Virtual Machine...
-
-	StartedError := NewVirtualMachineManager.StartVirtualMachine(NewVirtualMachine)
-
-	switch {
-	case StartedError == nil:
-		newVirtualMachine.Commit()
+	switch Deployed {
+	case true:
 		RequestContext.JSON(http.StatusOK,
-			gin.H{"Status": "Virtual Machine Has been Deployed",
-				"Hostname": Configuration.IP.Hostname,
-				"IP":       Configuration.IP.IP})
-
-	case StartedError != nil:
-		newVirtualMachine.Rollback()
+			gin.H{"Operation": "Success"})
+	case false:
 		RequestContext.JSON(http.StatusBadGateway,
-			gin.H{"Error": fmt.Sprintf("Failed to Start New Server, %s", StartedError)})
+			gin.H{"Error": "Failed to Deploy New Virtual Server"})
 	}
 }
 
@@ -229,7 +199,7 @@ func ShutdownVirtualMachineRestController(RequestContext *gin.Context) {
 
 	VirtualMachineId := RequestContext.Query("VirtualMachineId")
 	CustomerId := RequestContext.Query("CustomerId")
-	NewVmManager := deploy.NewVirtualMachineManager()
+	NewVmManager := deploy.NewVirtualMachineManager(*Client.Client)
 
 	Vm, FindError := NewVmManager.GetVirtualMachine(VirtualMachineId, CustomerId)
 
@@ -239,7 +209,6 @@ func ShutdownVirtualMachineRestController(RequestContext *gin.Context) {
 	}
 
 	StartedError := NewVmManager.StartVirtualMachine(Vm)
-
 	switch {
 	case StartedError != nil:
 		RequestContext.JSON(http.StatusBadGateway,
@@ -256,7 +225,7 @@ func RemoveVirtualMachineRestController(RequestContext *gin.Context) {
 
 	VirtualMachineId := RequestContext.Query("VirtualMachineId")
 	CustomerId := RequestContext.Query("CustomerId")
-	NewVmManager := deploy.NewVirtualMachineManager()
+	NewVmManager := deploy.NewVirtualMachineManager(*Client.Client)
 
 	Vm, FindError := NewVmManager.GetVirtualMachine(VirtualMachineId, CustomerId)
 
@@ -289,11 +258,11 @@ func GetAvailableResourcesInfoRestController(context *gin.Context) {
 	// Rest Endpoint, Returns All Available Resources, to Configure the Virtual Machine Server
 
 	ResourceTypes := map[string]suggestions.SuggestManagerInterface{
-		"DataCenters": suggestions.NewDataCenterSuggestManager(),
-		"DataStores":  suggestions.NewDatastoreSuggestManager(),
-		"Networks":    suggestions.NewNetworkSuggestManager(),
-		"Resources":   suggestions.NewResourceSuggestManager(),
-		"Folders":     suggestions.NewFolderSuggestManager(),
+		"DataCenters": suggestions.NewDataCenterSuggestManager(*Client.Client),
+		"DataStores":  suggestions.NewDatastoreSuggestManager(*Client.Client),
+		"Networks":    suggestions.NewNetworkSuggestManager(*Client.Client),
+		"Resources":   suggestions.NewResourceSuggestManager(*Client.Client),
+		"Folders":     suggestions.NewFolderSuggestManager(*Client.Client),
 	}
 
 	var Resources map[string][]suggestions.ResourceSuggestion

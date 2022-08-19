@@ -16,6 +16,7 @@ type Config struct {
 		Hostname string `json:"Hostname" xml:"Hostname"`
 		Netmask  string `json:"Netmask" xml:"Netmask"`
 		IP       string `json:"IP" xml:"IP"`
+		Gateway  string `json:"Gateway" xml:"Gateway"`
 	} `json:"IP" xml:"IP"`
 
 	// Hardware Resourcs for the VM Configuration
@@ -66,7 +67,7 @@ type Config struct {
 	} `json:"Folder" xml:"Folder"`
 }
 
-func NewConfig() *Config {
+func NewEmptyConfig() *Config {
 	return &Config{}
 }
 

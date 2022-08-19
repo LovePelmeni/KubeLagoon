@@ -17,8 +17,14 @@ func NewVirtualMachineHeartBeatManager() *VirtualMachineHeartBeatManager {
 	return &VirtualMachineHeartBeatManager{}
 }
 
-func (this *VirtualMachineHeartBeatManager) GetCpuMetrics()
+func (this *VirtualMachineHeartBeatManager) GetCpuMetrics() {
 
-func (this *VirtualMachineHeartBeatManager) GetMemoryUsageMetrics()
+}
 
-func (this *VirtualMachineHeartBeatManager) GetMetrics()
+func (this *VirtualMachineHeartBeatManager) GetMemoryUsageMetrics() {
+
+}
+
+func (this *VirtualMachineHeartBeatManager) GetMetrics() {
+	
+}

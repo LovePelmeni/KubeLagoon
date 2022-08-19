@@ -9,10 +9,13 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/exceptions"
 	"github.com/LovePelmeni/Infrastructure/ip"
+
 	"github.com/LovePelmeni/Infrastructure/models"
 	"github.com/LovePelmeni/Infrastructure/parsers"
+
 	"github.com/LovePelmeni/Infrastructure/resources"
 	"github.com/LovePelmeni/Infrastructure/storage"
+
 	"github.com/LovePelmeni/Infrastructure/suggestions"
 
 	"github.com/vmware/govmomi/find"
@@ -51,6 +54,10 @@ type VirtualMachineDeployKeyManagerInterface interface {
 type VirtualMachineManagerInterface interface {
 	// Interface, that Deploys new Virtual Machine
 
+	DeployVirtualMachine(VimClient vim25.Client,
+		Datastore *object.Datastore, Datacenter *object.Datacenter,
+		Folder *object.Folder, ResourcePool *object.ResourcePool, Configuration parsers.Config)
+
 	GetVirtualMachine(VmId string, CustomerId string) (*object.VirtualMachine, error)
 
 	StartVirtualMachine(VirtualMachine *object.VirtualMachine) (bool, error)
@@ -61,7 +68,7 @@ type VirtualMachineManagerInterface interface {
 
 	InitializeNewVirtualMachine(
 		VimClient vim25.Client, APIClient rest.Client,
-		Datastore *object.Datastore, Datacenter *object.Datacenter,
+		Datastore *object.Datastore, Datacenter *object.Datacenter, Network *object.Network,
 		Folder *object.Folder, ResourcePool *object.ResourcePool,
 	) *object.VirtualMachine
 
@@ -142,8 +149,10 @@ type VirtualMachineManager struct {
 	VimClient vim25.Client
 }
 
-func NewVirtualMachineManager() *VirtualMachineManager {
-	return &VirtualMachineManager{}
+func NewVirtualMachineManager(Client vim25.Client) *VirtualMachineManager {
+	return &VirtualMachineManager{
+		VimClient: Client,
+	}
 }
 
 func (this *VirtualMachineManager) GetVirtualMachine(VmId string, CustomerId string) (*object.VirtualMachine, error) {
@@ -185,6 +194,17 @@ func (this *VirtualMachineManager) GetVirtualMachine(VmId string, CustomerId str
 	default:
 		return VirtualRef.(*object.VirtualMachine), nil
 	}
+}
+
+func (this *VirtualMachineManager) DeployVirtualMachine(
+	VimClient vim25.Client,
+	Datastore *object.Datastore,
+	Datacenter *object.Datacenter,
+	Network *object.Network,
+	Folder *object.Folder,
+	ResourcePool *object.ResourcePool,
+	Configuration parsers.Config,
+) bool {
 }
 
 func (this *VirtualMachineManager) InitializeNewVirtualMachine(
@@ -269,45 +289,101 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 	return nil, exceptions.VMDeployFailure()
 }
 
-func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.VirtualMachine, Configuration parsers.Config) (error) {
+func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.VirtualMachine, Configuration parsers.Config) error {
 	// Applies Custom Configuration: Num's of CPU's, Memory etc... onto the Initialized Virtual Machine
 
-	ResourceManager := suggestions.NewResourceSuggestManager(this.VimClient) 
+	// Resource Manager, that allows to return Initialized Resource Instances, by ID, UniqueName, etc...
+	ResourceManager := suggestions.NewResourceSuggestManager(this.VimClient)
 
-	// Initializing Applier Managers
-	// Configurations
-
+	// Receiving Datastore Instance by InventoryPath
 	DataStore, _ := ResourceManager.GetResource(Configuration.DataStore.ItemPath)
 	DataStoreManagedReference := DataStore.Reference()
 
-
-	// Initializing Configurations for the Virtual Server 
+	// Initializing Configurations for the Virtual Server
 	DiskConfig, DiskError := storage.NewVirtualMachineStorageManager().SetupStorageDisk(VirtualMachine, *storage.NewVirtualMachineStorage(Configuration.Disk.CapacityInKB), &DataStoreManagedReference)
 	ResourceConfig, ResourceError := resources.NewVirtualMachineResourceManager().SetupResources(resources.NewVirtualMachineResources(Configuration.Resources.CpuNum, int64(Configuration.Resources.MemoryInMegabytes)))
 	IPConfig, IPError := ip.NewVirtualMachineIPManager().SetupAddress(ip.NewVirtualMachineIPAddress(Configuration.IP.IP, Configuration.IP.Netmask, Configuration.IP.Gateway, Configuration.IP.Hostname))
 
+	// If Failed to Obtain one of the Hardware Resources, Returns Exception, that it Does Not Exist
 
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
-	defer CancelFunc()
-
-	BaseVmSpecApplyTask, VmSpecApplyError := VirtualMachine.Reconfigure(TimeoutContext, BaseVmSpec)
-	BaseVmSpecApplyTask.WaitForResult(TimeoutContext)
-
-	switch {
-
-		case VmSpecApplyError != nil: 
-			ErrorLogger.Printf("Failed to Apply Configuration to the Virtual Machine with ItemPath: %s",
-			VirtualMachine.InventoryPath)
-			return VmSpecApplyError
-
-		case VmSpecApplyError == nil:
-			InfoLogger.Printf("Disk Configuration for the Virtual Machine with ItemPath: %s, has been Applied Successfully",
-		    VirtualMachine.InventoryPath)
+	if DiskError != nil {
+		return exceptions.ComponentDoesNotExist(DiskError.Error())
+	}
+	if ResourceError != nil {
+		return exceptions.ComponentDoesNotExist(ResourceError.Error())
+	}
+	if IPError != nil {
+		return exceptions.ComponentDoesNotExist(IPError.Error())
 	}
 
-	// Applying Custom 
+	// Applying Hardware Configurations, such as CPU, Memory, Disk etc....
 
+	for _, VmConfig := range []types.VirtualMachineConfigSpec{*DiskConfig, *ResourceConfig} {
 
+		HardwareError := func() error {
+			TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
+			defer CancelFunc()
+
+			NewApplyTask, ApplyError := VirtualMachine.Reconfigure(TimeoutContext, VmConfig)
+			WaitError := NewApplyTask.Wait(TimeoutContext)
+			switch {
+			case ApplyError != nil || WaitError != nil:
+				ErrorLogger.Printf(
+					"Hardware Configuration `%s` has been Failed to be Applied! For VM: %s",
+					VirtualMachine.Reference().Value)
+				return ApplyError
+
+			case ApplyError == nil && WaitError == nil:
+				DebugLogger.Printf(
+					"Hardware Configuration `%s` has been Applied Successfully! For VM: %s",
+					VirtualMachine.Reference().Value)
+				return nil
+
+			default:
+				return ApplyError
+			}
+		}()
+		if HardwareError != nil {
+			return HardwareError
+		} else {
+			continue
+		}
+	}
+
+	// Applying Customization Configurations, such as IP, Profiles, etc...
+
+	for _, VmCustomizationConfig := range []types.CustomizationSpec{*IPConfig} {
+		CustomizationError := func() error {
+
+			TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
+			defer CancelFunc()
+
+			NewApplyTask, ApplyError := VirtualMachine.Customize(TimeoutContext, VmCustomizationConfig)
+			WaitError := NewApplyTask.Wait(TimeoutContext)
+
+			switch {
+			case ApplyError != nil || WaitError != nil:
+				ErrorLogger.Printf(
+					"Customized Configuration `%s` has been Failed to be Applied! For VM: %s",
+					VirtualMachine.Reference().Value)
+				return ApplyError
+
+			case ApplyError == nil && WaitError == nil:
+				DebugLogger.Printf(
+					"Customized Configuration `%s` has been Applied Successfully! For VM: %s",
+					VirtualMachine.Reference().Value)
+				return nil
+			default:
+				return ApplyError
+			}
+		}()
+		if CustomizationError != nil {
+			return CustomizationError
+		} else {
+			continue
+		}
+	}
+	return nil
 }
 
 func (this *VirtualMachineManager) StartVirtualMachine(VirtualMachine *object.VirtualMachine) error {
@@ -332,7 +408,6 @@ func (this *VirtualMachineManager) StartVirtualMachine(VirtualMachine *object.Vi
 	default:
 		return nil
 	}
-
 }
 
 func (this *VirtualMachineManager) ShutdownVirtualMachine(VirtualMachine *object.VirtualMachine) error {

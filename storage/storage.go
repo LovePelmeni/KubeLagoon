@@ -42,7 +42,7 @@ func NewVirtualMachineStorage(CapacityInKB int) *VirtualMachineStorage {
 
 type VirtualMachineStorageManagerInterface interface {
 	// Interface, represents Manager Class, for handling Storage Resources of the Virtual Machine
-	SetupStorageDisk(VirtualMachine *object.VirtualMachine, Storage VirtualMachineStorage) (VirtualMachineStorage, error)
+	SetupStorageDisk(VirtualMachine *object.VirtualMachine, Storage VirtualMachineStorage) (*types.VirtualMachineConfigSpec, error)
 }
 
 type VirtualMachineStorageManager struct {
@@ -60,8 +60,9 @@ func (this *VirtualMachineStorageManager) SetupStorageDisk(
 	StorageCredentials VirtualMachineStorage,
 	DataStore *types.ManagedObjectReference,
 
-) (*types.VirtualDeviceConfigSpec, error) {
+) (*types.VirtualMachineConfigSpec, error) {
 
+	VirtualMachineSpec := types.VirtualMachineConfigSpec{}
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
@@ -97,5 +98,6 @@ func (this *VirtualMachineStorageManager) SetupStorageDisk(
 		Device:        &DeviceDisk,
 	}
 
-	return DeviceSpec, nil
+	VirtualMachineSpec.DeviceChange = append(VirtualMachineSpec.DeviceChange, DeviceSpec)
+	return &VirtualMachineSpec, nil
 }

@@ -1,6 +1,9 @@
 package exceptions
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 func IPSetupFailure() error {
 	return errors.New("Failed to Setup IP Address")
@@ -40,4 +43,8 @@ func ItemDoesNotExist() error {
 
 func DestroyFailure() error {
 	return errors.New("Failed to Destroy Virtual Machine")
+}
+
+func ComponentDoesNotExist(ComponentName string) error {
+	return errors.New(fmt.Sprintf("Resource: %s does not Exist", ComponentName))
 }
