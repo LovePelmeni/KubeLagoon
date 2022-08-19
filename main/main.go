@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"log"
 
 	"fmt"
 	"net/http"
@@ -25,6 +26,22 @@ var (
 	FRONT_APPLICATION_HOST = os.Getenv("FRONT_APPLICATION_HOST")
 	FRONT_APPLICATION_PORT = os.Getenv("FRONT_APPLICATION_PORT")
 )
+
+var (
+	DebugLogger *log.Logger
+	InfoLogger  *log.Logger
+	ErrorLogger *log.Logger
+)
+
+func init() {
+	LogFile, Error := os.OpenFile("Main.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
+	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+	if Error != nil {
+		panic(Error)
+	}
+}
 
 type Server struct {
 	ServerHost string `json:"ServerHost"`
@@ -134,6 +151,7 @@ func (this *Server) Shutdown(Context context.Context, ServerInstance http.Server
 }
 
 func main() {
+	DebugLogger.Printf("Running Http Application Server...")
 	httpServer := NewServer(APPLICATION_HOST, APPLICATION_PORT)
 	httpServer.Run()
 }

@@ -1,36 +1,69 @@
 package parsers
 
-import "sync"
+import (
+	"encoding/json"
+	"sync"
+)
 
 // Package consists of the Set of Classes, that Parses Hardware Configuration, User Specified
 
-type DefaultConfigValueStore struct {
-	// Struct, that represents default Values Across all of the Available Fields
-	// for every Suggested Object Reference
-}
-
-func NewDefaultValueStore() *DefaultConfigValueStore {
-	return &DefaultConfigValueStore{}
-}
-
 type Config struct {
-	// Represents Configuration of the Object Reference
+	// Represents Configuration of the Virtual Machine
 	Mutex sync.RWMutex
-	IP    struct {
-		Hostname string `json:"Hostname"`
-		Netmask  string `json:"Netmask"`
-		IP       string `json:"IP"`
-	} `json:"IP"`
 
+	// IP Address of the VM Configuration
+	IP struct {
+		Hostname string `json:"Hostname" xml:"Hostname"`
+		Netmask  string `json:"Netmask" xml:"Netmask"`
+		IP       string `json:"IP" xml:"IP"`
+	} `json:"IP" xml:"IP"`
+
+	// Hardware Resourcs for the VM Configuration
 	Resources struct {
-		CpuNum            int64 `json:"CpuNum"`
-		MemoryInMegabytes int32 `json:"MemoryInMegabytes"`
-	} `json:"Resources"`
+		ResourcePoolUniqueName string `json:"ResourcePoolUniqueName" xml:"ResourcePoolUniqueName"`
+		CpuNum                 int32  `json:"CpuNum" xml:"CpuNum"`
+		MemoryInMegabytes      int64  `json:"MemoryInMegabytes" xml:"MemoryInMegabytes"`
+		ItemPath               string `json:"ItemPath" xml:"ItemPath"`
+	} `json:"Resources" xml:"Resources"`
 
+	Disk struct {
+		CapacityInKB int `json:"CapacityInKB" xml:"CapacityInKB"`
+	} `json:"Disk"`
+
+	// SSH Credentials for the VM
 	Ssh struct {
-		User     string `json:"User"`
-		Password string `json:"Password"`
-	} `json:"Ssh"`
+		User     string `json:"User" xml:"User"`
+		Password string `json:"Password" xml:"Password"`
+	} `json:"Ssh" xml:"Ssh"`
+
+	// Network Resource info, that VM will be Connected to
+	Network struct {
+		NetworkType       string `json:"NetworkType" xml:"NetworkType"`
+		NetworkId         string `json:"NetworkID" xml:"NetworkID"`
+		NetworkUniqueName string `json:"NetworkUniqueName" xml:"NetworkUniqueName"`
+		ItemPath          string `json:"ItemPath" xml:"ItemPath"`
+	} `json:"Network" xml:"Network"`
+
+	// Datacenter Resource Info, VM will be deployed on
+	Datacenter struct {
+		DatacenterUniqueName string `json:"DatacenterUniqueName" xml:"DatacenterUniqueName"`
+		DatacenterName       string `json:"DatacenterName" xml:"DatacenterName"`
+		ItemPath             string `json:"ItemPath" xml:"ItemPath"`
+	} `json:"Datacenter" xml:"Datacenter"`
+
+	// Datastore Resource Info, VM will be using for storing Data
+	DataStore struct {
+		DatastoreUniqueName string `json:"DatastoreUniqueName" xml:"DatastoreUniqueName"`
+		DatastoreName       string `json:"DataStoreName" xml:"DatastoreName"`
+		ItemPath            string `json:"ItemPath" xml:"ItemPath"`
+	} `json:"DataStore" xml:"Datastore"`
+
+	// Forder Resource Info, where the Info about VM is going to be Stored.
+	Folder struct {
+		FolderUniqueName string `json:"FolderUniqueName" xml:"FolderUniqueName"`
+		FolderID         string `json:"FolderID" xml:"FolderID"`
+		ItemPath         string `json:"ItemPath" xml:"ItemPath"`
+	} `json:"Folder" xml:"Folder"`
 }
 
 func NewConfig() *Config {
@@ -41,11 +74,7 @@ type ConfigurationParserInterface interface {
 	// Interface, that represents Default Configuration Parser
 	// * Parser the Configuration form, and returns set of the Credentials
 	// That Will be Potentially used for creating Custom VM...
-	ConfigParse(Configuration Config) map[string]any
-}
-
-type BaseParser struct {
-	ConfigurationParserInterface
+	ConfigParse(SerializedConfiguraion []byte) (*Config, error)
 }
 
 type ConfigurationParser struct {
@@ -57,92 +86,12 @@ func NewConfigurationParser() *ConfigurationParser {
 	return &ConfigurationParser{}
 }
 
-func (this *ConfigurationParser) ConfigParse(SerializedConfiguration []byte) (map[string]Config, error) {
-
-	var StructedConfig map[string]string
-	ConfigParsers := map[string]ConfigurationParserInterface{
-		"Network":      NewNetworkConfigurationParser(),
-		"DataStore":    NewDataStoreConfigurationParser(),
-		"ResourcePool": NewResourcePoolConfigurationParser(),
-		"Folder":       NewFolderConfigurationParser(),
+func (this *ConfigurationParser) ConfigParse(SerializedConfiguration []byte) (*Config, error) {
+	var DecodedConfiguration Config
+	JsonDecodeError := json.Unmarshal(SerializedConfiguration, DecodedConfiguration)
+	if JsonDecodeError != nil {
+		return nil, JsonDecodeError
+	} else {
+		return &DecodedConfiguration, nil
 	}
-
-	var ParsedConfigs map[string]Config
-	group := sync.WaitGroup{}
-	go func() {
-		group.Add(1)
-		for ConfigName, ConfigValue := range StructedConfig {
-			ParsedConfigMap := ConfigParsers[ConfigName].ConfigParse(ConfigValue)
-			Config := NewConfig()
-			ParsedConfigs[ConfigName] = *Config
-		}
-		group.Done()
-	}()
-	return ParsedConfigs, nil
 }
-
-func NewBaseParser() *BaseParser {
-	return &BaseParser{}
-}
-
-func (this *BaseParser) ConfigParse(SerializedConfiguraton string) Config
-
-type NetworkConfigurationParser struct {
-	ConfigurationParserInterface
-}
-
-func NewNetworkConfigurationParser() *NetworkConfigurationParser {
-	return &NetworkConfigurationParser{}
-}
-
-func (this *NetworkConfigurationParser) ConfigParse(Configuration Config) map[string]any
-
-type SshConfigurationParser struct {
-	ConfigurationParserInterface
-}
-
-func NewSshConfigurationParser() *SshConfigurationParser {
-	return &SshConfigurationParser{}
-}
-
-func (this *SshConfigurationParser) ConfigParse(Configuration Config) map[string]any
-
-type DataCenterConfigurationParser struct {
-	ConfigurationParserInterface
-}
-
-func NewDatacenterConfigurationParser() *DataCenterConfigurationParser {
-	return &DataCenterConfigurationParser{}
-}
-
-func (this *DataCenterConfigurationParser) ConfigParse(Configuration Config) map[string]any
-
-type DataStoreConfigurationParser struct {
-	ConfigurationParserInterface
-}
-
-func NewDataStoreConfigurationParser() *DataStoreConfigurationParser {
-	return &DataStoreConfigurationParser{}
-}
-
-func (this *DataStoreConfigurationParser) ConfigParse(Configuration Config) map[string]any
-
-type ResourcePoolConfigurationParser struct {
-	ConfigurationParserInterface
-}
-
-func NewResourcePoolConfigurationParser() *ResourcePoolConfigurationParser {
-	return &ResourcePoolConfigurationParser{}
-}
-
-func (this *ResourcePoolConfigurationParser) ConfigParse(Configuration Config) map[string]any
-
-type FolderConfigurationParser struct {
-	ConfigurationParserInterface
-}
-
-func NewFolderConfigurationParser() *FolderConfigurationParser {
-	return &FolderConfigurationParser{}
-}
-
-func (this *FolderConfigurationParser) ConfigParse(Configuration Config) map[string]any

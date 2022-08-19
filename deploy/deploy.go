@@ -8,13 +8,19 @@ import (
 	"time"
 
 	"github.com/LovePelmeni/Infrastructure/exceptions"
+	"github.com/LovePelmeni/Infrastructure/ip"
 	"github.com/LovePelmeni/Infrastructure/models"
 	"github.com/LovePelmeni/Infrastructure/parsers"
+	"github.com/LovePelmeni/Infrastructure/resources"
+	"github.com/LovePelmeni/Infrastructure/storage"
+	"github.com/LovePelmeni/Infrastructure/suggestions"
 
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/vim25"
+	"github.com/vmware/govmomi/vim25/types"
 
 	"github.com/vmware/govmomi/object"
+	"github.com/vmware/govmomi/vapi/library"
 	"github.com/vmware/govmomi/vapi/rest"
 
 	"github.com/vmware/govmomi/vapi/vcenter"
@@ -45,11 +51,13 @@ type VirtualMachineDeployKeyManagerInterface interface {
 type VirtualMachineManagerInterface interface {
 	// Interface, that Deploys new Virtual Machine
 
+	GetVirtualMachine(VmId string, CustomerId string) (*object.VirtualMachine, error)
+
 	StartVirtualMachine(VirtualMachine *object.VirtualMachine) (bool, error)
 
 	ShutdownVirtualMachine(VirtualMachine *object.VirtualMachine) (bool, error)
 
-	ApplyConfiguration(VmId string, CustomerId string, Configuration parsers.Config) (bool, error)
+	ApplyConfiguration(VirtualMachine *object.VirtualMachine, Configuration parsers.Config) (bool, error)
 
 	InitializeNewVirtualMachine(
 		VimClient vim25.Client, APIClient rest.Client,
@@ -57,7 +65,7 @@ type VirtualMachineManagerInterface interface {
 		Folder *object.Folder, ResourcePool *object.ResourcePool,
 	) *object.VirtualMachine
 
-	DestroyVirtualMachine(VmId string, CustomerId string) (bool, error)
+	DestroyVirtualMachine(VirtualMachine *object.VirtualMachine) (bool, error)
 }
 
 type ResourceKeys struct {
@@ -81,15 +89,47 @@ type VirtualMachineResourceKeyManager struct {
 	// To Get the Permissions to use that Resources.
 
 	VirtualMachineDeployKeyManagerInterface
+	Client rest.Client
 }
 
-func NewVirtualMachineDeployKeyManager() *VirtualMachineResourceKeyManager {
+func NewVirtualMachineResourceKeyManager() *VirtualMachineResourceKeyManager {
 	return &VirtualMachineResourceKeyManager{}
 }
 
-func (this *VirtualMachineResourceKeyManager) GetResourceKeys() (ResourceKeys, error) {
-	// Returns Storage and Resource Key in order to get Usage Permissions
+func (this *VirtualMachineResourceKeyManager) GetLibraryItem(Context context.Context) (*library.Item, error) {
+	// Returns Library Item
+}
 
+func (this *VirtualMachineResourceKeyManager) GetResourceKeys(
+	Resource *object.ResourcePool, Folder *object.Folder) (*ResourceKeys, error) {
+
+	// Returns Storage and Resource Key in order to get Usage Permissions
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*20)
+	defer CancelFunc()
+
+	LibraryItem, LibError := this.GetLibraryItem(TimeoutContext)
+	DatacenterManager := vcenter.NewManager(&this.Client)
+
+	FilterRequest := vcenter.FilterRequest{Target: vcenter.Target{
+		ResourcePoolID: Resource.Reference().Value,
+		FolderID:       Folder.Reference().Value,
+	}}
+
+	Filter, FilterError := DatacenterManager.FilterLibraryItem(
+		TimeoutContext, LibraryItem.ID, FilterRequest)
+
+	switch {
+
+	case LibError != nil || FilterError != nil:
+		return nil, exceptions.ItemDoesNotExist()
+
+	case LibError == nil || FilterError == nil:
+		ResourceKeys := NewDeployResourceKeys(
+			Filter.Networks[0], Filter.StorageGroups[0])
+		return ResourceKeys, nil
+	default:
+		return nil, exceptions.ItemDoesNotExist()
+	}
 }
 
 type VirtualMachineManager struct {
@@ -102,7 +142,7 @@ type VirtualMachineManager struct {
 	VimClient vim25.Client
 }
 
-func NewVirtualMachineDeployer() *VirtualMachineManager {
+func NewVirtualMachineManager() *VirtualMachineManager {
 	return &VirtualMachineManager{}
 }
 
@@ -159,8 +199,8 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 ) (*object.VirtualMachine, error) {
 	// Initializes Virtual Machine Configuration (That does not exist yet)
 
-	ResourceAllocationManager := NewVirtualMachineDeployKeyManager()
-	ResourceCredentials, ResourceKeysError := ResourceAllocationManager.GetDeployResourceKeys()
+	ResourceAllocationManager := NewVirtualMachineResourceKeyManager()
+	ResourceCredentials, ResourceKeysError := ResourceAllocationManager.GetDeployResourceKeys(*rest.NewClient(&this.VimClient))
 
 	switch {
 
@@ -229,11 +269,45 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 	return nil, exceptions.VMDeployFailure()
 }
 
-func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.VirtualMachine, Configuration parsers.Config) {
+func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.VirtualMachine, Configuration parsers.Config) (error) {
 	// Applies Custom Configuration: Num's of CPU's, Memory etc... onto the Initialized Virtual Machine
+
+	ResourceManager := suggestions.NewResourceSuggestManager(this.VimClient) 
 
 	// Initializing Applier Managers
 	// Configurations
+
+	DataStore, _ := ResourceManager.GetResource(Configuration.DataStore.ItemPath)
+	DataStoreManagedReference := DataStore.Reference()
+
+
+	// Initializing Configurations for the Virtual Server 
+	DiskConfig, DiskError := storage.NewVirtualMachineStorageManager().SetupStorageDisk(VirtualMachine, *storage.NewVirtualMachineStorage(Configuration.Disk.CapacityInKB), &DataStoreManagedReference)
+	ResourceConfig, ResourceError := resources.NewVirtualMachineResourceManager().SetupResources(resources.NewVirtualMachineResources(Configuration.Resources.CpuNum, int64(Configuration.Resources.MemoryInMegabytes)))
+	IPConfig, IPError := ip.NewVirtualMachineIPManager().SetupAddress(ip.NewVirtualMachineIPAddress(Configuration.IP.IP, Configuration.IP.Netmask, Configuration.IP.Gateway, Configuration.IP.Hostname))
+
+
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
+	defer CancelFunc()
+
+	BaseVmSpecApplyTask, VmSpecApplyError := VirtualMachine.Reconfigure(TimeoutContext, BaseVmSpec)
+	BaseVmSpecApplyTask.WaitForResult(TimeoutContext)
+
+	switch {
+
+		case VmSpecApplyError != nil: 
+			ErrorLogger.Printf("Failed to Apply Configuration to the Virtual Machine with ItemPath: %s",
+			VirtualMachine.InventoryPath)
+			return VmSpecApplyError
+
+		case VmSpecApplyError == nil:
+			InfoLogger.Printf("Disk Configuration for the Virtual Machine with ItemPath: %s, has been Applied Successfully",
+		    VirtualMachine.InventoryPath)
+	}
+
+	// Applying Custom 
+
+
 }
 
 func (this *VirtualMachineManager) StartVirtualMachine(VirtualMachine *object.VirtualMachine) error {
@@ -253,7 +327,7 @@ func (this *VirtualMachineManager) StartVirtualMachine(VirtualMachine *object.Vi
 		return exceptions.VMDeployFailure()
 
 	case DeployError == nil && AppliedError == nil:
-		DebugLogger.Printf("Virtual Machine with ID: %s of Owner: %s has been Started Successfully", VmId, CustomerId)
+		DebugLogger.Printf("Virtual Machine with ItemPath: %s, has been Started Successfully", VirtualMachine.InventoryPath)
 		return nil
 	default:
 		return nil
@@ -261,14 +335,8 @@ func (this *VirtualMachineManager) StartVirtualMachine(VirtualMachine *object.Vi
 
 }
 
-func (this *VirtualMachineManager) ShutdownVirtualMachine(VmId string, CustomerId string) error {
+func (this *VirtualMachineManager) ShutdownVirtualMachine(VirtualMachine *object.VirtualMachine) error {
 	// Shutting Down Virtual Machine Server...
-
-	VirtualMachine, ExistsError := this.GetVirtualMachine(VmId, CustomerId)
-
-	if ExistsError != nil {
-		return ExistsError
-	}
 
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
@@ -278,28 +346,22 @@ func (this *VirtualMachineManager) ShutdownVirtualMachine(VmId string, CustomerI
 
 	switch {
 	case DeployError != nil || AppliedError != nil:
-		ErrorLogger.Printf("Failed to Shutdown Virtual Machine, with ID: %s of Owner: %s, Errors: [%s, %s]",
-			VmId, CustomerId, DeployError, AppliedError)
+		ErrorLogger.Printf("Failed to Shutdown Virtual Machine, with ItemPath: %s Errors: [%s, %s]",
+			VirtualMachine.InventoryPath, DeployError, AppliedError)
 		return exceptions.VMShutdownFailure()
 
 	case DeployError == nil && AppliedError == nil:
-		DebugLogger.Printf("Virtual Machine with ID: %s, Of Owner: %s has been Shutdown.", VmId, CustomerId)
+		DebugLogger.Printf("Virtual Machine with ItemPath: %s, has been Shutdown.", VirtualMachine.InventoryPath)
 		return nil
 	default:
-		ErrorLogger.Printf("Unknown State has been Occurred, while Shutting Down Virtual Machine with ID: %s of Owner: %s",
-			VmId, CustomerId)
+		ErrorLogger.Printf("Unknown State has been Occurred, while Shutting Down Virtual Machine with ItemPath: %s",
+			VirtualMachine.InventoryPath)
 		return nil
 	}
 }
 
-func (this *VirtualMachineManager) DestroyVirtualMachine(VmId string, CustomerId string) (bool, error) {
+func (this *VirtualMachineManager) DestroyVirtualMachine(VirtualMachine *object.VirtualMachine) (bool, error) {
 	// Destroys Virtual Machine, Customer Decided to get rid of...
-
-	VirtualMachine, ExistsError := this.GetVirtualMachine(VmId, CustomerId)
-
-	if ExistsError != nil {
-		return false, ExistsError
-	}
 
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
 	defer CancelFunc()
@@ -308,10 +370,11 @@ func (this *VirtualMachineManager) DestroyVirtualMachine(VmId string, CustomerId
 	DeletedError := DestroyTask.Wait(TimeoutContext)
 
 	if DestroyError != nil || DeletedError != nil {
-		ErrorLogger.Printf("Failed to Destroy Virtual Machine with ID: %s of Owner: %s, Errors: [%s, %s]",
-			VmId, CustomerId, DestroyError, DeletedError)
+		ErrorLogger.Printf("Failed to Destroy Virtual Machine with ItemPath %s, Errors: [%s, %s]",
+			VirtualMachine.InventoryPath, DestroyError, DeletedError)
 		return false, exceptions.DestroyFailure()
 	}
-	InfoLogger.Printf("Virtual Machine with ID: %s, Of Owner: %s has been Destroyed", VmId, CustomerId)
+	InfoLogger.Printf("Virtual Machine with ItemPath: %s has been Destroyed",
+		VirtualMachine.InventoryPath)
 	return true, nil
 }

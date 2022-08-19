@@ -59,11 +59,9 @@ func (this *VirtualMachineIPManager) SetupAddress(IPCredentials *VirtualMachineI
 	CustomizedIP := types.CustomizationAdapterMapping{
 		Adapter: types.CustomizationIPSettings{
 
-			Ip: &types.CustomizationFixedIp{IpAddress: IPCredentials.IP}, // Setting UP IP Address
-
-			SubnetMask: IPCredentials.Netmask, // Setting UP Subnet Mask
-
-			Gateway: []string{IPCredentials.Gateway}, // Setting up Gateway
+			Ip:         &types.CustomizationFixedIp{IpAddress: IPCredentials.IP}, // Setting UP IP Address
+			SubnetMask: IPCredentials.Netmask,                                    // Setting UP Subnet Mask
+			Gateway:    []string{IPCredentials.Gateway},                          // Setting up Gateway
 		},
 	}
 

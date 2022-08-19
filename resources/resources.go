@@ -43,7 +43,7 @@ type VirtualMachineResourceManagerInterface interface {
 	// * Setting up Following Resources to the Virtual Machine (
 	//  CPU, Memory in Megabytes
 	// )
-	SetupResources(Resources VirtualMachineResources) (VirtualMachineResources, error)
+	SetupResources(Resources VirtualMachineResources) (*types.VirtualMachineConfigSpec, error)
 }
 
 type VirtualMachineResourceManager struct {

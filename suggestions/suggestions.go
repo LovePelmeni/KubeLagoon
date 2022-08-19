@@ -50,31 +50,33 @@ type SuggestManagerInterface interface {
 	// Default Interface, represents Class, that returns Suggestions about specific
 	// Source
 	GetSuggestions() []ResourceSuggestion
-	GetResource(ItemPath string) (*object.Common, error) // Method, should return specific Object by the Idenitfier
+	GetResource(ItemPath string) (object.Reference, error) // Method, should return specific Object by the Idenitfier
 }
 
 type NetworkSuggestManager struct {
 	SuggestManagerInterface
-	Client vim25.Client
+	Client *vim25.Client
 }
 
-func NewNetworkSuggestManager() *NetworkSuggestManager {
-	return &NetworkSuggestManager{}
+func NewNetworkSuggestManager(Client vim25.Client) *NetworkSuggestManager {
+	return &NetworkSuggestManager{
+		Client: &Client,
+	}
 }
 
-func (this *NetworkSuggestManager) GetResource(ItemPath string) (*object.Reference, error) {
+func (this *NetworkSuggestManager) GetResource(ItemPath string) (object.Reference, error) {
 	// Method Receiving Instance of the Resource, that Customer has chosen, during Configuration Setup
 
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
-	Finder := object.NewSearchIndex(&this.Client)
+	Finder := object.NewSearchIndex(this.Client)
 	Resource, FindError := Finder.FindByInventoryPath(TimeoutContext, ItemPath)
 	switch {
 	case FindError == nil:
 		return nil, exceptions.ItemDoesNotExist()
 	case FindError != nil:
-		return &Resource, nil
+		return Resource, nil
 	default:
 		return nil, exceptions.ItemDoesNotExist()
 	}
@@ -86,7 +88,7 @@ func (this *NetworkSuggestManager) GetSuggestions() []ResourceSuggestion {
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
-	finder := find.NewFinder(&this.Client)
+	finder := find.NewFinder(this.Client)
 	var Suggestions []ResourceSuggestion
 	Networks, ParseDatastoreError := finder.NetworkList(TimeoutContext, "*")
 
@@ -122,11 +124,13 @@ type DatastoreSuggestManager struct {
 	Client vim25.Client
 }
 
-func NewDatastoreSuggestManager() *DataCenterSuggestManager {
-	return &DataCenterSuggestManager{}
+func NewDatastoreSuggestManager(Client vim25.Client) *DataCenterSuggestManager {
+	return &DataCenterSuggestManager{
+		Client: &Client,
+	}
 }
 
-func (this *DatastoreSuggestManager) GetResource(ItemPath string) (*object.Reference, error) {
+func (this *DatastoreSuggestManager) GetResource(ItemPath string) (object.Reference, error) {
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
@@ -137,10 +141,10 @@ func (this *DatastoreSuggestManager) GetResource(ItemPath string) (*object.Refer
 		return nil, exceptions.ItemDoesNotExist()
 
 	case FindError == nil:
-		return &Datastore, nil
+		return Datastore, nil
 
 	default:
-		return &Datastore, nil
+		return Datastore, nil
 	}
 }
 
@@ -180,11 +184,13 @@ type DataCenterSuggestManager struct {
 	Client *vim25.Client
 }
 
-func NewDataCenterSuggestManager() *DataCenterSuggestManager {
-	return &DataCenterSuggestManager{}
+func NewDataCenterSuggestManager(Client vim25.Client) *DataCenterSuggestManager {
+	return &DataCenterSuggestManager{
+		Client: &Client,
+	}
 }
 
-func (this *DataCenterSuggestManager) GetResource(ItemPath string) (*object.Reference, error) {
+func (this *DataCenterSuggestManager) GetResource(ItemPath string) (object.Reference, error) {
 
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
@@ -196,10 +202,10 @@ func (this *DataCenterSuggestManager) GetResource(ItemPath string) (*object.Refe
 		return nil, exceptions.ItemDoesNotExist()
 
 	case FindError == nil:
-		return &Datacenter, nil
+		return Datacenter, nil
 
 	default:
-		return &Datacenter, nil
+		return Datacenter, nil
 	}
 }
 
@@ -237,28 +243,30 @@ func (this *DataCenterSuggestManager) GetSuggestions() []ResourceSuggestion {
 
 type ResourceSuggestManager struct {
 	SuggestManagerInterface
-	Client vim25.Client
+	Client *vim25.Client
 }
 
-func NewResourceSuggestManager() *ResourceSuggestManager {
-	return &ResourceSuggestManager{}
+func NewResourceSuggestManager(Client vim25.Client) *ResourceSuggestManager {
+	return &ResourceSuggestManager{
+		Client: &Client,
+	}
 }
 
-func (this *ResourceSuggestManager) GetResource(ItemPath string) (*object.Reference, error) {
+func (this *ResourceSuggestManager) GetResource(ItemPath string) (object.Reference, error) {
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
-	Finder := object.NewSearchIndex(&this.Client)
+	Finder := object.NewSearchIndex(this.Client)
 	ResourcePool, FindError := Finder.FindByInventoryPath(TimeoutContext, ItemPath)
 	switch {
 	case FindError != nil:
 		return nil, exceptions.ItemDoesNotExist()
 
 	case FindError == nil:
-		return &ResourcePool, nil
+		return ResourcePool, nil
 
 	default:
-		return &ResourcePool, nil
+		return ResourcePool, nil
 	}
 }
 
@@ -294,28 +302,30 @@ func (this *ResourceSuggestManager) GetSuggestions() []ResourceSuggestion {
 
 type FolderSuggestManager struct {
 	SuggestManagerInterface
-	Client vim25.Client
+	Client *vim25.Client
 }
 
-func NewFolderSuggestManager() *FolderSuggestManager {
-	return &FolderSuggestManager{}
+func NewFolderSuggestManager(Client vim25.Client) *FolderSuggestManager {
+	return &FolderSuggestManager{
+		Client: &Client,
+	}
 }
 
-func (this *FolderSuggestManager) GetResource(ItemPath string) (*object.Reference, error) {
+func (this *FolderSuggestManager) GetResource(ItemPath string) (object.Reference, error) {
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
 
-	Finder := object.NewSearchIndex(&this.Client)
+	Finder := object.NewSearchIndex(this.Client)
 	Folder, FindError := Finder.FindByInventoryPath(TimeoutContext, ItemPath)
 	switch {
 	case FindError != nil:
 		return nil, exceptions.ItemDoesNotExist()
 
 	case FindError == nil:
-		return &Folder, nil
+		return Folder, nil
 
 	default:
-		return &Folder, nil
+		return Folder, nil
 	}
 }
 

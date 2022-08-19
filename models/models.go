@@ -52,10 +52,10 @@ type Customer struct {
 func NewCustomer() *Customer {
 	return &Customer{}
 }
-func (this *Customer) Create() {
+func (this *Customer) Create() (*gorm.DB, error) {
 }
 
-func (this *Customer) Delete() {
+func (this *Customer) Delete() (*gorm.DB, error) {
 
 }
 
@@ -92,10 +92,24 @@ func NewVirtualMachine(
 		ItemPath:      ItemPath,
 	}
 }
-func (this *VirtualMachine) Create() {
+func (this *VirtualMachine) Create(OwnerId string, NewConfiguration Configuration) (*gorm.DB, error) {
+
+	Created := Database.Model(&VirtualMachine{}).Create(&Vm)
+	if Created.Error != nil {
+		Created.Rollback()
+		return nil, Created.Error
+	}
+	return Created, nil
 }
 
-func (this *VirtualMachine) Delete() {
+func (this *VirtualMachine) Delete(NewConfiguration Configuration) (*gorm.DB, error) {
+	Created := Database.Model(&VirtualMachine{}).Delete(&Vm)
+	if Created.Error != nil {
+		Created.Rollback()
+		return nil, Created.Error
+	}
+	Database.Model(&VirtualMachine{}).Unscoped().Delete(&Vm)
+	return Created, nil
 }
 
 type Configuration struct {
@@ -128,8 +142,8 @@ func NewConfiguration(
 		ResourcePool: SerializedResourcePoolInfo,
 	}
 }
-func (this *Configuration) Create() {
+func (this *Configuration) Create() (*gorm.DB, error) {
 }
 
-func (this *Configuration) Delete() {
+func (this *Configuration) Delete() (*gorm.DB, error) {
 }

@@ -3,6 +3,7 @@ package rest
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	_ "net"
@@ -14,7 +15,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/LovePelmeni/Infrastructure/deploy"
 	"github.com/LovePelmeni/Infrastructure/models"
+	"github.com/LovePelmeni/Infrastructure/parsers"
 
 	"github.com/LovePelmeni/Infrastructure/suggestions"
 
@@ -49,6 +52,12 @@ var (
 	SUPPORT_CLIENT_EMAIL_PASSWORD = os.Getenv("SUPPORT_CLIENT_EMAIL_PASSWORD")
 )
 
+var (
+	VirtualMachine models.VirtualMachine
+	configuration  models.Configuration
+	Customer       models.Customer
+)
+
 func init() {
 
 	var RestClient *rest.Client
@@ -68,6 +77,7 @@ func init() {
 	}
 }
 
+
 // Authorization Rest API Endpoints
 
 func LoginRestController(RequestContext *gin.Context) {
@@ -75,6 +85,8 @@ func LoginRestController(RequestContext *gin.Context) {
 
 func LogoutRestController(RequestContext *gin.Context) {
 }
+
+
 
 // Customers Rest API Endpoints
 
@@ -90,9 +102,122 @@ func DeleteCustomerRestController(RequestContext *gin.Context) {
 
 }
 
+
+
+
 // Virtual Machine Rest API Endpoints
 
 func DeployNewVirtualMachineRestController(RequestContext *gin.Context) {
+
+	CustomerId := RequestContext.PostForm("customerId")
+
+	Configuration, ConfigError := parsers.NewConfigurationParser().ConfigParse(
+		[]byte(RequestContext.PostForm("Configuration")))
+
+	if ConfigError != nil {
+		RequestContext.JSON(http.StatusBadRequest, gin.H{"Error": "Invalid Configuration"})
+		return
+	}
+
+	// Receiving Physical Instances of the Hardware, that is Going to Be Used within the Virtual Machine
+	// Based on the Configuraion
+
+	SerializedDatacenterConfig, _ := json.Marshal(Configuration.Datacenter)
+	SerializedDatastoreConfig, _ := json.Marshal(Configuration.DataStore)
+	SerializedNetworkConfig, _ := json.Marshal(Configuration.Network)
+	SerializedResourceConfig, _ := json.Marshal(Configuration.Resources)
+	SerializedFolderConfig, _ := json.Marshal(Configuration.Folder)
+
+	NewVirtualMachineManager := deploy.NewVirtualMachineManager()
+	NewResourceManager := suggestions.NewResourceSuggestManager()
+
+	// Obtaining Resource Instances, by Configuration Parameters
+
+	Datacenter, DatacenterError := NewResourceManager.GetResource(Configuration.Datacenter.ItemPath)
+	Datastore, DatastoreError := NewResourceManager.GetResource(Configuration.DataStore.ItemPath)
+	Network, NetworkError := NewResourceManager.GetResource(Configuration.Network.ItemPath)
+	Folder, FolderError := NewResourceManager.GetResource(Configuration.Folder.ItemPath)
+	ResourcePool, ResourcePoolError := NewResourceManager.GetResource(Configuration.Resources.ItemPath)
+
+	// if One of the Components does not exist or cannot be find, Aborting Process...
+	if DatacenterError == nil {
+		RequestContext.AbortWithStatusJSON(http.StatusBadGateway, gin.H{"Error": "Datacenter Does Not Exist"})
+		return
+	}
+	if DatastoreError == nil {
+		RequestContext.AbortWithStatusJSON(http.StatusBadGateway, gin.H{"Error": "Datastore Does Not Exist"})
+		return
+	}
+	if NetworkError == nil {
+		RequestContext.AbortWithStatusJSON(http.StatusBadGateway, gin.H{"Error": "Network Does Not Exist"})
+		return
+	}
+	if FolderError == nil {
+		RequestContext.AbortWithStatusJSON(http.StatusBadGateway, gin.H{"Error": "Folder Does Not Exist"})
+		return
+	}
+	if ResourcePoolError == nil {
+		RequestContext.AbortWithStatusJSON(http.StatusBadGateway, gin.H{"Error": "Resource Does Not Exist"})
+		return
+	}
+
+	//
+	NewConfiguration := models.NewConfiguration(
+		string(SerializedFolderConfig), string(SerializedNetworkConfig),
+		string(SerializedDatacenterConfig), string(SerializedDatastoreConfig),
+		string(SerializedResourceConfig),
+	)
+
+	// Creating New VM ORM Model Object...
+
+	newVirtualMachine, VmError := VirtualMachine.Create(CustomerId, *NewConfiguration)
+
+	if VmError != nil {
+		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to Create new VM"})
+		return
+	}
+
+	// Initializing New Virtual Machine Instance
+
+	NewVirtualMachine, InitializeError := NewVirtualMachineManager.InitializeNewVirtualMachine(
+		VimClient, rest.NewClient(&VimClient),
+		Datastore, Datacenter,
+		Network, Folder, ResourcePool,
+	)
+
+	if InitializeError != nil {
+		RequestContext.JSON(http.StatusBadGateway,
+			gin.H{"Error": fmt.Sprintf("Failed to Initialize New Server, %s", InitializeError)})
+		newVirtualMachine.Rollback()
+	}
+
+	// Applying Configuration to the New Initialized Virtual Machine
+
+	AppliedError := NewVirtualMachineManager.ApplyConfiguration(Configuration)
+
+	if AppliedError != nil {
+		RequestContext.JSON(http.StatusBadGateway,
+			gin.H{"Error": fmt.Sprintf("Failed to Apply Configuration to New Initialized Server, %s", AppliedError)})
+		newVirtualMachine.Rollback()
+	}
+
+	// Starting New Initialized Virtual Machine...
+
+	StartedError := NewVirtualMachineManager.StartVirtualMachine(NewVirtualMachine)
+
+	switch {
+	case StartedError == nil:
+		newVirtualMachine.Commit()
+		RequestContext.JSON(http.StatusOK,
+			gin.H{"Status": "Virtual Machine Has been Deployed",
+				"Hostname": Configuration.IP.Hostname,
+				"IP":       Configuration.IP.IP})
+
+	case StartedError != nil:
+		newVirtualMachine.Rollback()
+		RequestContext.JSON(http.StatusBadGateway,
+			gin.H{"Error": fmt.Sprintf("Failed to Start New Server, %s", StartedError)})
+	}
 }
 
 func UpdateVirtualMachineConfigurationRestController(RequestContext *gin.Context) {
@@ -100,15 +225,61 @@ func UpdateVirtualMachineConfigurationRestController(RequestContext *gin.Context
 
 func ShutdownVirtualMachineRestController(RequestContext *gin.Context) {
 
+	// Rest Controller, that Is Used to Shutdown Virtual Machine Server
+
+	VirtualMachineId := RequestContext.Query("VirtualMachineId")
+	CustomerId := RequestContext.Query("CustomerId")
+	NewVmManager := deploy.NewVirtualMachineManager()
+
+	Vm, FindError := NewVmManager.GetVirtualMachine(VirtualMachineId, CustomerId)
+
+	if FindError != nil {
+		RequestContext.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"Error": "Server does Not Exist"})
+		return
+	}
+
+	StartedError := NewVmManager.StartVirtualMachine(Vm)
+
+	switch {
+	case StartedError != nil:
+		RequestContext.JSON(http.StatusBadGateway,
+			gin.H{"Error": fmt.Sprintf("Failed to Start the Server, %s", StartedError)})
+
+	case StartedError == nil:
+		RequestContext.JSON(http.StatusCreated, gin.H{"Operation": "Success"})
+	}
+
 }
 
-func RemoveVirtualMachineRestController(context *gin.Context) {
+func RemoveVirtualMachineRestController(RequestContext *gin.Context) {
+	// Rest Controller, that is Used for Destroying Virtual machines...
 
+	VirtualMachineId := RequestContext.Query("VirtualMachineId")
+	CustomerId := RequestContext.Query("CustomerId")
+	NewVmManager := deploy.NewVirtualMachineManager()
+
+	Vm, FindError := NewVmManager.GetVirtualMachine(VirtualMachineId, CustomerId)
+
+	if FindError != nil {
+		RequestContext.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"Error": "Server does Not Exist"})
+		return
+	}
+
+	Started, StartedError := NewVmManager.DestroyVirtualMachine(Vm)
+
+	switch {
+	case StartedError != nil || Started != true:
+		RequestContext.JSON(http.StatusBadGateway,
+			gin.H{"Error": fmt.Sprintf("Failed to Start the Server, %s", StartedError)})
+
+	case StartedError == nil && Started:
+		RequestContext.JSON(http.StatusCreated, gin.H{"Operation": "Success"})
+	}
 }
 
 // Support Rest API Endpoints
 
-func SupportRestController(context *gin.Context) {
+func SupportRestController(RequestContext *gin.Context) {
 }
 
 // Resources Rest API Endpoints

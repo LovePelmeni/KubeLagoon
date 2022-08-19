@@ -34,13 +34,15 @@ type VirtualMachineStorage struct {
 	DiskCapacityKB int64
 }
 
-func NewVirtualMachineStorage() *VirtualMachineStorage {
-	return &VirtualMachineStorage{}
+func NewVirtualMachineStorage(CapacityInKB int) *VirtualMachineStorage {
+	return &VirtualMachineStorage{
+		DiskCapacityKB: int64(CapacityInKB),
+	}
 }
 
 type VirtualMachineStorageManagerInterface interface {
 	// Interface, represents Manager Class, for handling Storage Resources of the Virtual Machine
-	SetStorage(Storage VirtualMachineStorage) (VirtualMachineStorage, error)
+	SetupStorageDisk(VirtualMachine *object.VirtualMachine, Storage VirtualMachineStorage) (VirtualMachineStorage, error)
 }
 
 type VirtualMachineStorageManager struct {
