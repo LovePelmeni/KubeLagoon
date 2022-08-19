@@ -219,22 +219,31 @@ func (this *VirtualMachineManager) DeployVirtualMachine(
 
 	// Initializing New Virtual Machine
 
+	Resources, AvailableError := HardwareConfiguration.GetResources(VimClient)
+
+	if AvailableError != nil {
+		return nil,
+			errors.New("Sorry, But Not All Resources is Currently Available to Deploy Your Server :(")
+	}
+
 	InitializedMachine, InitError := this.InitializeNewVirtualMachine(
-		VimClient, CustomConfiguration.Metadata.VirtualMachineName, HardwareConfiguration,
+		VimClient, CustomConfiguration.Metadata.VirtualMachineName, Resources["Datastore"].(*object.Datastore),
+		Resources["Datacenter"].(*object.Datacenter), Resources["Network"].(*object.Network),
+		Resources["ResourcePool"].(*object.ResourcePool), Resources["Folder"].(*object.Folder),
 	)
 
 	if InitError != nil {
 		ErrorLogger.Printf("Failed to Initialize New Virtual Machine Instance")
-		return nil, exceptions.VMDeployFailure()
+		return nil, errors.New("Failed to Initialize New Virtual Server")
 	}
 
 	// Applying Configuration
 
-	ApplyError := this.ApplyConfiguration(InitializedMachine, CustomConfiguration)
+	ApplyError := this.ApplyConfiguration(InitializedMachine, CustomConfiguration, Resources["Datastore"].(*object.Datastore))
 	if ApplyError != nil {
 		ErrorLogger.Printf("Failed to Apply Custom Configuration to the VM: %s",
 			InitializedMachine.Reference().Value)
-		return nil, exceptions.VMDeployFailure()
+		return nil, errors.New("Failed to Apply Virtual Server Custom Configuration")
 	}
 
 	// Starting Virtual Machine Server
@@ -242,25 +251,28 @@ func (this *VirtualMachineManager) DeployVirtualMachine(
 	if StartedError != nil {
 		ErrorLogger.Printf("Failed to Start New VM: %s, Error: %s",
 			InitializedMachine.Reference().Value, StartedError)
-		return nil, exceptions.VMDeployFailure()
+		return nil, errors.New("Failed to Start New Virtual Server")
 	}
 	return InitializedMachine, nil
 }
 
 func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 	VimClient vim25.Client,
-	VirtualMachineName string, // Name, Customer Decided to set up for this Virtual Server
-	Configuration parsers.HardwareConfig,
+	VirtualMachineName string,
+	DataStore *object.Datastore, // Name, Customer Decided to set up for this Virtual Server
+	Datacenter *object.Datacenter,
+	Network *object.Network,
+	ResourcePool *object.ResourcePool,
+	Folder *object.Folder,
 ) (*object.VirtualMachine, error) {
 	// Initializes Virtual Machine Configuration (That does not exist yet)
-
-	Resources := Configuration.GetResources()
 
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
 	defer CancelFunc()
 
 	ResourceAllocationManager := NewVirtualMachineResourceKeyManager()
-	ResourceCredentials, ResourceKeysError := ResourceAllocationManager.GetResourceKeys(Resources["ResourcePool"], Resources["Folder"])
+	ResourceCredentials, ResourceKeysError := ResourceAllocationManager.GetResourceKeys(
+		ResourcePool, Folder)
 
 	switch {
 
@@ -271,11 +283,11 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 			DeploymentSpec: vcenter.DeploymentSpec{
 
 				Name:               VirtualMachineName,
-				DefaultDatastoreID: Resources["Datastore"].Reference().Value,
+				DefaultDatastoreID: DataStore.Reference().Value,
 				AcceptAllEULA:      true,
 				NetworkMappings: []vcenter.NetworkMapping{{
 					Key:   ResourceCredentials.NetworkKey,
-					Value: Resources["Network"].Reference().Value,
+					Value: Network.Reference().Value,
 				}},
 
 				StorageMappings: []vcenter.StorageMapping{
@@ -283,7 +295,7 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 						Key: ResourceCredentials.StorageKey,
 						Value: vcenter.StorageGroupMapping{
 							Type:         "DATASTORE",
-							DatastoreID:  Resources["Datastore"].Reference().Value,
+							DatastoreID:  DataStore.Reference().Value,
 							Provisioning: "thin",
 						},
 					},
@@ -292,8 +304,8 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 				StorageProvisioning: "thin",
 			},
 			Target: vcenter.Target{
-				ResourcePoolID: Resources["ResourcePool"].Reference().Value,
-				FolderID:       Resources["Folder"].Reference().Value,
+				ResourcePoolID: ResourcePool.Reference().Value,
+				FolderID:       Folder.Reference().Value,
 			},
 		}
 
@@ -343,6 +355,7 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 func (this *VirtualMachineManager) ApplyConfiguration(
 	VirtualMachine *object.VirtualMachine,
 	Configuration parsers.VirtualMachineCustomSpec,
+	Datastore *object.Datastore,
 ) error {
 	// Applies Custom Configuration: Num's of CPU's, Memory etc... onto the Initialized Virtual Machine
 
@@ -350,7 +363,7 @@ func (this *VirtualMachineManager) ApplyConfiguration(
 	ResourceManager := suggestions.NewResourceSuggestManager(this.VimClient)
 
 	// Receiving Datastore Instance by InventoryPath
-	DataStore, _ := ResourceManager.GetResource(Configuration.DataStore.ItemPath)
+	DataStore, _ := ResourceManager.GetResource(Datastore.InventoryPath)
 	DataStoreManagedReference := DataStore.Reference()
 
 	// Initializing Configurations for the Virtual Server

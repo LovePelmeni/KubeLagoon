@@ -2,97 +2,92 @@ package parsers
 
 import (
 	"encoding/json"
-	"sync"
+
+	"github.com/LovePelmeni/Infrastructure/exceptions"
+	"github.com/LovePelmeni/Infrastructure/suggestions"
+
+	"github.com/vmware/govmomi/object"
+	"github.com/vmware/govmomi/vim25"
 )
 
 // Package consists of the Set of Classes, that Parses Hardware Configuration, User Specified
 
-type Config struct {
-	// Represents Configuration of the Virtual Machine
-	Mutex sync.RWMutex
+type HardwareConfig struct {
 
-	// IP Address of the VM Configuration
-	IP struct {
-		Hostname string `json:"Hostname" xml:"Hostname"`
-		Netmask  string `json:"Netmask" xml:"Netmask"`
-		IP       string `json:"IP" xml:"IP"`
-		Gateway  string `json:"Gateway" xml:"Gateway"`
-	} `json:"IP" xml:"IP"`
+	// Hardware Configuration, that is Used to Initialize Virtual Machine Server Instance
+
+	// Network Resource info, that VM will be Connected to
+	Network struct {
+		ItemPath string `json:"ItemPath" xml:"ItemPath"`
+	} `json:"Network" xml:"Network"`
+
+	// Datacenter Resource Info, VM will be deployed on
+	Datacenter struct {
+		ItemPath string `json:"ItemPath" xml:"ItemPath"`
+	} `json:"Datacenter" xml:"Datacenter"`
+
+	// Datastore Resource Info, VM will be using for storing Data
+	DataStore struct {
+		ItemPath string `json:"ItemPath" xml:"ItemPath"`
+	} `json:"DataStore" xml:"Datastore"`
+
+	// Place, where Physical Resources is going to be Picked Up From, it can be HostMachine or Cluster
+	ResourcePool struct {
+		ItemPath string `json:"ItemPath" xml:"ItemPath"`
+	} `json:"ResourcePool" xml:"ResourcePool"`
+
+	// Forder Resource Info, where the Info about VM is going to be Stored.
+	Folder struct {
+		ItemPath string `json:"ItemPath" xml:"ItemPath"`
+	} `json:"Folder" xml:"Folder"`
+}
+
+func NewHardwareConfig(Config string) (*HardwareConfig, error) {
+	var config *HardwareConfig
+	DecodedError := json.Unmarshal([]byte(Config), &config)
+	return config, DecodedError
+}
+
+func (this *HardwareConfig) GetResources(Client vim25.Client) (map[string]object.Reference, error) {
+
+	var Resources map[string]object.Reference
+	ResourceManager := suggestions.NewResourceSuggestManager(Client)
+	for ResourceName, Instance := range map[string]struct{ ItemPath string }{
+		"Network":      struct{ ItemPath string }(this.Network),
+		"Datastore":    struct{ ItemPath string }(this.DataStore),
+		"Folder":       struct{ ItemPath string }(this.Folder),
+		"ResourcePool": struct{ ItemPath string }(this.ResourcePool),
+	} {
+		Resource, Error := ResourceManager.GetResource(Instance.ItemPath)
+		if Error != nil {
+			return nil, exceptions.ItemDoesNotExist()
+		} else {
+			Resources[ResourceName] = Resource
+		}
+	}
+	return Resources, nil
+}
+
+type VirtualMachineCustomSpec struct {
+	// Represents Configuration of the Virtual Machine
+
+	Metadata struct {
+		VirtualMachineName string `json:"VirtualMachineName" xml:"VirtualMachineName"`
+	} `json:"Metadata" xml:"Metadata"`
 
 	// Hardware Resourcs for the VM Configuration
 	Resources struct {
-		ResourcePoolUniqueName string `json:"ResourcePoolUniqueName" xml:"ResourcePoolUniqueName"`
-		CpuNum                 int32  `json:"CpuNum" xml:"CpuNum"`
-		MemoryInMegabytes      int64  `json:"MemoryInMegabytes" xml:"MemoryInMegabytes"`
-		ItemPath               string `json:"ItemPath" xml:"ItemPath"`
+		CpuNum            int32 `json:"CpuNum" xml:"CpuNum"`
+		MemoryInMegabytes int64 `json:"MemoryInMegabytes" xml:"MemoryInMegabytes"`
 	} `json:"Resources" xml:"Resources"`
 
 	Disk struct {
 		CapacityInKB int `json:"CapacityInKB" xml:"CapacityInKB"`
 	} `json:"Disk"`
-
-	// SSH Credentials for the VM
-	Ssh struct {
-		User     string `json:"User" xml:"User"`
-		Password string `json:"Password" xml:"Password"`
-	} `json:"Ssh" xml:"Ssh"`
-
-	// Network Resource info, that VM will be Connected to
-	Network struct {
-		NetworkType       string `json:"NetworkType" xml:"NetworkType"`
-		NetworkId         string `json:"NetworkID" xml:"NetworkID"`
-		NetworkUniqueName string `json:"NetworkUniqueName" xml:"NetworkUniqueName"`
-		ItemPath          string `json:"ItemPath" xml:"ItemPath"`
-	} `json:"Network" xml:"Network"`
-
-	// Datacenter Resource Info, VM will be deployed on
-	Datacenter struct {
-		DatacenterUniqueName string `json:"DatacenterUniqueName" xml:"DatacenterUniqueName"`
-		DatacenterName       string `json:"DatacenterName" xml:"DatacenterName"`
-		ItemPath             string `json:"ItemPath" xml:"ItemPath"`
-	} `json:"Datacenter" xml:"Datacenter"`
-
-	// Datastore Resource Info, VM will be using for storing Data
-	DataStore struct {
-		DatastoreUniqueName string `json:"DatastoreUniqueName" xml:"DatastoreUniqueName"`
-		DatastoreName       string `json:"DataStoreName" xml:"DatastoreName"`
-		ItemPath            string `json:"ItemPath" xml:"ItemPath"`
-	} `json:"DataStore" xml:"Datastore"`
-
-	// Forder Resource Info, where the Info about VM is going to be Stored.
-	Folder struct {
-		FolderUniqueName string `json:"FolderUniqueName" xml:"FolderUniqueName"`
-		FolderID         string `json:"FolderID" xml:"FolderID"`
-		ItemPath         string `json:"ItemPath" xml:"ItemPath"`
-	} `json:"Folder" xml:"Folder"`
 }
 
-func NewEmptyConfig() *Config {
-	return &Config{}
-}
-
-type ConfigurationParserInterface interface {
-	// Interface, that represents Default Configuration Parser
-	// * Parser the Configuration form, and returns set of the Credentials
-	// That Will be Potentially used for creating Custom VM...
-	ConfigParse(SerializedConfiguraion []byte) (*Config, error)
-}
-
-type ConfigurationParser struct {
-	ConfigurationParserInterface
-	// Main Class, that is used for Parsing the Whole Configuration for the Virtual Server
-}
-
-func NewConfigurationParser() *ConfigurationParser {
-	return &ConfigurationParser{}
-}
-
-func (this *ConfigurationParser) ConfigParse(SerializedConfiguration []byte) (*Config, error) {
-	var DecodedConfiguration Config
-	JsonDecodeError := json.Unmarshal(SerializedConfiguration, DecodedConfiguration)
-	if JsonDecodeError != nil {
-		return nil, JsonDecodeError
-	} else {
-		return &DecodedConfiguration, nil
-	}
+func NewCustomConfig(Config string) (*VirtualMachineCustomSpec, error) {
+	var config VirtualMachineCustomSpec
+	DecodeError := json.Unmarshal([]byte(Config), config)
+	return &config, DecodeError
 }

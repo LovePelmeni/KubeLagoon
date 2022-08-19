@@ -38,14 +38,8 @@ func NewVirtualMachineIPAddress(IP string, Netmask string, Gateway string, Hostn
 	}
 }
 
-type VirtualMachineIPManagerInterface interface {
-	// Interface of the Class, that setting Up IP Address to the Virtual Machine
-	SetupAddress(IPCredentials *VirtualMachineIPAddress) (*VirtualMachineIPAddress, error)
-}
 
-type VirtualMachineIPManager struct {
-	VirtualMachineIPManagerInterface
-}
+type VirtualMachineIPManager struct {}
 
 func NewVirtualMachineIPManager() *VirtualMachineIPManager {
 	return &VirtualMachineIPManager{}

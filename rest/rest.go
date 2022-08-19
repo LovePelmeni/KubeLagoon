@@ -18,6 +18,7 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/deploy"
 	"github.com/LovePelmeni/Infrastructure/models"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/LovePelmeni/Infrastructure/parsers"
 	"github.com/LovePelmeni/Infrastructure/suggestions"
@@ -34,9 +35,9 @@ import (
 
 // Insfrastructure API Environment Variables
 var (
-	APIIp    = os.Getenv("API_SOURCE_IP")
-	Username = os.Getenv("API_SOURCE_USERNAME")
-	Password = os.Getenv("API_SOURCE_PASSWORD")
+	APIIp    = os.Getenv("VMWARE_SOURCE_IP")
+	Username = os.Getenv("VMWARE_SOURCE_USERNAME")
+	Password = os.Getenv("VMWARE_SOURCE_PASSWORD")
 
 	APIUrl = &url.URL{
 		Scheme: "https",
@@ -86,10 +87,33 @@ func init() {
 // Authorization Rest API Endpoints
 
 func LoginRestController(RequestContext *gin.Context) {
+	// Rest Controller, that is responsible for users to let them login
+	Username := RequestContext.PostForm("Username")
+	Password := RequestContext.PostForm("Password")
 
+	var Customer models.Customer
+	customer := models.Database.Model(&models.Customer{}).Where("username = ?", Username).Find(&Customer)
+
+	if customer.Error != nil {
+		RequestContext.JSON(http.StatusBadRequest,
+			gin.H{"Error": "No User With This Username Exists :("})
+		return
+	}
+
+	if EqualsError := bcrypt.CompareHashAndPassword(
+		[]byte(Customer.Password), []byte(Password)); EqualsError != nil {
+		RequestContext.JSON(http.StatusBadRequest, gin.H{"Error": "Invalid Password"})
+	}
 }
 
 func LogoutRestController(RequestContext *gin.Context) {
+	// Rest Controller, that is responsible to let users Log out from their existing account
+
+	if Cookie, Error := RequestContext.Cookie("jwt-token"); len(Cookie) != 0 && Error == nil {
+		Cookie, _ := RequestContext.Request.Cookie("jwt-token")
+		Cookie.Expires.Add(-1)
+		RequestContext.JSON(http.StatusOK, gin.H{"Status": "Logged out"})
+	}
 }
 
 // Customers Rest API Endpoints
@@ -128,11 +152,25 @@ func DeployNewVirtualMachineRestController(RequestContext *gin.Context) {
 	DeployedInstance, DeployError := NewVirtualMachineManager.DeployVirtualMachine(
 		*Client.Client, *HardwareConfiguration, *CustomConfiguration)
 
+	// Creating New ORM Object
+	VirtualMachineConfig, _ := models.NewConfiguration(*HardwareConfiguration, *CustomConfiguration).Create()
+	VirtualMachine, _ := models.NewVirtualMachine(CustomerId,
+		CustomConfiguration.Metadata.VirtualMachineName, DeployedInstance.InventoryPath).Create()
+
 	switch DeployError {
+
 	case nil:
+
+		VirtualMachineConfig.Commit()
+		VirtualMachine.Commit()
+
 		RequestContext.JSON(http.StatusOK,
 			gin.H{"Operation": "Success"})
 	default:
+
+		VirtualMachineConfig.Rollback()
+		VirtualMachine.Rollback()
+
 		RequestContext.JSON(http.StatusBadGateway,
 			gin.H{"Error": "Failed to Deploy New Virtual Server"})
 	}
@@ -144,10 +182,46 @@ func UpdateVirtualMachineConfigurationRestController(RequestContext *gin.Context
 
 func StartVirtualMachineRestController(RequestContext *gin.Context) {
 	// Rest Controller, that is Used to Start Virtual Machine Server
+	VirtualMachineId := RequestContext.Query("VirtualMachineId")
+	CustomerId := RequestContext.Query("CustomerId")
+
+	VmManager := deploy.NewVirtualMachineManager(*Client.Client)
+	Vm, VmError := VmManager.GetVirtualMachine(VirtualMachineId, CustomerId)
+
+	if VmError != nil {
+		RequestContext.JSON(http.StatusBadRequest, gin.H{"Error": "VM Does not Exist."})
+	}
+	StartedError := VmManager.StartVirtualMachine(Vm)
+
+	switch StartedError {
+	case nil:
+		RequestContext.JSON(http.StatusOK, gin.H{"Status": "Started"})
+	default:
+		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": StartedError})
+	}
 }
 
 func RebootVirtualMachineRestController(RequestContext *gin.Context) {
 	// Rest Controller, that is Used to Reboot Virtual Machine Server
+	VirtualMachineId := RequestContext.Query("VirtualMachineId")
+	CustomerId := RequestContext.Query("CustomerId")
+	NewVmManager := deploy.NewVirtualMachineManager(*Client.Client)
+	Vm, VmError := NewVmManager.GetVirtualMachine(VirtualMachineId, CustomerId)
+
+	if VmError != nil {
+		RequestContext.JSON(
+			http.StatusBadRequest, gin.H{"Error": "VM Does Not Exist."})
+		return
+	}
+
+	Rebooted := NewVmManager.RebootVirtualMachine(Vm)
+
+	switch Rebooted {
+	case true:
+		RequestContext.JSON(http.StatusOK, gin.H{"Status": "Rebooted"})
+	case false:
+		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": VmError})
+	}
 }
 
 func ShutdownVirtualMachineRestController(RequestContext *gin.Context) {

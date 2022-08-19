@@ -11,6 +11,6 @@ ENV GOARCH=amd64
 ENV GIN_MODE=0
 
 COPY . . 
-RUN go mod tidy && go mod vendor && go mod test -v ./tests/.. 
+RUN go mod tidy && go mod vendor && go test -v ./tests/.. 
 RUN go build -o ./main/. 
 ENTRYPOINT ["go", "run", "./main/main.go"]

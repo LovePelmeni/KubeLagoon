@@ -56,4 +56,27 @@ data:
   SUPPORT_EMAIL_ADDRESS: email_manager@gmail.com 
   SUPPORT_EMAIL_PASSWORD: email_manager_password 
 
+  SUPPORT_CLIENT_EMAIL_ADDRESS: email_infra_server@gmail.com 
+  SUPPORT_CLIENT_EMAIL_PASSWORD: email_infra_server_password
+
+--- 
+
+apiVersion: v1
+kind: 
+metadata:
+  name: project-secret 
+  namespace: app-namespace 
+  annotations:
+    kubernetes.io/type: "Opaque"
+    
+stringData:
+  SUPPORT_EMAIL_ADDRESS: "email_manager@gmail.com" 
+  SUPPORT_EMAIL_PASSWORD: "email_manager_password" 
+
+  SUPPORT_CLIENT_EMAIL_ADDRESS: "email_infra_server@gmail.com" 
+  SUPPORT_CLIENT_EMAIL_PASSWORD: "email_infra_server_password"
+
+  VMWARE_SOURCE_IP: "192.268.0.10"
+  VMWARE_SOURCE_USER: "vmware_api_user"
+  VMWARE_SOURCE_PASSWORD: "vmware_api_password"
 

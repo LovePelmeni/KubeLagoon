@@ -117,15 +117,16 @@ type Configuration struct {
 }
 
 func NewConfiguration(
-	Config parsers.Config,
+	Config parsers.HardwareConfig,
+	CustomConfig parsers.VirtualMachineCustomSpec,
 ) *Configuration {
 
 	SerializedDatacenterConfig, _ := json.Marshal(Config.Datacenter)
 	SerializedDatastoreConfig, _ := json.Marshal(Config.DataStore)
 	SerializedNetworkConfig, _ := json.Marshal(Config.Network)
-	SerializedResourcePoolConfig, _ := json.Marshal(Config.Resources)
+	SerializedResourcePoolConfig, _ := json.Marshal(CustomConfig.Resources)
 	SerializedFolderConfig, _ := json.Marshal(Config.Folder)
-	SerializedDiskConfig, _ := json.Marshal(Config.Disk)
+	SerializedDiskConfig, _ := json.Marshal(CustomConfig.Disk)
 
 	return &Configuration{
 		Disk:         string(SerializedDiskConfig),
