@@ -181,13 +181,13 @@ func (this *VirtualMachineManager) GetVirtualMachine(VmId string, CustomerId str
 
 	var VirtualMachineConfiguration models.Configuration
 
-	VirtualMachineGormRef := models.Database.Model(
+	VirtualMachineGormRefError := models.Database.Model(
 		&models.VirtualMachine{}).Where(
 		"owner_id = ? AND id = ?",
 		CustomerId, VmId).Association(
 		"Configuration").Find(&VirtualMachineConfiguration)
 
-	if VirtualMachineGormRef.Error != nil {
+	if VirtualMachineGormRefError != nil {
 		ErrorLogger.Printf("Failed to Find Virtual Machine in Database with ID: %s and Owner ID: %s", VmId, CustomerId)
 		return nil, exceptions.ItemDoesNotExist()
 	}

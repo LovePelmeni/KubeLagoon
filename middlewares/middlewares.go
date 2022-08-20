@@ -15,3 +15,15 @@ func IsVirtualMachineOwnerMiddleware() gin.HandlerFunc {
 
 	}
 }
+
+func AuthorizationRequiredMiddleware() gin.HandlerFunc {
+	return func(RequestContext *gin.Context) {
+
+	}
+}
+
+func NonAuthorizationRequiredMiddleware() gin.HandlerFunc {
+	return func(RequestContext *gin.Context) {
+
+	}
+}
