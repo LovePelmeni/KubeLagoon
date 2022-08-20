@@ -1,13 +1,11 @@
 package models
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 
 	"os"
 
-	"github.com/LovePelmeni/Infrastructure/parsers"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -49,7 +47,7 @@ func init() {
 	}
 
 	Database = DatabaseInstance
-	Database.AutoMigrate(&Customer{}, &Configuration{}, &VirtualMachine{})
+	Database.AutoMigrate(&Customer{}, &VirtualMachine{})
 }
 
 type Customer struct {
@@ -106,54 +104,5 @@ func (this *VirtualMachine) Create() (*gorm.DB, error) {
 func (this *VirtualMachine) Delete() (*gorm.DB, error) {
 	Deleted := Database.Model(&VirtualMachine{}).Delete(&this)
 	Database.Model(&VirtualMachine{}).Unscoped().Delete(&this)
-	return Deleted, Deleted.Error
-}
-
-type Configuration struct {
-	gorm.Model
-
-	VirtualMachineID string         `json:"VirtualMachineID" xml:"VirtualMachineID" gorm:"primaryKey;unique;"`
-	VirtualMachine   VirtualMachine `gorm:"foreignKey:ID;references:VirtualMachineID;"`
-
-	Disk           string `json:"Storage" xml:"Disk" gorm:"type:varchar(1000); not null; unique;"`
-	Network        string `json:"Network" xml:"Network" gorm:"type:varchar(1000); not null;"`
-	DataCenter     string `json:"DataCenter" xml:"Datacenter" gorm:"type:varchar(1000); not null;"`
-	DataStore      string `json:"DataStore" xml:"DataStore" gorm:"type:varchar(1000); not null;"`
-	ResourcePool   string `json:"ResourcePool" xml:"ResourcePool" gorm:"type:varchar(1000); not null;"`
-	ItemPath       string `json:"ItemPath" gorm:"type:varchar(100); not null;"`
-	Folder         string `json:"Folder" xml:"Folder" gorm:"type:varchar(1000); not null;"`
-	ResourceConfig string `json:"ResourceConfig" xml:"ResourceConfig" gorm:"type:varchar(1000); not null;"` // Configuration of the CPU's and Memoery
-	DiskConfig     string `json:"DiskConfig" xml:"DiskConfig" gorm:"type:varchar(1000); not null;"`
-}
-
-func NewConfiguration(
-	Config parsers.HardwareConfig,
-	CustomConfig parsers.VirtualMachineCustomSpec,
-) *Configuration {
-
-	SerializedDatacenterConfig, _ := json.Marshal(Config.Datacenter)
-	SerializedDatastoreConfig, _ := json.Marshal(Config.DataStore)
-	SerializedNetworkConfig, _ := json.Marshal(Config.Network)
-	SerializedResourcePoolConfig, _ := json.Marshal(CustomConfig.Resources)
-	SerializedFolderConfig, _ := json.Marshal(Config.Folder)
-	SerializedDiskConfig, _ := json.Marshal(CustomConfig.Disk)
-
-	return &Configuration{
-		Disk:         string(SerializedDiskConfig),
-		Network:      string(SerializedNetworkConfig),
-		DataCenter:   string(SerializedDatacenterConfig),
-		DataStore:    string(SerializedDatastoreConfig),
-		ResourcePool: string(SerializedResourcePoolConfig),
-		Folder:       string(SerializedFolderConfig),
-	}
-}
-func (this *Configuration) Create() (*gorm.DB, error) {
-	Created := Database.Model(&Configuration{}).Create(&this)
-	return Created, Created.Error
-}
-
-func (this *Configuration) Delete() (*gorm.DB, error) {
-	Deleted := Database.Model(&Configuration{}).Delete(&this)
-	Database.Model(&Configuration{}).Unscoped().Delete(&this)
 	return Deleted, Deleted.Error
 }

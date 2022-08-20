@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/LovePelmeni/Infrastructure/exceptions"
-	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25"
 )
@@ -31,6 +30,15 @@ func init() {
 
 // Package consists of set of classes, that represents available options about "when/where/how" you can
 // deploy your application
+
+type ResourceRequirements struct {
+	// Resource Requirements Provided by the Customer
+	// Used to filter appropriate Instances of the Resources, depending on this Struct
+}
+
+func NewResourceRequirements() *ResourceRequirements {
+	return &ResourceRequirements{}
+}
 
 type ResourceSuggestion struct {
 	// Struct, represents Object Info
@@ -82,41 +90,8 @@ func (this *NetworkSuggestManager) GetResource(ItemPath string) (object.Referenc
 	}
 }
 
-func (this *NetworkSuggestManager) GetSuggestions() []ResourceSuggestion {
+func (this *NetworkSuggestManager) GetSuggestions(Requirements ResourceRequirements) []ResourceSuggestion {
 	// Returns Suggested Resources, of different Types, Zones, Unique Names, etc...
-
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	defer CancelFunc()
-
-	finder := find.NewFinder(this.Client)
-	var Suggestions []ResourceSuggestion
-	Networks, ParseDatastoreError := finder.NetworkList(TimeoutContext, "*")
-
-	switch {
-	case ParseDatastoreError != nil:
-		return Suggestions
-
-	case ParseDatastoreError == nil:
-		// Extracting Metadata From available resources and putting it into a single `Resource Suggestion` Structure
-		group := sync.WaitGroup{}
-		for _, Network := range Networks {
-			go func() {
-				group.Add(1)
-				NetworkRef := Network.(*object.Network)
-				Resource := NewResourceSuggestion(&NetworkRef.Common,
-					map[string]string{
-						"UniqueName": Network.Reference().Value,
-						"Type":       Network.Reference().Type,
-						"ItemPath":       Network.GetInventoryPath(),
-					})
-				Suggestions = append(Suggestions, *Resource)
-				group.Done()
-			}()
-			group.Wait()
-			return Suggestions
-		}
-	}
-	return Suggestions
 }
 
 type DatastoreSuggestManager struct {
@@ -148,35 +123,8 @@ func (this *DatastoreSuggestManager) GetResource(ItemPath string) (object.Refere
 	}
 }
 
-func (this *DatastoreSuggestManager) GetSuggestions() []ResourceSuggestion {
-
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	defer CancelFunc()
-
-	finder := find.NewFinder(&this.Client)
-	var Suggestions []ResourceSuggestion
-	Datastores, ParseDatastoreError := finder.DatastoreList(TimeoutContext, "*")
-
-	switch {
-	case ParseDatastoreError != nil:
-		return Suggestions
-
-	case ParseDatastoreError == nil:
-
-		for _, Datastore := range Datastores {
-			Resource := NewResourceSuggestion(
-				&Datastore.Common,
-				map[string]string{
-					"UniqueName": Datastore.Reference().Value,
-					"Type":       Datastore.Reference().Type,
-					"Name":       Datastore.Name(),
-					"Path":       Datastore.InventoryPath,
-				})
-			Suggestions = append(Suggestions, *Resource)
-		}
-		return Suggestions
-	}
-	return Suggestions
+func (this *DatastoreSuggestManager) GetSuggestions(Requirements ResourceRequirements) []ResourceSuggestion {
+	// Returns Query of the Networks, depending on the Requirements
 }
 
 type DataCenterSuggestManager struct {
@@ -209,36 +157,8 @@ func (this *DataCenterSuggestManager) GetResource(ItemPath string) (object.Refer
 	}
 }
 
-func (this *DataCenterSuggestManager) GetSuggestions() []ResourceSuggestion {
-
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	defer CancelFunc()
-
-	finder := find.NewFinder(&vim25.Client{})
-	var Suggestions []ResourceSuggestion
-	DataCenters, ParseDatastoreError := finder.DatacenterList(TimeoutContext, "*")
-
-	switch {
-	case ParseDatastoreError != nil:
-		return Suggestions
-
-	case ParseDatastoreError == nil:
-
-		for _, Datacenter := range DataCenters {
-			Resource := NewResourceSuggestion(
-				&Datacenter.Common,
-				map[string]string{
-					"UniqueName": Datacenter.Reference().Value,
-					"Type":       Datacenter.Reference().Type,
-					"Name":       Datacenter.Name(),
-					"ItemPath":   Datacenter.InventoryPath,
-				})
-			Suggestions = append(Suggestions, *Resource)
-		}
-	default:
-		return Suggestions
-	}
-	return Suggestions
+func (this *DataCenterSuggestManager) GetSuggestions(Requirements ResourceRequirements) []ResourceSuggestion {
+	// Returns Suggested Resource Objects, Depending on the Requirements
 }
 
 type ResourceSuggestManager struct {
@@ -270,34 +190,12 @@ func (this *ResourceSuggestManager) GetResource(ItemPath string) (object.Referen
 	}
 }
 
-func (this *ResourceSuggestManager) GetSuggestions() []ResourceSuggestion {
+func (this *ResourceSuggestManager) GetSuggestions(Requirements ResourceRequirements) []ResourceSuggestion {
 
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	defer CancelFunc()
+}
 
-	finder := find.NewFinder(&vim25.Client{})
-	var Suggestions []ResourceSuggestion
-	ResourcePools, ParseDatastoreError := finder.ResourcePoolList(TimeoutContext, "*")
+func (this *ResourceSuggestManager) GetSuggestionsBasedOnRequirements() {
 
-	switch {
-	case ParseDatastoreError != nil:
-		return Suggestions
-
-	case ParseDatastoreError == nil:
-		for _, ResourcePool := range ResourcePools {
-			Resource := NewResourceSuggestion(
-				&ResourcePool.Common,
-				map[string]string{
-					"UniqueName": ResourcePool.Reference().Value,
-					"Type":       ResourcePool.Reference().Type,
-					"Name":       ResourcePool.Name(),
-					"ItemPath":   ResourcePool.InventoryPath,
-				})
-			Suggestions = append(Suggestions, *Resource)
-		}
-		return Suggestions
-	}
-	return Suggestions
 }
 
 type FolderSuggestManager struct {
@@ -329,32 +227,24 @@ func (this *FolderSuggestManager) GetResource(ItemPath string) (object.Reference
 	}
 }
 
-func (this *FolderSuggestManager) GetSuggestions() []ResourceSuggestion {
+func (this *FolderSuggestManager) GetSuggestions(ResourceRequirements ResourceRequirements) []ResourceSuggestion {
+	// Returns Available Folders, depending on the Customer Resource Requirements.
+}
 
+type ClusterComputeResourceSuggestManager struct {
+	Client vim25.Client
+}
+
+func NewClusterComputeResourceSuggestManager() *ClusterComputeResourceSuggestManager {
+	return &ClusterComputeResourceSuggestManager{}
+}
+
+func (this *ClusterComputeResourceSuggestManager) GetResource(ItemPath string) (object.Reference, error) {
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
-
-	finder := find.NewFinder(&vim25.Client{})
-	var Suggestions []ResourceSuggestion
-	Folders, ParseDatastoreError := finder.FolderList(TimeoutContext, "*")
-
-	switch {
-	case ParseDatastoreError != nil:
-		return Suggestions
-
-	case ParseDatastoreError == nil:
-		for _, Folder := range Folders {
-			Resource := NewResourceSuggestion(
-				&Folder.Common,
-				map[string]string{
-					"UniqueName": Folder.Reference().Value,
-					"Type":       Folder.Reference().Type,
-					"Name":       Folder.Name(),
-					"ItemPath":   Folder.InventoryPath,
-				})
-			Suggestions = append(Suggestions, *Resource)
-		}
-		return Suggestions
-	}
-	return Suggestions
+	SearchIndex := object.NewSearchIndex(&this.Client)
+	AvailableCluster, Error := SearchIndex.FindByInventoryPath(TimeoutContext, ItemPath)
+	return AvailableCluster, Error
 }
+
+func (this *ClusterComputeResourceSuggestManager) GetSuggestions(ResourceRequirements) ([]ResourceSuggestion, error)

@@ -179,13 +179,12 @@ func (this *VirtualMachineManager) GetVirtualMachine(VmId string, CustomerId str
 
 	// Receiving Virtual Machine Configuration Instance from the Database
 
-	var VirtualMachineConfiguration models.Configuration
+	var VirtualMachineObj models.VirtualMachine
 
 	VirtualMachineGormRefError := models.Database.Model(
 		&models.VirtualMachine{}).Where(
 		"owner_id = ? AND id = ?",
-		CustomerId, VmId).Association(
-		"Configuration").Find(&VirtualMachineConfiguration)
+		CustomerId, VmId).Find(&VirtualMachineObj)
 
 	if VirtualMachineGormRefError != nil {
 		ErrorLogger.Printf("Failed to Find Virtual Machine in Database with ID: %s and Owner ID: %s", VmId, CustomerId)
@@ -195,7 +194,7 @@ func (this *VirtualMachineManager) GetVirtualMachine(VmId string, CustomerId str
 	// Receiving Prepared Virtual Machine Instance by using API
 
 	FinderIndex := object.NewSearchIndex(&this.VimClient)
-	VirtualRef, FindError := FinderIndex.FindByInventoryPath(TimeoutContext, VirtualMachineConfiguration.ItemPath)
+	VirtualRef, FindError := FinderIndex.FindByInventoryPath(TimeoutContext, VirtualMachineObj.ItemPath)
 
 	switch {
 	case FindError != nil:

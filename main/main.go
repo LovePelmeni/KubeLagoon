@@ -13,8 +13,10 @@ import (
 	"syscall"
 
 	"github.com/LovePelmeni/Infrastructure/middlewares"
-	"github.com/LovePelmeni/Infrastructure/rest"
 
+	customer_rest "github.com/LovePelmeni/Infrastructure/customer_rest"
+	resource_rest "github.com/LovePelmeni/Infrastructure/resources_rest"
+	vm_rest "github.com/LovePelmeni/Infrastructure/vm_rest"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
@@ -86,12 +88,12 @@ func (this *Server) Run() {
 
 	Router.Group("/customer/")
 	{
-		Router.POST("/login/", rest.LoginRestController)
-		Router.POST("/logout/", rest.LogoutRestController)
+		Router.POST("/login/", customer_rest.LoginRestController)
+		Router.POST("/logout/", customer_rest.LogoutRestController)
 
-		Router.POST("/create/", rest.CreateCustomerRestController)
-		Router.PUT("/update/", rest.UpdateCustomerRestController)
-		Router.DELETE("/delete/", rest.DeleteCustomerRestController)
+		Router.POST("/create/", customer_rest.CreateCustomerRestController)
+		Router.PUT("/update/", customer_rest.UpdateCustomerRestController)
+		Router.DELETE("/delete/", customer_rest.DeleteCustomerRestController)
 	}
 
 	// Virtual Machines Rest API Endpoints
@@ -99,18 +101,18 @@ func (this *Server) Run() {
 		middlewares.IsVirtualMachineOwnerMiddleware())
 	{
 		{
-			Router.POST("/deploy/", rest.DeployNewVirtualMachineRestController)
-			Router.POST("/start/", rest.StartVirtualMachineRestController)
-			Router.PUT("/update/", rest.UpdateVirtualMachineConfigurationRestController)
-			Router.POST("/reboot/", rest.RebootVirtualMachineRestController)
-			Router.DELETE("/shutdown/", rest.ShutdownVirtualMachineRestController)
-			Router.DELETE("/remove/", rest.RemoveVirtualMachineRestController)
+			Router.POST("/deploy/", vm_rest.DeployNewVirtualMachineRestController)
+			Router.POST("/start/", vm_rest.StartVirtualMachineRestController)
+			Router.PUT("/update/", vm_rest.UpdateVirtualMachineConfigurationRestController)
+			Router.POST("/reboot/", vm_rest.RebootVirtualMachineRestController)
+			Router.DELETE("/shutdown/", vm_rest.ShutdownVirtualMachineRestController)
+			Router.DELETE("/remove/", vm_rest.RemoveVirtualMachineRestController)
 		}
 
 		Router.Use(middlewares.IsVirtualMachineOwnerMiddleware())
 		{
-			Router.GET("/get/list/", rest.GetCustomerVirtualMachinesRestController)
-			Router.GET("/get/", rest.GetCustomerVirtualMachineInfoRestController)
+			Router.GET("/get/list/", vm_rest.GetCustomerVirtualMachinesRestController)
+			Router.GET("/get/", vm_rest.GetCustomerVirtualMachineInfoRestController)
 		}
 	}
 
@@ -118,7 +120,13 @@ func (this *Server) Run() {
 	{
 		Router.Use(middlewares.JwtAuthenticationMiddleware())
 		{
-			Router.POST("/get/suggestions/", rest.GetAvailableResourcesInfoRestController)
+			Router.POST("/get/cluster/compute/resource/suggestions/", resource_rest.GetAvailableResourcesInfoRestController)
+			Router.POST("/get/datacenter/suggestions/", resource_rest)
+			Router.POST("/get/datastore/suggestions/", resource_rest)
+			Router.POST("/get/network/suggestions/", resource_rest)
+			Router.POST("/get/storage/suggestions/", resource_rest)
+			Router.POST("/get/folder/suggestions/", resource_rest)
+
 		}
 	}
 
