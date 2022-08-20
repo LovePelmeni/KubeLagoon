@@ -35,11 +35,21 @@ func init() {
 		DSN: fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s",
 			DATABASE_HOST, DATABASE_PORT, DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME),
 	}))
-	if ConnectionError != nil {
+
+	switch ConnectionError {
+
+	case gorm.ErrInvalidDB:
+		panic("Please Setup Credentials for your PostgreSQL Database: Host, Port, User, Password, DbName")
+
+	case gorm.ErrUnsupportedDriver:
+		panic("Invalid Database Driver")
+
+	case gorm.ErrNotImplemented:
 		panic(ConnectionError)
 	}
+
 	Database = DatabaseInstance
-	Database.AutoMigrate(&Customer{}, &VirtualMachine{}, &Configuration{})
+	Database.AutoMigrate(&Customer{}, &Configuration{}, &VirtualMachine{})
 }
 
 type Customer struct {
@@ -102,14 +112,14 @@ func (this *VirtualMachine) Delete() (*gorm.DB, error) {
 type Configuration struct {
 	gorm.Model
 
-	VirtualMachineID string         `json:"VirtualMachineID" gorm:"primaryKey;unique;"`
-	VirtualMachine   VirtualMachine `gorm:"foreignKey:VirtualMachine;references:VirtualMachineID;"`
+	VirtualMachineID string         `json:"VirtualMachineID" xml:"VirtualMachineID" gorm:"primaryKey;unique;"`
+	VirtualMachine   VirtualMachine `gorm:"foreignKey:ID;references:VirtualMachineID;"`
 
-	Disk           string `json:"Storage" gorm:"type:varchar(1000); not null; unique;"`
-	Network        string `json:"Network" gorm:"type:varchar(1000); not null;"`
-	DataCenter     string `json:"DataCenter" gorm:"type:varchar(1000); not null;"`
-	DataStore      string `json:"DataStore" gorm:"type:varchar(1000); not null;"`
-	ResourcePool   string `json:"ResourcePool" gorm:"type:varchar(1000); not null;"`
+	Disk           string `json:"Storage" xml:"Disk" gorm:"type:varchar(1000); not null; unique;"`
+	Network        string `json:"Network" xml:"Network" gorm:"type:varchar(1000); not null;"`
+	DataCenter     string `json:"DataCenter" xml:"Datacenter" gorm:"type:varchar(1000); not null;"`
+	DataStore      string `json:"DataStore" xml:"DataStore" gorm:"type:varchar(1000); not null;"`
+	ResourcePool   string `json:"ResourcePool" xml:"ResourcePool" gorm:"type:varchar(1000); not null;"`
 	ItemPath       string `json:"ItemPath" gorm:"type:varchar(100); not null;"`
 	Folder         string `json:"Folder" xml:"Folder" gorm:"type:varchar(1000); not null;"`
 	ResourceConfig string `json:"ResourceConfig" xml:"ResourceConfig" gorm:"type:varchar(1000); not null;"` // Configuration of the CPU's and Memoery

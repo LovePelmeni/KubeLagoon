@@ -3,6 +3,8 @@ package rest
 import (
 	"context"
 	"encoding/json"
+	"log"
+	"reflect"
 
 	"fmt"
 	"sync"
@@ -19,6 +21,7 @@ import (
 	"github.com/LovePelmeni/Infrastructure/deploy"
 	"github.com/LovePelmeni/Infrastructure/models"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 
 	"github.com/LovePelmeni/Infrastructure/parsers"
 	"github.com/LovePelmeni/Infrastructure/suggestions"
@@ -58,13 +61,29 @@ var (
 var (
 	Client govmomi.Client
 )
+
 var (
 	VirtualMachine models.VirtualMachine
 	configuration  models.Configuration
 	Customer       models.Customer
 )
 
+var (
+	DebugLogger *log.Logger
+	InfoLogger  *log.Logger
+	ErrorLogger *log.Logger
+)
+
 func init() {
+
+	LogFile, Error := os.OpenFile("Rest.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if Error != nil {
+		panic(Error)
+	}
+
+	DebugLogger = log.New(LogFile, "DEBUG:", log.Ldate|log.Ltime|log.Lshortfile)
+	InfoLogger = log.New(LogFile, "INFO:", log.Ldate|log.Ltime|log.Lshortfile)
+	ErrorLogger = log.New(LogFile, "ERROR:", log.Ldate|log.Ltime|log.Lshortfile)
 
 	var RestClient *rest.Client
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
@@ -88,11 +107,13 @@ func init() {
 
 func LoginRestController(RequestContext *gin.Context) {
 	// Rest Controller, that is responsible for users to let them login
+
 	Username := RequestContext.PostForm("Username")
 	Password := RequestContext.PostForm("Password")
 
 	var Customer models.Customer
-	customer := models.Database.Model(&models.Customer{}).Where("username = ?", Username).Find(&Customer)
+	customer := models.Database.Model(&models.Customer{}).Where(
+		"username = ?", Username).Find(&Customer)
 
 	if customer.Error != nil {
 		RequestContext.JSON(http.StatusBadRequest,
@@ -120,6 +141,35 @@ func LogoutRestController(RequestContext *gin.Context) {
 
 func CreateCustomerRestController(RequestContext *gin.Context) {
 
+	NewCustomer := models.NewCustomer()
+	Created, Error := NewCustomer.Create()
+
+	if reflect.ValueOf(Created).IsNil() || Error != nil {
+
+		switch Error {
+		case gorm.ErrInvalidData:
+			RequestContext.JSON(http.StatusBadRequest,
+				gin.H{"Error": "Invalid Credentials has been Passed, Make sure that Credentials has proper Length and Character Type"})
+			return
+
+		case gorm.ErrInvalidValue:
+			RequestContext.JSON(http.StatusBadRequest,
+				gin.H{"Error": "Invalid Value has been Passed"})
+			return
+
+		case gorm.ErrModelValueRequired:
+			RequestContext.JSON(http.StatusBadRequest,
+				gin.H{"Error": "You missed to Setup Required Fields"})
+			return
+
+		default:
+			RequestContext.JSON(http.StatusBadRequest,
+				gin.H{"Error": fmt.Sprintf("Unknown Error `%s`", Error.Error())})
+			return
+		}
+	} else {
+		RequestContext.JSON(http.StatusCreated, gin.H{"Operation": "Success"})
+	}
 }
 
 func UpdateCustomerRestController(RequestContext *gin.Context) {
@@ -127,7 +177,26 @@ func UpdateCustomerRestController(RequestContext *gin.Context) {
 }
 
 func DeleteCustomerRestController(RequestContext *gin.Context) {
+	CustomerId := RequestContext.Query("CustomerId")
+	var Customer models.Customer
+	models.Database.Model(&models.Customer{}).Where("id = ?", CustomerId).Find(&Customer)
+	_, Error := Customer.Delete()
 
+	switch Error {
+	case gorm.ErrRecordNotFound:
+		RequestContext.JSON(http.StatusBadRequest,
+			gin.H{"Error": "Profile with this Credentials Does Not Exist"})
+
+	case gorm.ErrInvalidTransaction:
+		ErrorLogger.Printf(
+			"Failed to Delete Customer Profile with ID: %s, Error: %s", CustomerId, Error)
+		RequestContext.JSON(http.StatusBadGateway,
+			gin.H{"Error": "Failed to Delete Profile"})
+	default:
+		ErrorLogger.Printf("Unknown Error on Customer Deletion, Error: %s", Error)
+		RequestContext.JSON(http.StatusBadGateway,
+			gin.H{"Error": fmt.Sprintf("Unknown Error, %s", Error)})
+	}
 }
 
 // Virtual Machine Rest API Endpoints
@@ -340,15 +409,13 @@ func GetCustomerVirtualMachinesRestController(RequestContext *gin.Context) {
 			Finder := object.NewSearchIndex(&vim25.Client{})
 			VmEntity, _ := Finder.FindByInventoryPath(TimeoutContext, VirtualMachine.ItemPath)
 			PowerState, _ := VmEntity.(*object.VirtualMachine).PowerState(TimeoutContext)
-
-			VirtualMachineQuerySet := struct {
-				Vm     models.VirtualMachine
-				Status string
+			VirtualMachineQuerySet = struct {
+				VirtualMachineName string `json"VirtualMachineName"`
+				Status string `json:"Status"`
 			}{
-				Vm:     VirtualMachine,
+				VirtualMachineName: VirtualMachine.VirtualMachineName, 
 				Status: string(PowerState),
 			}
-
 			Queryset = append(Queryset, VirtualMachineQuerySet)
 			group.Done()
 		}()
@@ -361,11 +428,63 @@ func GetCustomerVirtualMachineInfoRestController(RequestContext *gin.Context) {
 	// Rest Controller, that returns Info about Specific Customer Virtual Machine,
 	// Including Current Health, Status, Ssh Credentials, CPU/memory usage, etc...
 
+
+	type Config struct {
+
+		Metadata struct {
+			FullName string `json:"FullName"`
+			Version string `json:"Version"`
+			InstanceUuid string `json:"InstanceUuid"`
+			Vendor string `json:"Vendor"`
+		} `json:"Metadata"`
+
+		PowerState string `json:"PowerState"`
+
+		IPInfo struct {
+			Tip string `json:"ChapterTip"`
+			IPAddress string `json:"IPAddress"`
+		} `json:"IpInfo" xml:"IPInfo"`
+
+		TlsInfo struct {
+			Tip string `json:"ChapterTip"`
+			PrivateKey []byte  `json:"PrivateKey"`
+			PublicKey []byte `json:"PublicKey"`
+		} `json:"TlsInfo" xml:"TlsInfo"` 
+
+		OSInfo struct {
+			OSName string `json:"OSName"`
+			Bit    int    `json:"Bit;omitempty;"`
+			Version string `json:"OSVersion;omitempty;"`
+		}
+
+		DiskInfo struct {
+			Tip string `json:"ChapterTip"`
+			Capacity string `json:"Capacity"`
+			DiskType string `json:"DiskType"`
+		} `json:"DiskInfo" xml:"DiskInfo"`
+
+		NetworkInfo struct {
+			Tip string `json:"ChapterTip"`
+			Netmask string `json:"`
+			NetworkIP string `json:"`
+		} `json:"NetworkInfo" xml:"NetworkInfo"`
+
+		DatacenterInfo struct {
+			Name string `json:"Name"`
+			UniqueName string `json:"UniqueName"`
+		} `json:"Datacenter"`
+
+		DatastoreInfo struct {
+			Name string `json:"Name"`
+			UniqueName string `json:"UniqueName"`
+			MemoryInUse int32 `json:"MemoryInUse"`
+		} `json:"Datastore`
+	}
+
 	CustomerId := RequestContext.Query("customerId")
 	VirtualMachineId := RequestContext.Query("virtualMachineId")
 
 	var VirtualMachine models.VirtualMachine
-	var PowerState string
 
 	models.Database.Model(&models.Customer{}).Where(
 		"id = ?", CustomerId).Preload("Vms").Where("id = ?",
@@ -380,8 +499,62 @@ func GetCustomerVirtualMachineInfoRestController(RequestContext *gin.Context) {
 
 		Finder := object.NewSearchIndex(&vim25.Client{})
 		Vm, _ := Finder.FindByInventoryPath(Timeout, VirtualMachine.ItemPath)
-		Pw, _ := Vm.(*object.VirtualMachine).PowerState(Timeout)
-		PowerState = string(Pw)
+		PowerState, _ := Vm.(*object.VirtualMachine).PowerState(Timeout)
+
+		VmServiceContent := Vm.(*object.VirtualMachine).Client().ServiceContent
+
+		VirtualMachineQuerySet := Config{
+			Metadata: struct {
+				FullName string `json:"FullName"`
+				Version  string `json:"Version"`
+				InstanceUuid string `json:"InstanceUuid"`
+				Vendor string `json:"Vendor"`
+			}{
+				FullName: VmServiceContent.About.FullName, 
+				InstanceUuid: VmServiceContent.About.InstanceUuid, 	
+				Version: VmServiceContent.About.Version, 
+				Vendor: VmServiceContent.About.Vendor,
+			},
+			PowerState: string(PowerState),
+			IPInfo: struct {
+				Tip string `json:"ChapterTip"`
+				IPAddress string `json:"IPAddress"`
+			}{
+			Tip: "This Is IP Info about your Virtual Server," +
+			" there you can find Info about Location of your Virtual Server", 
+			IPAddress: VmServiceContent.IpPoolManager.Value,
+			},
+			OSInfo: struct {
+				OSName string "json:\"OSName\"";
+				Bit int "json:\"Bit;omitempty;\"";
+				Version string "json:\"OSVersion;omitempty;\""
+			}{
+				OSName: Vm.(*object.VirtualMachine).Client().ServiceContent.About.OsType, 
+
+			},
+
+			TlsInfo: struct{
+				Tip string "json:\"ChapterTip\"";
+				PrivateKey []byte "json:\"PrivateKey\""
+				PublicKey []byte "json:\"PublicKey\""
+			}{
+				Tip: "This Is TLS/SSL Configuration for your Virtual Server, to Access your VM Server Using SSH run: `ssh user@password -i <public-key>", 
+				PrivateKey: Vm.(*object.VirtualMachine).Client().Certificate().PrivateKey, 
+				PublicKey: Vm.(*object.VirtualMachine).Client().Certificate().Leaf.PublicKey, 
+			},
+			DiskInfo: struct{
+			Tip string "json:\"ChapterTip\"";
+			 Capacity string "json:\"Capacity\""; 
+			 DiskType string "json:\"DiskType\""
+			 RootFolder string "json:\"RootFolder\""
+			}{
+				RootFolder: Vm.(*object.VirtualMachine).Client().ServiceContent.RootFolder.Value,
+				DiskType: VmServiceContent.VirtualDiskManager.Type,
+				Capacity: VirtualMachine
+			},
+			
+		
+		}
 
 		group.Done()
 	}()

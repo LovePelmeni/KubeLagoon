@@ -100,4 +100,5 @@ func (this *VirtualMachineStorageManager) SetupStorageDisk(
 
 	VirtualMachineSpec.DeviceChange = append(VirtualMachineSpec.DeviceChange, DeviceSpec)
 	return &VirtualMachineSpec, nil
+
 }
