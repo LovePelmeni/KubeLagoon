@@ -7,6 +7,9 @@ import (
 	"os"
 	"reflect"
 
+	"time"
+
+	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/models"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -57,7 +60,15 @@ func LoginRestController(RequestContext *gin.Context) {
 	if EqualsError := bcrypt.CompareHashAndPassword(
 		[]byte(Customer.Password), []byte(Password)); EqualsError != nil {
 		RequestContext.JSON(http.StatusBadRequest, gin.H{"Error": "Invalid Password"})
+		return
 	}
+
+	// Generating New Jwt Authentication Token
+	NewJwtToken := authentication.CreateJwtToken(Customer.Username, Customer.Email)
+
+	// Setting UP New Generated Auth Token
+	RequestContext.SetCookie("jwt-token", NewJwtToken, int(time.Now().Add(time.Minute*10000).Unix()), "/", "", true, false)
+	RequestContext.JSON(http.StatusOK, gin.H{"Status": "Logged In"})
 }
 
 func LogoutRestController(RequestContext *gin.Context) {
@@ -73,8 +84,13 @@ func LogoutRestController(RequestContext *gin.Context) {
 // Customers Rest API Endpoints
 
 func CreateCustomerRestController(RequestContext *gin.Context) {
+	// Rest Controller, Responsible for Creating new Customer Profiles
 
-	NewCustomer := models.NewCustomer()
+	Username := RequestContext.PostForm("Username")
+	Email := RequestContext.PostForm("Email")
+	Password := RequestContext.PostForm("Password")
+
+	NewCustomer := models.NewCustomer(Username, Email, Password)
 	Created, Error := NewCustomer.Create()
 
 	if reflect.ValueOf(Created).IsNil() || Error != nil {
@@ -105,11 +121,12 @@ func CreateCustomerRestController(RequestContext *gin.Context) {
 	}
 }
 
-func UpdateCustomerRestController(RequestContext *gin.Context) {
-
+func ResetPasswordRestController(RequestContext *gin.Context) {
+	// Rest Controller, Responsible for Resetting Password
 }
 
 func DeleteCustomerRestController(RequestContext *gin.Context) {
+	// Rest Controller, Responsible for Deleting Customer Profiles
 	CustomerId := RequestContext.Query("CustomerId")
 	var Customer models.Customer
 	models.Database.Model(&models.Customer{}).Where("id = ?", CustomerId).Find(&Customer)
@@ -130,4 +147,8 @@ func DeleteCustomerRestController(RequestContext *gin.Context) {
 		RequestContext.JSON(http.StatusBadGateway,
 			gin.H{"Error": fmt.Sprintf("Unknown Error, %s", Error)})
 	}
+}
+
+func SupportRestController(RequestContext *gin.Context) {
+	// Rest Controller, that is Responsible for Sending out Messages / Notifications to the Support Email 
 }

@@ -78,13 +78,41 @@ func init() {
 
 // VM Rest API Controllers
 
-func GetCustomerVirtualMachine(RequestContext *gin.Context)
+func GetCustomerVirtualMachine(RequestContext *gin.Context) {
+	// Returns Extended Info about Virtual Machine Server Owned by the Customer
 
-// Returns Extended Info about Virtual Machine Server Owned by the Customer
+	var VirtualMachine models.VirtualMachine
+	CustomerId := RequestContext.Query("CustomerId")
+	VirtualMachineId := RequestContext.Query("VirtualMachineId")
+	Gorm := models.Database.Model(&VirtualMachine).Where(
+		"owner_id = ? AND id = ?", CustomerId, VirtualMachineId).Find(&VirtualMachine)
 
-func GetCustomerVirtualMachines(RequestContext *gin.Context)
+	switch Gorm.Error {
+	case nil:
+		RequestContext.JSON(http.StatusOK,
+			gin.H{"VirtualMachine": VirtualMachine})
+	default:
+		ErrorLogger.Printf("Failed to Receive Virtual Machine, Error: %s", Gorm.Error.Error())
+		RequestContext.JSON(http.StatusBadRequest,
+			gin.H{"Error": "Virtual Machine Does Not Exist"})
+	}
+}
 
-// Returns List of the VM's that Customer Owns
+func GetCustomerVirtualMachines(RequestContext *gin.Context) {
+	// Returns List of the VM's that Customer Owns
+	var VirtualMachines []models.VirtualMachine
+	CustomerId := RequestContext.Query("CustomerId")
+	Gorm := models.Database.Model(&Customer).Where("id = ?", CustomerId).Preload("Vms").Find(&VirtualMachines)
+	switch Gorm.Error {
+	case nil:
+		RequestContext.JSON(http.StatusOK,
+			gin.H{"QuerySet": VirtualMachines})
+	default:
+		ErrorLogger.Printf("Failed to Receive All Customer Virtual Machines, Error: %s", Gorm.Error)
+		RequestContext.JSON(http.StatusBadRequest,
+			gin.H{"Error": fmt.Sprintf("%s", Gorm.Error)})
+	}
+}
 
 // Virtual Machine Rest API Endpoints
 

@@ -2,12 +2,6 @@ package parsers
 
 import (
 	"encoding/json"
-
-	"github.com/LovePelmeni/Infrastructure/exceptions"
-	"github.com/LovePelmeni/Infrastructure/suggestions"
-
-	"github.com/vmware/govmomi/object"
-	"github.com/vmware/govmomi/vim25"
 )
 
 // Package consists of the Set of Classes, that Parses Hardware Configuration, User Specified
@@ -46,26 +40,6 @@ func NewHardwareConfig(Config string) (*HardwareConfig, error) {
 	var config *HardwareConfig
 	DecodedError := json.Unmarshal([]byte(Config), &config)
 	return config, DecodedError
-}
-
-func (this *HardwareConfig) GetResources(Client vim25.Client) (map[string]object.Reference, error) {
-
-	var Resources map[string]object.Reference
-	ResourceManager := suggestions.NewResourceSuggestManager(Client)
-	for ResourceName, Instance := range map[string]struct{ ItemPath string }{
-		"Network":      struct{ ItemPath string }(this.Network),
-		"Datastore":    struct{ ItemPath string }(this.DataStore),
-		"Folder":       struct{ ItemPath string }(this.Folder),
-		"ResourcePool": struct{ ItemPath string }(this.ResourcePool),
-	} {
-		Resource, Error := ResourceManager.GetResource(Instance.ItemPath)
-		if Error != nil {
-			return nil, exceptions.ItemDoesNotExist()
-		} else {
-			Resources[ResourceName] = Resource
-		}
-	}
-	return Resources, nil
 }
 
 type VirtualMachineCustomSpec struct {

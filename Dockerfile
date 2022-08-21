@@ -1,9 +1,11 @@
 FROM golang:1.18.3-alpine 
 # Using Golang 1.18.3 On Alpine Linux 
+
 LABEL Author="Klimushin Kirill"
 RUN echo "Running Docker Build of the Web Infrastructure App"
 
 # Initializing Project Directory 
+
 CMD mkdir /project/dir/ 
 WORKDIR /project/dir/ 
 

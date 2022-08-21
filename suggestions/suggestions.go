@@ -7,9 +7,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/LovePelmeni/Infrastructure/exceptions"
-	"github.com/vmware/govmomi/object"
+	"github.com/LovePelmeni/Infrastructure/converter"
+	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/property"
+	"golang.org/x/exp/slices"
+
 	"github.com/vmware/govmomi/vim25"
+	"github.com/vmware/govmomi/vim25/mo"
+	"github.com/vmware/govmomi/vim25/types"
 )
 
 var (
@@ -33,102 +38,40 @@ func init() {
 
 type ResourceRequirements struct {
 	// Resource Requirements Provided by the Customer
-	// Used to filter appropriate Instances of the Resources, depending on this Struct
+	// This Struct Is Being Matched to the Datacenter's Resource Capabilities, in order to find out
+	// that Datacenter has enough resources to meet the Customer Requirements
+	Requirements interface{} `json:"Requirements" xml:"Requirements"`
 }
 
-func NewResourceRequirements() *ResourceRequirements {
-	return &ResourceRequirements{}
-}
-
-type ResourceSuggestion struct {
-	// Struct, represents Object Info
-	Mutex    sync.Mutex
-	Object   *object.Common    `json:"Object"`
-	Metadata map[string]string `json:"Metadata"`
-}
-
-func NewResourceSuggestion(Obj *object.Common, Info map[string]string) *ResourceSuggestion {
-	return &ResourceSuggestion{
-		Object:   Obj,
-		Metadata: Info,
+func NewResourceRequirements(Requirements interface{}) *ResourceRequirements {
+	return &ResourceRequirements{
+		Requirements: Requirements,
 	}
 }
 
-type SuggestManagerInterface interface {
+type DatacenterSuggestion struct {
+	// Struct, represents Datacenter Info
+	DatacenterName string `json:"DatacenterName" xml:"DatacenterName"`
+	Datastores     int    `json:"Datastores" xml:"Datastores"`
+	Networks       int    `json:"Networks" xml:"Networks"`
+}
+
+func NewDatacenterSuggestion(Name string, DatastoresCount int, NetworksCount int) *DatacenterSuggestion {
+	return &DatacenterSuggestion{
+		DatacenterName: Name,
+		Datastores:     DatastoresCount,
+		Networks:       NetworksCount,
+	}
+}
+
+type DatacenterSuggestManagerInterface interface {
 	// Default Interface, represents Class, that returns Suggestions about specific
 	// Source
-	GetSuggestions() []ResourceSuggestion
-	GetResource(ItemPath string) (object.Reference, error) // Method, should return specific Object by the Idenitfier
-}
-
-type NetworkSuggestManager struct {
-	SuggestManagerInterface
-	Client *vim25.Client
-}
-
-func NewNetworkSuggestManager(Client vim25.Client) *NetworkSuggestManager {
-	return &NetworkSuggestManager{
-		Client: &Client,
-	}
-}
-
-func (this *NetworkSuggestManager) GetResource(ItemPath string) (object.Reference, error) {
-	// Method Receiving Instance of the Resource, that Customer has chosen, during Configuration Setup
-
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	defer CancelFunc()
-
-	Finder := object.NewSearchIndex(this.Client)
-	Resource, FindError := Finder.FindByInventoryPath(TimeoutContext, ItemPath)
-	switch {
-	case FindError == nil:
-		return nil, exceptions.ItemDoesNotExist()
-	case FindError != nil:
-		return Resource, nil
-	default:
-		return nil, exceptions.ItemDoesNotExist()
-	}
-}
-
-func (this *NetworkSuggestManager) GetSuggestions(Requirements ResourceRequirements) []ResourceSuggestion {
-	// Returns Suggested Resources, of different Types, Zones, Unique Names, etc...
-}
-
-type DatastoreSuggestManager struct {
-	SuggestManagerInterface
-	Client vim25.Client
-}
-
-func NewDatastoreSuggestManager(Client vim25.Client) *DataCenterSuggestManager {
-	return &DataCenterSuggestManager{
-		Client: &Client,
-	}
-}
-
-func (this *DatastoreSuggestManager) GetResource(ItemPath string) (object.Reference, error) {
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	defer CancelFunc()
-
-	Finder := object.NewSearchIndex(&this.Client)
-	Datastore, FindError := Finder.FindByInventoryPath(TimeoutContext, ItemPath)
-	switch {
-	case FindError != nil:
-		return nil, exceptions.ItemDoesNotExist()
-
-	case FindError == nil:
-		return Datastore, nil
-
-	default:
-		return Datastore, nil
-	}
-}
-
-func (this *DatastoreSuggestManager) GetSuggestions(Requirements ResourceRequirements) []ResourceSuggestion {
-	// Returns Query of the Networks, depending on the Requirements
+	GetSuggestions(Requirements ResourceRequirements) []DatacenterSuggestion
 }
 
 type DataCenterSuggestManager struct {
-	SuggestManagerInterface
+	DatacenterSuggestManagerInterface
 	Client *vim25.Client
 }
 
@@ -138,113 +81,120 @@ func NewDataCenterSuggestManager(Client vim25.Client) *DataCenterSuggestManager 
 	}
 }
 
-func (this *DataCenterSuggestManager) GetResource(ItemPath string) (object.Reference, error) {
+func (this *DataCenterSuggestManager) CheckHasEnoughResources(Datacenter *mo.Datacenter, Requirements ResourceRequirements) bool {
+	// Checks, that Datacenter has enough resources, based on requirements
 
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	defer CancelFunc()
+	var Resources []bool
+	ResourceManagers := []resources.ResourceManagerInterface{
+		resources.StorageResourceManager,
+		resources.NetworkResourceManager,
+		resources.DatastoreResourceManager,
+		resources.ClusterComputeResourceManager,
+	}
+	WaitGroup := sync.WaitGroup{}
 
-	Finder := object.NewSearchIndex(this.Client)
-	Datacenter, FindError := Finder.FindByInventoryPath(TimeoutContext, ItemPath)
-	switch {
-	case FindError != nil:
-		return nil, exceptions.ItemDoesNotExist()
+	// Filtering the Datacenter resources, and making sure, that they are compatible with
+	// Customer Requirements
 
-	case FindError == nil:
-		return Datacenter, nil
+	// NOTE: Every of the Component Upper (Network, Storage, Datastore, etc....)
+	// Is being checked within ONLY this Specific Datacenter, that Customer Decided to Pick up
+	// If there is not enough resources at this Datacenter, this method would return `False`
 
-	default:
-		return Datacenter, nil
+	for _, Manager := range ResourceManagers {
+		go func() {
+			WaitGroup.Add(1)
+			if Resource, Error := Manager.GetResource(Datacenter, Requirements); Resource != nil && Error == nil {
+				Resources = append(Resources, true)
+			} else {
+				Resources = append(Resources, false)
+			}
+			WaitGroup.Done()
+		}()
+		WaitGroup.Wait()
+	}
+	if slices.Contains[bool](Resources, false) {
+		return false
+	} else {
+		return true
 	}
 }
 
-func (this *DataCenterSuggestManager) GetSuggestions(Requirements ResourceRequirements) []ResourceSuggestion {
+func (this *DataCenterSuggestManager) FindAvailableResources(Requirements ResourceRequirements) []types.ManagedObjectReference {
+	// Finds Available Resources, that fullfill the Needs of the Client
+
+	var AvailableDatacenters []types.ManagedObjectReference
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
+	defer CancelFunc()
+
+	Finder := find.NewFinder(this.Client)
+	TypeConverter := converter.NewInstanceConverter()
+	AllDatacenters, FindError := Finder.DatacenterList(TimeoutContext, "*")
+
+	// Filtering Datacenters, Checking if they meet the Resource Requirements
+
+	for _, Datacenter := range AllDatacenters {
+
+		DatacenterReference := Datacenter.Reference()
+		ConvertedDatacenter := TypeConverter.ToMoEntity(&DatacenterReference) // convertes Datacenter of type `object.Datacenter` to Instace of `mo.Datacenter`
+
+		if HasEnoughResources := this.CheckHasEnoughResources(
+			ConvertedDatacenter.(*mo.Datacenter), Requirements); HasEnoughResources == true {
+			AvailableDatacenters = append(AvailableDatacenters, Datacenter.Reference())
+		} else {
+			continue
+		}
+	}
+
+	switch FindError {
+	case nil:
+		return AvailableDatacenters
+	default:
+		ErrorLogger.Printf("Failed to Get Available Datacenters, %s", FindError)
+		return []types.ManagedObjectReference{}
+	}
+}
+
+func (this *DataCenterSuggestManager) GetSuggestions(Requirements ResourceRequirements) []DatacenterSuggestion {
 	// Returns Suggested Resource Objects, Depending on the Requirements
-}
 
-type ResourceSuggestManager struct {
-	SuggestManagerInterface
-	Client *vim25.Client
-}
-
-func NewResourceSuggestManager(Client vim25.Client) *ResourceSuggestManager {
-	return &ResourceSuggestManager{
-		Client: &Client,
+	var ResponseDatacentersQuerySet []DatacenterSuggestion
+	var AvailableDatacenters []mo.Datacenter
+	var DatacenterProps = []string{
+		"Name",      // Name of the Datacenter
+		"Datastore", // Available Datastores, via this Datacenter
+		"Network",   // Available Networks, via this Datacenter
 	}
-}
 
-func (this *ResourceSuggestManager) GetResource(ItemPath string) (object.Reference, error) {
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
+	// Receiving Available Datacenters, based on the Customer Needs
+	Datacenters := this.FindAvailableResources(Requirements)
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*30)
 	defer CancelFunc()
 
-	Finder := object.NewSearchIndex(this.Client)
-	ResourcePool, FindError := Finder.FindByInventoryPath(TimeoutContext, ItemPath)
-	switch {
-	case FindError != nil:
-		return nil, exceptions.ItemDoesNotExist()
+	PropertyCollector := property.DefaultCollector(this.Client)
+	//
+	FindError := PropertyCollector.Retrieve(
+		TimeoutContext, Datacenters, DatacenterProps, &AvailableDatacenters)
+	WaitGroup := sync.WaitGroup{}
 
-	case FindError == nil:
-		return ResourcePool, nil
+	// Making Annotations (Converting Datacenters to `DatacenterSuggetion` classes)
+	go func() {
+		WaitGroup.Add(1)
+		for _, Datacenter := range AvailableDatacenters {
+			ResourceSuggestion := NewDatacenterSuggestion(Datacenter.Name,
+				len(Datacenter.Datastore), len(Datacenter.Network))
+			ResponseDatacentersQuerySet = append(ResponseDatacentersQuerySet, *ResourceSuggestion)
+		}
+		WaitGroup.Done()
+	}()
 
+	WaitGroup.Wait()
+
+	switch FindError {
+	case nil:
+		return ResponseDatacentersQuerySet
 	default:
-		return ResourcePool, nil
+		// If FindError != nil return empty datacenter's suggestions list
+		ErrorLogger.Printf("Failed to get Available Datacenters, Error: %s", FindError)
+		return []DatacenterSuggestion{}
 	}
 }
-
-func (this *ResourceSuggestManager) GetSuggestions(Requirements ResourceRequirements) []ResourceSuggestion {
-
-}
-
-func (this *ResourceSuggestManager) GetSuggestionsBasedOnRequirements() {
-
-}
-
-type FolderSuggestManager struct {
-	SuggestManagerInterface
-	Client *vim25.Client
-}
-
-func NewFolderSuggestManager(Client vim25.Client) *FolderSuggestManager {
-	return &FolderSuggestManager{
-		Client: &Client,
-	}
-}
-
-func (this *FolderSuggestManager) GetResource(ItemPath string) (object.Reference, error) {
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	defer CancelFunc()
-
-	Finder := object.NewSearchIndex(this.Client)
-	Folder, FindError := Finder.FindByInventoryPath(TimeoutContext, ItemPath)
-	switch {
-	case FindError != nil:
-		return nil, exceptions.ItemDoesNotExist()
-
-	case FindError == nil:
-		return Folder, nil
-
-	default:
-		return Folder, nil
-	}
-}
-
-func (this *FolderSuggestManager) GetSuggestions(ResourceRequirements ResourceRequirements) []ResourceSuggestion {
-	// Returns Available Folders, depending on the Customer Resource Requirements.
-}
-
-type ClusterComputeResourceSuggestManager struct {
-	Client vim25.Client
-}
-
-func NewClusterComputeResourceSuggestManager() *ClusterComputeResourceSuggestManager {
-	return &ClusterComputeResourceSuggestManager{}
-}
-
-func (this *ClusterComputeResourceSuggestManager) GetResource(ItemPath string) (object.Reference, error) {
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	defer CancelFunc()
-	SearchIndex := object.NewSearchIndex(&this.Client)
-	AvailableCluster, Error := SearchIndex.FindByInventoryPath(TimeoutContext, ItemPath)
-	return AvailableCluster, Error
-}
-
-func (this *ClusterComputeResourceSuggestManager) GetSuggestions(ResourceRequirements) ([]ResourceSuggestion, error)

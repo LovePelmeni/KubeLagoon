@@ -6,6 +6,7 @@ import (
 
 	"os"
 
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -55,12 +56,21 @@ type Customer struct {
 	Username string           `json:"Username" gorm:"type:varchar(100); not null; unique;"`
 	Email    string           `json:"Email" gorm:"type:varchar(100); not null; unique;"`
 	Password string           `json:"Password" gorm:"type:varchar(100); not null;"`
-	Vms      []VirtualMachine `json:"Vms" gorm:"many2many:VirtualMachines;"`
+	Vms      []VirtualMachine `json:"Vms" gorm:"many2many:Vms;"`
 }
 
-func NewCustomer() *Customer {
-	return &Customer{}
+func NewCustomer(Username string, Password string, Email string) *Customer {
+	PasswordHash, HashError := bcrypt.GenerateFromPassword([]byte(Password), 14)
+	if HashError != nil {
+		return nil
+	}
+	return &Customer{
+		Username: Username,
+		Email:    Email,
+		Password: string(PasswordHash),
+	}
 }
+
 func (this *Customer) Create() (*gorm.DB, error) {
 	CreatedCustomer := Database.Model(&Customer{}).Create(&this)
 	return CreatedCustomer, CreatedCustomer.Error

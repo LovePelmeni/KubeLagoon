@@ -3,6 +3,7 @@ package ip
 import (
 	"log"
 	"os"
+
 	"github.com/vmware/govmomi/vim25/types"
 )
 
@@ -38,8 +39,7 @@ func NewVirtualMachineIPAddress(IP string, Netmask string, Gateway string, Hostn
 	}
 }
 
-
-type VirtualMachineIPManager struct {}
+type VirtualMachineIPManager struct{}
 
 func NewVirtualMachineIPManager() *VirtualMachineIPManager {
 	return &VirtualMachineIPManager{}

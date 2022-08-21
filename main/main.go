@@ -15,7 +15,7 @@ import (
 	"github.com/LovePelmeni/Infrastructure/middlewares"
 
 	customer_rest "github.com/LovePelmeni/Infrastructure/customer_rest"
-	resource_rest "github.com/LovePelmeni/Infrastructure/resources_rest"
+	suggestion_rest "github.com/LovePelmeni/Infrastructure/suggestion_rest"
 	vm_rest "github.com/LovePelmeni/Infrastructure/vm_rest"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -92,7 +92,7 @@ func (this *Server) Run() {
 		Router.POST("/logout/", customer_rest.LogoutRestController)
 
 		Router.POST("/create/", customer_rest.CreateCustomerRestController)
-		Router.PUT("/update/", customer_rest.UpdateCustomerRestController)
+		Router.PUT("/reset/password/", customer_rest.ResetPasswordRestController)
 		Router.DELETE("/delete/", customer_rest.DeleteCustomerRestController)
 	}
 
@@ -111,22 +111,16 @@ func (this *Server) Run() {
 
 		Router.Use(middlewares.IsVirtualMachineOwnerMiddleware())
 		{
-			Router.GET("/get/list/", vm_rest.GetCustomerVirtualMachinesRestController)
-			Router.GET("/get/", vm_rest.GetCustomerVirtualMachineInfoRestController)
+			Router.GET("/get/list/", vm_rest.GetCustomerVirtualMachine)
+			Router.GET("/get/", vm_rest.GetCustomerVirtualMachines)
 		}
 	}
 
-	Router.Group("/resources/")
+	Router.Group("/suggestions/")
 	{
 		Router.Use(middlewares.JwtAuthenticationMiddleware())
 		{
-			Router.POST("/get/cluster/compute/resource/suggestions/", resource_rest.GetAvailableResourcesInfoRestController)
-			Router.POST("/get/datacenter/suggestions/", resource_rest)
-			Router.POST("/get/datastore/suggestions/", resource_rest)
-			Router.POST("/get/network/suggestions/", resource_rest)
-			Router.POST("/get/storage/suggestions/", resource_rest)
-			Router.POST("/get/folder/suggestions/", resource_rest)
-
+			Router.POST("/datacenter/", suggestion_rest.GetDatacenterSuggestions)
 		}
 	}
 
@@ -136,7 +130,7 @@ func (this *Server) Run() {
 	{
 		Router.Use(middlewares.JwtAuthenticationMiddleware())
 		{
-			Router.POST("/feedback/", rest.SupportRestController)
+			Router.POST("/feedback/", customer_rest.SupportRestController)
 		}
 	}
 

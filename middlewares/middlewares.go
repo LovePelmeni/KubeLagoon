@@ -6,7 +6,7 @@ import (
 
 func JwtAuthenticationMiddleware() gin.HandlerFunc {
 	return func(context *gin.Context) {
-
+		
 	}
 }
 
@@ -18,7 +18,7 @@ func IsVirtualMachineOwnerMiddleware() gin.HandlerFunc {
 
 func AuthorizationRequiredMiddleware() gin.HandlerFunc {
 	return func(RequestContext *gin.Context) {
-
+		
 	}
 }
 
