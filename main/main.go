@@ -102,11 +102,11 @@ func (this *Server) Run() {
 	{
 		{
 			Router.POST("/deploy/", vm_rest.DeployNewVirtualMachineRestController)
-			Router.POST("/start/", vm_rest.StartVirtualMachineRestController)
 			Router.PUT("/update/", vm_rest.UpdateVirtualMachineConfigurationRestController)
+			Router.DELETE("/remove/", vm_rest.RemoveVirtualMachineRestController)
+			Router.POST("/start/", vm_rest.StartVirtualMachineRestController)
 			Router.POST("/reboot/", vm_rest.RebootVirtualMachineRestController)
 			Router.DELETE("/shutdown/", vm_rest.ShutdownVirtualMachineRestController)
-			Router.DELETE("/remove/", vm_rest.RemoveVirtualMachineRestController)
 		}
 
 		Router.Use(middlewares.IsVirtualMachineOwnerMiddleware())

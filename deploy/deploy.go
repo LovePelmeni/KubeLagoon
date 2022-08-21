@@ -209,52 +209,6 @@ func (this *VirtualMachineManager) GetVirtualMachine(VmId string, CustomerId str
 	}
 }
 
-func (this *VirtualMachineManager) DeployVirtualMachine(
-	VimClient vim25.Client,
-	HardwareConfiguration parsers.HardwareConfig,
-	CustomConfiguration parsers.VirtualMachineCustomSpec,
-
-) (*object.VirtualMachine, error) {
-
-	// Initializing New Virtual Machine
-
-	Resources, AvailableError := HardwareConfiguration.GetResources(VimClient)
-
-	if AvailableError != nil {
-		return nil,
-			errors.New("Sorry, But Not All Resources is Currently Available to Deploy Your Server :(")
-	}
-
-	InitializedMachine, InitError := this.InitializeNewVirtualMachine(
-		VimClient, CustomConfiguration.Metadata.VirtualMachineName, Resources["Datastore"].(*object.Datastore),
-		Resources["Datacenter"].(*object.Datacenter), Resources["Network"].(*object.Network),
-		Resources["ResourcePool"].(*object.ResourcePool), Resources["Folder"].(*object.Folder),
-	)
-
-	if InitError != nil {
-		ErrorLogger.Printf("Failed to Initialize New Virtual Machine Instance")
-		return nil, errors.New("Failed to Initialize New Virtual Server")
-	}
-
-	// Applying Configuration
-
-	ApplyError := this.ApplyConfiguration(InitializedMachine, CustomConfiguration, Resources["Datastore"].(*object.Datastore))
-	if ApplyError != nil {
-		ErrorLogger.Printf("Failed to Apply Custom Configuration to the VM: %s",
-			InitializedMachine.Reference().Value)
-		return nil, errors.New("Failed to Apply Virtual Server Custom Configuration")
-	}
-
-	// Starting Virtual Machine Server
-	StartedError := this.StartVirtualMachine(InitializedMachine)
-	if StartedError != nil {
-		ErrorLogger.Printf("Failed to Start New VM: %s, Error: %s",
-			InitializedMachine.Reference().Value, StartedError)
-		return nil, errors.New("Failed to Start New Virtual Server")
-	}
-	return InitializedMachine, nil
-}
-
 func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 	VimClient vim25.Client,
 	VirtualMachineName string,

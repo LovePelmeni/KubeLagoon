@@ -10,6 +10,7 @@ import (
 	"github.com/LovePelmeni/Infrastructure/converter"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/property"
+	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 
 	"github.com/vmware/govmomi/vim25"
@@ -81,15 +82,15 @@ func NewDataCenterSuggestManager(Client vim25.Client) *DataCenterSuggestManager 
 	}
 }
 
-func (this *DataCenterSuggestManager) CheckHasEnoughResources(Datacenter *mo.Datacenter, Requirements ResourceRequirements) bool {
-	// Checks, that Datacenter has enough resources, based on requirements
+func (this *DataCenterSuggestManager) GetDatacenterResources(Datacenter *mo.Datacenter, Requirements ResourceRequirements) map[string]*types.ManagedObjectReference {
+	// Returns the Map of the Key (name of the Resource) and Value (Resource Instance), based on the Requirements .
+	var Resources map[string]*types.ManagedObjectReference
 
-	var Resources []bool
-	ResourceManagers := []resources.ResourceManagerInterface{
-		resources.StorageResourceManager,
-		resources.NetworkResourceManager,
-		resources.DatastoreResourceManager,
-		resources.ClusterComputeResourceManager,
+	ResourceManagers := map[string]resources.ResourceManagerInterface{
+		"Storage":                resources.StorageResourceManager,
+		"Network":                resources.NetworkResourceManager,
+		"Datastore":              resources.DatastoreResourceManager,
+		"ClusterComputeResource": resources.ClusterComputeResourceManager,
 	}
 	WaitGroup := sync.WaitGroup{}
 
@@ -100,26 +101,39 @@ func (this *DataCenterSuggestManager) CheckHasEnoughResources(Datacenter *mo.Dat
 	// Is being checked within ONLY this Specific Datacenter, that Customer Decided to Pick up
 	// If there is not enough resources at this Datacenter, this method would return `False`
 
-	for _, Manager := range ResourceManagers {
+	for ManagerKey, Manager := range ResourceManagers {
 		go func() {
 			WaitGroup.Add(1)
 			if Resource, Error := Manager.GetResource(Datacenter, Requirements); Resource != nil && Error == nil {
-				Resources = append(Resources, true)
+				Resources[ManagerKey] = Resource
 			} else {
-				Resources = append(Resources, false)
+				Resources[ManagerKey] = nil
 			}
 			WaitGroup.Done()
 		}()
 		WaitGroup.Wait()
 	}
-	if slices.Contains[bool](Resources, false) {
+}
+
+func (this *DataCenterSuggestManager) CheckHasEnoughResources(Datacenter *mo.Datacenter, Requirements ResourceRequirements) bool {
+	// Checks, that Datacenter has enough resources, based on requirements
+
+	// Filtering the Datacenter resources, and making sure, that they are compatible with
+	// Customer Requirements
+
+	// NOTE: Every of the Component Upper (Network, Storage, Datastore, etc....)
+	// Is being checked within ONLY this Specific Datacenter, that Customer Decided to Pick up
+	// If there is not enough resources at this Datacenter, this method would return `False`
+
+	Resources := this.GetDatacenterResources(Datacenter, Requirements)
+	if slices.Contains(maps.Values(Resources), nil) {
 		return false
 	} else {
 		return true
 	}
 }
 
-func (this *DataCenterSuggestManager) FindAvailableResources(Requirements ResourceRequirements) []types.ManagedObjectReference {
+func (this *DataCenterSuggestManager) FindAvailableDatacenters(Requirements ResourceRequirements) []types.ManagedObjectReference {
 	// Finds Available Resources, that fullfill the Needs of the Client
 
 	var AvailableDatacenters []types.ManagedObjectReference
@@ -166,7 +180,7 @@ func (this *DataCenterSuggestManager) GetSuggestions(Requirements ResourceRequir
 	}
 
 	// Receiving Available Datacenters, based on the Customer Needs
-	Datacenters := this.FindAvailableResources(Requirements)
+	Datacenters := this.FindAvailableDatacenters(Requirements)
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*30)
 	defer CancelFunc()
 

@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"reflect"
 	"time"
 
 	"github.com/LovePelmeni/Infrastructure/deploy"
 	"github.com/LovePelmeni/Infrastructure/models"
 	"github.com/LovePelmeni/Infrastructure/parsers"
+	"github.com/LovePelmeni/Infrastructure/suggestions"
 	"github.com/gin-gonic/gin"
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/vapi/rest"
@@ -116,46 +118,61 @@ func GetCustomerVirtualMachines(RequestContext *gin.Context) {
 
 // Virtual Machine Rest API Endpoints
 
-func DeployNewVirtualMachineRestController(RequestContext *gin.Context) {
+func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 
-	// Rest Controller, that deploys new Virtual Machine with Custom Configuration
+	//Rest Controller, that Initializes New Empty Virtual Machine
 
-	CustomerId := RequestContext.PostForm("customerId")
+	VirtualMachineName := RequestContext.PostForm("VirtualMachineName")
+	CustomerId := RequestContext.PostForm("CustomerId")
 
-	HardwareConfiguration, HardwareError := parsers.NewHardwareConfig(RequestContext.PostForm("HardwareConfiguration"))
-	CustomConfiguration, CustomError := parsers.NewCustomConfig(RequestContext.PostForm("CustomConfiguration"))
+	// Initilizing Resource Requirements Instance, that will be used to pick up Appropriate Hardware Instances, based on this Requirements
+	ResourceRequirements := suggestions.NewResourceRequirements(RequestContext.PostForm("ResourceRequirements"))
 
-	if HardwareError != nil || CustomError != nil {
-		RequestContext.JSON(
-			http.StatusBadRequest, gin.H{"Error": "Invalid Configuration"})
+	// Initializing Hardware Configuration Based on the Resource Requirements
+	HardwareConfig, ParseError := parsers.NewHardwareConfig(RequestContext.PostForm("DatacenterConfig"))
+	if ParseError != nil {
+		RequestContext.JSON(http.StatusBadRequest, gin.H{"Error": "Failed to Initialize New Virtual Server, Invalid Configuration has been Passed"})
+		return
 	}
 
-	// Deploying New Virtual Server Instance
+	// Parsing the Resource Instances, based on the Hardwares Configuration and Resource Requirements
+	// that has been Provided by the Customer Initially
 
-	NewVirtualMachineManager := deploy.NewVirtualMachineManager(*Client.Client)
-	DeployedInstance, DeployError := NewVirtualMachineManager.DeployVirtualMachine(
-		*Client.Client, *HardwareConfiguration, *CustomConfiguration)
+	ParsedResourceInstances := HardwareConfig.ParseResources(*ResourceRequirements)
+	if reflect.ValueOf(ParsedResourceInstances).IsNil() {
+		RequestContext.JSON(
+			http.StatusBadGateway, gin.H{"Error": "Failed to Get Resource Instances for Initializing New Server, Might be Some of the Instances does not Exist"})
+		return
+	}
 
-	// Creating New ORM Object
-	VirtualMachine, _ := models.NewVirtualMachine(CustomerId,
-		CustomConfiguration.Metadata.VirtualMachineName, DeployedInstance.InventoryPath).Create()
+	// Initializing New Virtual Server Instance...
 
-	switch DeployError {
+	InstanceDeployer := deploy.NewVirtualMachineManager(*Client.Client)
+	InitializedInstance, InitError := InstanceDeployer.InitializeNewVirtualMachine(
+		*Client.Client, VirtualMachineName,
+		ParsedResourceInstances["Datastore"],
+		ParsedResourceInstances["Datacenter"],
+		ParsedResourceInstances["Network"],
+		ParsedResourceInstances["ResourcePool"],
+		ParsedResourceInstances["Folder"],
+	)
 
+	switch InitError {
 	case nil:
-		VirtualMachine.Commit()
-
-		RequestContext.JSON(http.StatusOK,
-			gin.H{"Operation": "Success"})
+		NewVirtualMachine := models.NewVirtualMachine(
+			CustomerId, VirtualMachineName, InitializedInstance.InventoryPath)
+		NewVirtualMachine.Create()
+		RequestContext.JSON(http.StatusCreated, gin.H{"Status": "Initialized"})
 	default:
-		VirtualMachine.Rollback()
+		ErrorLogger.Printf("Failed to Initialize New Virtual Server, Error: %s", InitError)
 		RequestContext.JSON(http.StatusBadGateway,
-			gin.H{"Error": "Failed to Deploy New Virtual Server"})
+			gin.H{"Error": "Failed to Initialize new Virtual Server"})
 	}
 }
 
-func UpdateVirtualMachineConfigurationRestController(RequestContext *gin.Context) {
-	// Rest Controller, that is Used to Apply New Configuration to the Virtual Machine Server
+func DeployVirtualMachineRestController(RequestContext *gin.Context) {
+	// Rest Controller, that Applies Configuration on the Existing Initialized Virtual Machine Server
+	// Before Calling this Method, you firsly need to call `InitializeVirtualMachineRestController`.
 }
 
 func StartVirtualMachineRestController(RequestContext *gin.Context) {
