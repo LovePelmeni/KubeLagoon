@@ -13,11 +13,6 @@ import (
 	"github.com/LovePelmeni/Infrastructure/models"
 	"github.com/LovePelmeni/Infrastructure/parsers"
 
-	"github.com/LovePelmeni/Infrastructure/resources"
-	"github.com/LovePelmeni/Infrastructure/storage"
-
-	"github.com/LovePelmeni/Infrastructure/suggestions"
-
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/types"
@@ -213,10 +208,9 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 	VimClient vim25.Client,
 	VirtualMachineName string,
 	DataStore *object.Datastore, // Name, Customer Decided to set up for this Virtual Server
-	Datacenter *object.Datacenter,
-	Network *object.Network,
-	ResourcePool *object.ResourcePool,
-	Folder *object.Folder,
+	DatacenterNetwork *object.Network,
+	DatacenterResourcePool *object.ClusterComputeResource,
+	DatacenterFolder *object.Folder,
 ) (*object.VirtualMachine, error) {
 	// Initializes Virtual Machine Configuration (That does not exist yet)
 
@@ -225,7 +219,7 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 
 	ResourceAllocationManager := NewVirtualMachineResourceKeyManager()
 	ResourceCredentials, ResourceKeysError := ResourceAllocationManager.GetResourceKeys(
-		ResourcePool, Folder)
+		DatacenterResourcePool, DatacenterFolder)
 
 	switch {
 
@@ -240,7 +234,7 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 				AcceptAllEULA:      true,
 				NetworkMappings: []vcenter.NetworkMapping{{
 					Key:   ResourceCredentials.NetworkKey,
-					Value: Network.Reference().Value,
+					Value: DatacenterNetwork.Reference().Value,
 				}},
 
 				StorageMappings: []vcenter.StorageMapping{
@@ -257,8 +251,8 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 				StorageProvisioning: "thin",
 			},
 			Target: vcenter.Target{
-				ResourcePoolID: ResourcePool.Reference().Value,
-				FolderID:       Folder.Reference().Value,
+				ResourcePoolID: DatacenterResourcePool.Reference().Value,
+				FolderID:       DatacenterFolder.Reference().Value,
 			},
 		}
 
@@ -305,36 +299,19 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 	return nil, exceptions.VMDeployFailure()
 }
 
-func (this *VirtualMachineManager) ApplyConfiguration(
-	VirtualMachine *object.VirtualMachine,
-	Configuration parsers.VirtualMachineCustomSpec,
-	Datastore *object.Datastore,
-) error {
+func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.VirtualMachine, Configuration parsers.VirtualMachineCustomSpec) error {
+
 	// Applies Custom Configuration: Num's of CPU's, Memory etc... onto the Initialized Virtual Machine
 
 	// Resource Manager, that allows to return Initialized Resource Instances, by ID, UniqueName, etc...
-	ResourceManager := suggestions.NewResourceSuggestManager(this.VimClient)
-
-	// Receiving Datastore Instance by InventoryPath
-	DataStore, _ := ResourceManager.GetResource(Datastore.InventoryPath)
-	DataStoreManagedReference := DataStore.Reference()
-
-	// Initializing Configurations for the Virtual Server
-	DiskConfig, DiskError := storage.NewVirtualMachineStorageManager().SetupStorageDisk(VirtualMachine, *storage.NewVirtualMachineStorage(Configuration.Disk.CapacityInKB), &DataStoreManagedReference)
-	ResourceConfig, ResourceError := resources.NewVirtualMachineResourceManager().SetupResources(resources.NewVirtualMachineResources(Configuration.Resources.CpuNum, int64(Configuration.Resources.MemoryInMegabytes)))
 
 	// If Failed to Obtain one of the Hardware Resources, Returns Exception, that it Does Not Exist
 
-	if DiskError != nil {
-		return exceptions.ComponentDoesNotExist(DiskError.Error())
-	}
-	if ResourceError != nil {
-		return exceptions.ComponentDoesNotExist(ResourceError.Error())
-	}
-
 	// Applying Hardware Configurations, such as CPU, Memory, Disk etc....
 
-	for _, VmConfig := range []types.VirtualMachineConfigSpec{*DiskConfig, *ResourceConfig} {
+	Configs := Configuration.GetDeployConfigurations(this.VimClient)
+
+	for _, VmConfig := range []types.VirtualMachineConfigSpec{*Configs["Disk"], *Configs["Resources"]} {
 
 		HardwareError := func() error {
 			TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)

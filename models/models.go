@@ -9,6 +9,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var (
@@ -106,13 +107,18 @@ func NewVirtualMachine(
 }
 
 func (this *VirtualMachine) Create() (*gorm.DB, error) {
-
-	Created := Database.Model(&VirtualMachine{}).Create(&this)
+	// Creates New Virtual Machine Object
+	Created := Database.Clauses(clause.OnConflict{Columns: []clause.Column{
+		{Table: "VirtualMachine", Name: "VirtualMachineName"}},
+		DoUpdates: clause.Assignments(map[string]interface{}{
+			"VirtualMachineName": gorm.Expr("virtual_machine_name + _ + uuid_generate_v3()"),
+		})}).Model(&VirtualMachine{}).Create(&this)
 	return Created, Created.Error
 }
 
 func (this *VirtualMachine) Delete() (*gorm.DB, error) {
-	Deleted := Database.Model(&VirtualMachine{}).Delete(&this)
-	Database.Model(&VirtualMachine{}).Unscoped().Delete(&this)
+	// Deletes the Virtual Machine ORM Object....
+	Deleted := Database.Clauses(clause.OnConflict{DoNothing: true}).Delete(&this)
+	Database.Model(&VirtualMachine{}).Unscoped().Model(&VirtualMachine{}).Delete(&this)
 	return Deleted, Deleted.Error
 }

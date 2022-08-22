@@ -1,0 +1,40 @@
+// Simple Jenkins CI/CD Pipeline for Deliverying New Versions of the Applications to the Docker Private/Public Registry 
+pipeline {
+    agent any 
+    environment{
+        DOCKERHUB_CREDENTIALS=credentials("Dockerhub")
+        ORGANIZATION_EMAIL="<your-email@gmail.com>"
+    }
+    stages {
+        stage("build"){
+            dir("${env.DOCKERFILE_PATH}"){
+                sh "echo 'Running Build Application Stage...'"
+                sh "docker build ."
+                success "echo 'Dockerfile Image of the Project has been Built Successfully.'"
+            }
+        }
+        stage("testing & validating"){
+            dir("${env.INTEGRATION_TESTS_PATH"){
+                sh "echo 'Running Integration Tests...'"
+                sh "go test -v ./"
+                success "echo 'Integration Tests has been Passed, Deploying...'"
+            }
+        }
+        stage("deployment"){
+            withCredentials([usernamePassword(
+                credentialsId: "Dockerhub", 
+                usernameVariable: env.DOCKERHUB_CREDENTIALS_USR,
+                passwordVariable: env.DOCKERHUB_CREDENTIALS_PSW,
+            )]){
+                sh "echo 'Logging into Dockerhub Registry..'"
+                sh "docker login -u ${env.DOCKERHUB_CREDENTIALS_USR} -p ${env.DOCKERHUB_CREDENTIALS_PSW}"
+            }
+        }
+        always {
+            post {
+                emailext body: "CD Pipeline has been Executed, Go Check Results", 
+                subject: "CD Pipeline Completion", to: "${env.ORGANIZATION_EMAIL}"
+            }
+        }
+    }
+}

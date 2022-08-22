@@ -101,12 +101,12 @@ func (this *Server) Run() {
 		middlewares.IsVirtualMachineOwnerMiddleware())
 	{
 		{
-			Router.POST("/deploy/", vm_rest.DeployNewVirtualMachineRestController)
-			Router.PUT("/update/", vm_rest.UpdateVirtualMachineConfigurationRestController)
-			Router.DELETE("/remove/", vm_rest.RemoveVirtualMachineRestController)
-			Router.POST("/start/", vm_rest.StartVirtualMachineRestController)
-			Router.POST("/reboot/", vm_rest.RebootVirtualMachineRestController)
-			Router.DELETE("/shutdown/", vm_rest.ShutdownVirtualMachineRestController)
+			Router.POST("/initialize/", vm_rest.InitializeVirtualMachineRestController) // initialized new Virtual Machine (Emtpy)
+			Router.PUT("/deploy/", vm_rest.DeployVirtualMachineRestController) // Applies Configuration to the Initialized Machine
+			Router.DELETE("/remove/", vm_rest.RemoveVirtualMachineRestController) // Removes Existing Virtual Machine 
+			Router.POST("/start/", vm_rest.StartVirtualMachineRestController) // Starts Virtual Machine 
+			Router.POST("/reboot/", vm_rest.RebootVirtualMachineRestController) // Reboots Virtual Machine 
+			Router.DELETE("/shutdown/", vm_rest.ShutdownVirtualMachineRestController) // Shutting Down Virtual Machine 
 		}
 
 		Router.Use(middlewares.IsVirtualMachineOwnerMiddleware())
