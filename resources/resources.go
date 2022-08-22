@@ -27,7 +27,7 @@ var (
 )
 
 func init() {
-	LogFile, Error := os.OpenFile("Resources.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	LogFile, Error := os.OpenFile("../logs/Resources.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	DebugLogger = log.New(LogFile, "DEBUG:", log.Ldate|log.Ltime|log.Lshortfile)
 	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
@@ -46,13 +46,13 @@ type ResourceRequirements interface {
 type DatacenterResourceRequirements struct {
 	ResourceRequirements
 
-	// Resource Requirements 
-	HostSystemResourceRequirements HostSystemResourceRequirements    `json:"HostSystemRequirements;"`
-	NetworkResourceRequirements   NetworkResourceRequirements        `json:"NetworkRequirements;omitempty;"`
-	DatastoreResourceRequirements DatastoreResourceRequirements      `json:"DatastoreRequirements;omitempty;"`
-	StorageResourceRequirements   StorageResourceRequirements        `json:"StorageRequirements;omitempty;"`
-	ClusterResourceRequirements   ClusterComputeResourceRequirements `json:"ClusterComputeRequirements;omitempty"`
-	FolderResourceRequirements    FolderResourceRequirements         `json:"FolderRequirements;omitempty"`
+	// Resource Requirements
+	HostSystemResourceRequirements HostSystemResourceRequirements     `json:"HostSystemRequirements;"`
+	NetworkResourceRequirements    NetworkResourceRequirements        `json:"NetworkRequirements;omitempty;"`
+	DatastoreResourceRequirements  DatastoreResourceRequirements      `json:"DatastoreRequirements;omitempty;"`
+	StorageResourceRequirements    StorageResourceRequirements        `json:"StorageRequirements;omitempty;"`
+	ClusterResourceRequirements    ClusterComputeResourceRequirements `json:"ClusterComputeRequirements;omitempty"`
+	FolderResourceRequirements     FolderResourceRequirements         `json:"FolderRequirements;omitempty"`
 }
 
 func NewDatacenterResourceRequirements(Requirements string) (*DatacenterResourceRequirements, error) {
@@ -72,22 +72,18 @@ func NewNetworkResourceRequirements() *NetworkResourceRequirements {
 	return &NetworkResourceRequirements{}
 }
 
-
 type HostSystemResourceRequirements struct {
-	ResourceRequirements 
+	ResourceRequirements
 	SystemName string `json:"SystemName"`
-	Bit int64 `json:"Bit"`
+	Bit        int64  `json:"Bit"`
 }
 
 func NewHostSystemResourceRequirements(SystemName string, Bit int64) *HostSystemResourceRequirements {
 	return &HostSystemResourceRequirements{
 		SystemName: strings.ToLower(SystemName),
-		Bit: Bit, 
+		Bit:        Bit,
 	}
 }
-
-
-
 
 type DatastoreResourceRequirements struct {
 	ResourceRequirements
@@ -148,8 +144,10 @@ func (this *DatacenterResourceManager) HasEnoughResources(Datacenter *mo.Datacen
 	// Returns True if the Datacenter has Enough Resources and meet Customer Requirements
 
 	if _, Error := this.GetComputeResources(Datacenter, Requirements); Error != nil {
-		return false 
-	}else{return true }
+		return false
+	} else {
+		return true
+	}
 }
 
 func (this *DatacenterResourceManager) GetComputeResources(Datacenter *mo.Datacenter, Requirements DatacenterResourceRequirements) (map[string]object.Reference, error) {
@@ -177,13 +175,13 @@ func (this *DatacenterResourceManager) GetComputeResources(Datacenter *mo.Datace
 		return make(map[string]object.Reference), ResourceError
 	}
 
-	if ClusterComputeResources := NewClusterComputeResourceManager(this.Client).GetAvailableResources(Datacenter, Requirements.ClusterResourceRequirements); len(ClusterComputeResources) != 0{
+	if ClusterComputeResources := NewClusterComputeResourceManager(this.Client).GetAvailableResources(Datacenter, Requirements.ClusterResourceRequirements); len(ClusterComputeResources) != 0 {
 		Resources["ClusterComputeResource"] = ClusterComputeResources[0]
 	} else {
 		return make(map[string]object.Reference), ResourceError
 	}
 
-	if HostSystemResources := NewHostSystemResourceManager(*this.Client).GetAvailableResources(Datacenter, Requirements.FolderResourceRequirements); len(FolderResources) != nil {
+	if HostSystemResources := NewHostSystemResourceManager(*this.Client).GetAvailableResources(Datacenter, Requirements.HostSystemResourceRequirements); len(HostSystemResources) != 0 {
 		Resources["HostSystem"] = HostSystemResources[0]
 	} else {
 		return make(map[string]object.Reference), ResourceError
@@ -256,14 +254,8 @@ func (this *NetworkResourceManager) GetAvailableResources(Datacenter *mo.Datacen
 	var Networks []*object.Network
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*20)
 	defer CancelFunc()
-	Finder := find.NewFinder(&this.Client)
-	NetworkRefs, FindError := Finder.NetworkList(TimeoutContext, "*")
 
-	if FindError != nil {
-		ErrorLogger.Printf("Failed to Find Network Resources, Error: %s", FindError)
-		return Networks
-	}
-	for _, Network := range NetworkRefs {
+	for _, Network := range Datacenter.Network {
 		var MoNetwork mo.Network
 		Collector := property.DefaultCollector(&this.Client)
 		CollectError := Collector.RetrieveOne(TimeoutContext, Network.Reference(), []string{"*"}, &MoNetwork)
@@ -273,7 +265,7 @@ func (this *NetworkResourceManager) GetAvailableResources(Datacenter *mo.Datacen
 			continue
 		}
 		if HasEnough := this.HasEnoughResources(&MoNetwork, Requirements); HasEnough != false {
-			Networks = append(Networks, Network.(*object.Network))
+			Networks = append(Networks, object.NewReference(&this.Client, Network).(*object.Network))
 		}
 	}
 	return Networks
@@ -306,13 +298,13 @@ func (this *DatastoreResourceManager) HasEnoughResources(Datastore *mo.Datastore
 
 	// Checking if Datastore has enough Free Space, to Run the Customer Application
 	if !(Datastore.Summary.FreeSpace >= int64(Requirements.FreeSpace)) {
-		DebugLogger.Printf("Datastore with Name: `%s` does not Have Enough Free space, according to Resource Requirements")
+		DebugLogger.Printf("Datastore with Name: `%s` does not Have Enough Free space, according to Resource Requirements", Datastore.Name)
 		return false
 	}
 	return true
 }
 
-func (this *DatastoreResourceManager) GetAvailableResources(Datacenter *mo.Datacenter, Requirements DatastoreResourceRequirements) []*object.Datastore {
+func (this *DatastoreResourceManager) GetAvailableResources(Cluster *mo.Datacenter, Requirements DatastoreResourceRequirements) []*object.Datastore {
 	// Method Returns List of Available Datastores of the Datacenter, depending on the Requirements
 	var Resources []*object.Datastore
 	Collector := property.DefaultCollector(&this.Client)
@@ -320,7 +312,7 @@ func (this *DatastoreResourceManager) GetAvailableResources(Datacenter *mo.Datac
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*10)
 	defer CancelFunc()
 
-	for _, Datastore := range Datacenter.Datastore {
+	for _, Datastore := range Cluster.Datastore {
 		var MoDataStore mo.Datastore
 		RetrieveError := Collector.RetrieveOne(TimeoutContext, Datastore, []string{"*"}, MoDataStore)
 		if IsEnough := this.HasEnoughResources(&MoDataStore, Requirements); IsEnough == true {
@@ -375,7 +367,7 @@ func (this *StorageResourceManager) GetAvailableResources(Datacenter *mo.Datacen
 	defer CancelFunc()
 
 	Finder := find.NewFinder(&this.Client)
-	StoragePods, FindError := Finder.FolderList(TimeoutContext, fmt.Sprintf("%s", Datacenter.Name))
+	StoragePods, FindError := Finder.DatastoreClusterList(TimeoutContext, "*")
 
 	if FindError != nil {
 		return StorageResources
@@ -424,6 +416,7 @@ func (this *ClusterComputeResourceManager) HasEnoughResources(ClusterComputeReso
 
 func (this *ClusterComputeResourceManager) GetAvailableResources(Datacenter *mo.Datacenter, Requirements ClusterComputeResourceRequirements) []*object.ClusterComputeResource {
 	// Method Returns List of Available Datastores of the Datacenter, depending on the Requirements
+
 	var ClusterComputeResources []*object.ClusterComputeResource
 	Collector := property.DefaultCollector(&this.Client)
 
@@ -431,7 +424,7 @@ func (this *ClusterComputeResourceManager) GetAvailableResources(Datacenter *mo.
 	defer CancelFunc()
 
 	Finder := find.NewFinder(&this.Client)
-	ClusterComputeResource, FindError := Finder.ClusterComputeResource(
+	ClusterComputeResourceList, FindError := Finder.ClusterComputeResourceList(
 		TimeoutContext, fmt.Sprintf("%s", Datacenter.Name))
 
 	if FindError != nil {
@@ -440,7 +433,7 @@ func (this *ClusterComputeResourceManager) GetAvailableResources(Datacenter *mo.
 		return ClusterComputeResources
 	}
 
-	for _, ClusterComputeResource := range []*object.ClusterComputeResource{ClusterComputeResource} {
+	for _, ClusterComputeResource := range ClusterComputeResourceList {
 
 		var MoClusterComputeResource mo.ClusterComputeResource
 		RetrieveError := Collector.RetrieveOne(TimeoutContext, ClusterComputeResource.Reference(), []string{"*"}, MoClusterComputeResource)
@@ -469,37 +462,38 @@ func NewHostSystemResourceManager(Client vim25.Client) *HostSystemResourceManage
 	}
 }
 
-func (this *HostSystemResourceManager) HasEnoughResources(Folder *mo.HostSystem, HostSystemRequirements HostSystemResourceRequirements) bool {
+func (this *HostSystemResourceManager) HasEnoughResources(HostSystem *mo.HostSystem, HostSystemRequirements HostSystemResourceRequirements) bool {
 	// Checks if Folder Entity is fullfilling the Requirements
+	return true
 }
 func (this *HostSystemResourceManager) GetAvailableResources(Datacenter *mo.Datacenter, HostSystemRequirements HostSystemResourceRequirements) []*object.HostSystem {
-		// Method Returns List of Available Host Systems of the specific Datacenter, depending on the Requirements
-		var HostSystemResources []*object.HostSystem
-		Collector := property.DefaultCollector(&this.Client)
-	
-		TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*10)
-		defer CancelFunc()
-	
-		Finder := find.NewFinder(&this.Client)
-		HostSystems, FindError := Finder.HostSystemList(TimeoutContext, fmt.Sprintf("%s", Datacenter.Name))
-	
-		if FindError != nil {
-			return HostSystemResources
+	// Method Returns List of Available Host Systems of the specific Datacenter, depending on the Requirements
+	var HostSystemResources []*object.HostSystem
+	Collector := property.DefaultCollector(&this.Client)
+
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*10)
+	defer CancelFunc()
+
+	Finder := find.NewFinder(&this.Client)
+	HostSystems, FindError := Finder.HostSystemList(TimeoutContext, "*")
+
+	if FindError != nil {
+		return HostSystemResources
+	}
+
+	for _, HostSystem := range HostSystems {
+		var MoHostSystem mo.HostSystem
+		RetrieveError := Collector.RetrieveOne(TimeoutContext, HostSystem.Reference(), []string{"*"}, MoHostSystem)
+		if IsEnough := this.HasEnoughResources(&MoHostSystem, HostSystemRequirements); IsEnough == true {
+			HostSystemResources = append(HostSystemResources, object.NewReference(&this.Client, HostSystem.Reference()).(*object.HostSystem))
+		} else {
+			continue
 		}
 
-		for _, HostSystem := range HostSystems {
-			var MoHostSystem mo.HostSystem
-			RetrieveError := Collector.RetrieveOne(TimeoutContext, HostSystem.Reference(), []string{"*"}, MoHostSystem)
-			if IsEnough := this.HasEnoughResources(&MoHostSystem, HostSystemRequirements); IsEnough == true {
-				HostSystemResources = append(HostSystemResources, object.NewReference(&this.Client, HostSystem.Reference()).(*object.HostSystem))
-			} else {
-				continue
-			}
-	
-			if RetrieveError != nil {
-				DebugLogger.Printf(
-					"Failed to Retrieve Datastore, Error: %s", RetrieveError)
-			}
+		if RetrieveError != nil {
+			DebugLogger.Printf(
+				"Failed to Retrieve Datastore, Error: %s", RetrieveError)
 		}
-		return HostSystemResources
+	}
+	return HostSystemResources
 }

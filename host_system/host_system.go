@@ -8,6 +8,7 @@ import (
 
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/types"
+	"golang.org/x/exp/slices"
 )
 
 // Package for Managing Host System of the Virtual Machine Server
@@ -25,23 +26,34 @@ func NewHostSystemCredentials(SystemName string, Bit int64) *HostSystemCredentia
 	}
 }
 
-type VirtualMachineHostSystemManager struct {
-}
+type VirtualMachineHostSystemManager struct{}
 
 func NewVirtualMachineHostSystemManager() *VirtualMachineHostSystemManager {
 	return &VirtualMachineHostSystemManager{}
 }
-func (this *VirtualMachineHostSystemManager) GetHostSystemLocalPath(SystemName string) string {
+func (this *VirtualMachineHostSystemManager) GetHostSystemLocalPath(SystemName string) (string, error) {
 	// Picking up default Local Path, depending on the Operational System
 	if SystemName == "ubuntu" {
-		return ""
+		return "", nil
 	}
 	if SystemName == "windows" {
-		return ""
+		return "", nil
 	}
+	return "", errors.New("Invalid System Name")
 }
 
-func (this *VirtualMachineHostSystemManager) GetDefaultCustomizationOptions(SystemName string) (*types.BaseCustomizationOptions, error)
+func (this *VirtualMachineHostSystemManager) GetDefaultCustomizationOptions(SystemName string) (types.BaseCustomizationOptions, error) {
+	// Returns Customization Options, based on the Operational System passed
+	LinuxDistributions := []string{}
+	WindowsDistrubitions := []string{}
+	if Contains := slices.Contains(LinuxDistributions, strings.ToLower(SystemName)); Contains {
+		return &types.CustomizationLinuxOptions{}, nil
+	}
+	if Contains := slices.Contains(WindowsDistrubitions, strings.ToLower(SystemName)); Contains {
+		return &types.CustomizationWinOptions{}, nil
+	}
+	return nil, errors.New("Invalid Host System Name")
+}
 
 // Returns Default Operational System Options, depending on the System Name.
 

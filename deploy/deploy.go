@@ -207,9 +207,10 @@ func (this *VirtualMachineManager) GetVirtualMachine(VmId string, CustomerId str
 func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 	VimClient vim25.Client,
 	VirtualMachineName string,
+	HostSystem *object.HostSystem,
 	DataStore *object.Datastore, // Name, Customer Decided to set up for this Virtual Server
 	DatacenterNetwork *object.Network,
-	DatacenterResourcePool *object.ClusterComputeResource,
+	DatacenterClusterComputeResource *object.ClusterComputeResource,
 	DatacenterFolder *object.Folder,
 ) (*object.VirtualMachine, error) {
 	// Initializes Virtual Machine Configuration (That does not exist yet)
@@ -217,9 +218,21 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
 	defer CancelFunc()
 
+	// Receiving Cluster's Resource Pool
+	ClusterResourcePool, ResourcePoolError := DatacenterClusterComputeResource.ResourcePool(TimeoutContext)
+
+	// If Failed to Get Clusters Resource Pool, returning Exception
+	if ResourcePoolError != nil {
+		ErrorLogger.Printf("Failed to Get Cluster Resource Pool, Error: %s", ResourcePoolError)
+		return *new(*object.VirtualMachine), errors.New("Failed to Get Cluster Resource Pool")
+	}
+
+	// Initializing Virtual Machine Resource Key Manager, that Is Going to Obtain Necessasy Keys
+	// In order to Get Access to Resource Pools
+
 	ResourceAllocationManager := NewVirtualMachineResourceKeyManager()
 	ResourceCredentials, ResourceKeysError := ResourceAllocationManager.GetResourceKeys(
-		DatacenterResourcePool, DatacenterFolder)
+		ClusterResourcePool, DatacenterFolder)
 
 	switch {
 
@@ -247,11 +260,10 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 						},
 					},
 				},
-				VmConfigSpec:        &vcenter.VmConfigSpec{},
 				StorageProvisioning: "thin",
 			},
 			Target: vcenter.Target{
-				ResourcePoolID: DatacenterResourcePool.Reference().Value,
+				ResourcePoolID: ClusterResourcePool.Reference().Value,
 				FolderID:       DatacenterFolder.Reference().Value,
 			},
 		}

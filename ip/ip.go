@@ -3,7 +3,6 @@ package ip
 import (
 	"log"
 	"os"
-
 	"github.com/vmware/govmomi/vim25/types"
 )
 
@@ -48,7 +47,6 @@ func NewVirtualMachineIPManager() *VirtualMachineIPManager {
 func (this *VirtualMachineIPManager) SetupAddress(IPCredentials *VirtualMachineIPAddress) (*types.CustomizationSpec, error) {
 
 	// Setting up Customized IP Credentials for the Virtual Machine
-
 	CustomizedIP := types.CustomizationAdapterMapping{
 		Adapter: types.CustomizationIPSettings{
 

@@ -41,7 +41,7 @@ var (
 
 func init() {
 
-	LogFile, Error := os.OpenFile("RestResources.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	LogFile, Error := os.OpenFile("../logs/RestResources.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if Error != nil {
 		panic(Error)
 	}

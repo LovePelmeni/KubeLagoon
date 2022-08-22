@@ -123,6 +123,18 @@ func CreateCustomerRestController(RequestContext *gin.Context) {
 
 func ResetPasswordRestController(RequestContext *gin.Context) {
 	// Rest Controller, Responsible for Resetting Password
+	NewPassword := RequestContext.PostForm("NewPassword")
+	CustomerId := RequestContext.PostForm("CustomerId")
+
+	NewPasswordHash, GenerateError := bcrypt.GenerateFromPassword([]byte(NewPassword), 14)
+	if GenerateError != nil {
+		RequestContext.JSON(http.StatusBadRequest, gin.H{"Error": "Failed to Apply new Password"})
+	}
+	Updated := models.Database.Model(&models.Customer{}).Where("id = ?", CustomerId).Update("Password", NewPasswordHash)
+	Updated.Unscoped().Update("Password", NewPasswordHash)
+
+	RequestContext.JSON(http.StatusCreated, gin.H{"Status": "Applied"})
+
 }
 
 func DeleteCustomerRestController(RequestContext *gin.Context) {
@@ -150,5 +162,5 @@ func DeleteCustomerRestController(RequestContext *gin.Context) {
 }
 
 func SupportRestController(RequestContext *gin.Context) {
-	// Rest Controller, that is Responsible for Sending out Messages / Notifications to the Support Email 
+	// Rest Controller, that is Responsible for Sending out Messages / Notifications to the Support Email
 }

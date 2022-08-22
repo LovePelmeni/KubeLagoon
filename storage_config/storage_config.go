@@ -19,7 +19,7 @@ var (
 )
 
 func init() {
-	LogFile, Error := os.OpenFile("Storage.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	LogFile, Error := os.OpenFile("../logs/Storage.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
 	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
@@ -100,5 +100,4 @@ func (this *VirtualMachineStorageManager) SetupStorageDisk(
 
 	VirtualMachineSpec.DeviceChange = append(VirtualMachineSpec.DeviceChange, DeviceSpec)
 	return &VirtualMachineSpec, nil
-
 }
