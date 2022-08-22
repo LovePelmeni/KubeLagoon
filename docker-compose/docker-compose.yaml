@@ -1,0 +1,72 @@
+version: "3.8"
+services:
+
+    frontend_application:
+      container_name: vue_application 
+      image: crazycoderrr/infrastructure_front_app 
+      ports:
+        - containerPort: 3000 
+          protocol: TCP 
+      healthcheck:
+        test: ["curl", "-f", "http://localhost:3000/ping/"]
+        interval: 30s
+        timeout: 5s
+        retries: 5
+        start_period: 5s 
+      networks:
+        - private_network 
+      depends_on:
+        - nginx_server 
+
+    nginx_server:
+      container_name: nginx-web-server 
+      image: nginx:latest 
+      volumes:
+        - ../nginx/nginx.conf:/etc/nginx/nginx.conf 
+      ports:
+        - containerPort: 8000 
+          targetPort: 8000 
+          protocol: TCP 
+      depends_on: 
+        - infrastructure_application 
+      networks:
+        - private_network 
+
+    infrastructure_application:
+      container_name: infrastructure-application 
+      image: crazycoderrr/infrastructure_app 
+      ports:
+        - containerPort: 8001 
+          targetPort: 8001 
+          protocol: TCP 
+      env_file:
+          - ../env/project.env
+      healthcheck:
+        test: [""]
+        retries: 5
+        interval: 10s 
+        timeout: 5s
+      networks:
+        - private_network 
+      depends_on:
+        - infrastructure_database 
+
+    infrastructure_database:
+      container_name: infrastructure-sql-database 
+      image: postgres:latest 
+      environment:
+        POSTGRES_DB: infrastructure_db 
+        POSTGRES_USER: postgres_user
+        POSTGRES_PASSWORD: postgres_password 
+      ports:
+        - containerPort: 5432
+          targetPort: 5432
+          protocol: TCP 
+      networks:
+        - private_network 
+
+
+networks:
+  private_network:
+    external: true 
+    name: infrastructure_network 

@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/LovePelmeni/Infrastructure/healthcheck_rest"
 	"github.com/LovePelmeni/Infrastructure/middlewares"
 
 	customer_rest "github.com/LovePelmeni/Infrastructure/customer_rest"
@@ -96,6 +97,7 @@ func (this *Server) Run() {
 		Router.DELETE("/delete/", customer_rest.DeleteCustomerRestController)
 	}
 
+
 	// Virtual Machines Rest API Endpoints
 	Router.Group("/vm/").Use(middlewares.JwtAuthenticationMiddleware(),
 		middlewares.IsVirtualMachineOwnerMiddleware())
@@ -111,8 +113,12 @@ func (this *Server) Run() {
 
 		Router.Use(middlewares.IsVirtualMachineOwnerMiddleware())
 		{
-			Router.GET("/get/list/", vm_rest.GetCustomerVirtualMachine)
-			Router.GET("/get/", vm_rest.GetCustomerVirtualMachines)
+			Router.GET("/get/list/", vm_rest.GetCustomerVirtualMachine) // Customer's Virtual Machines 
+			Router.GET("/get/", vm_rest.GetCustomerVirtualMachines) // Customer's Specific Virtual Machine
+		}
+		Router.Use(middlewares.IsVirtualMachineOwnerMiddleware())
+		{
+			Router.GET("/health/metrics/", healthcheck_rest.GetVirtualMachineHealthMetricRestController) // HealthCheck Metrics of the Virtual Machine 
 		}
 	}
 

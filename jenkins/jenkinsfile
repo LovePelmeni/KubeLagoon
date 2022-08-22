@@ -2,6 +2,7 @@
 pipeline {
     agent any 
     environment{
+        DOCKER_REGISTRY_REPO="crazycoderrr/infrastructure_app"
         DOCKERHUB_CREDENTIALS=credentials("Dockerhub")
         ORGANIZATION_EMAIL="<your-email@gmail.com>"
     }
@@ -9,7 +10,7 @@ pipeline {
         stage("build"){
             dir("${env.DOCKERFILE_PATH}"){
                 sh "echo 'Running Build Application Stage...'"
-                sh "docker build ."
+                sh "docker build . -t infrastructure_image"
                 success "echo 'Dockerfile Image of the Project has been Built Successfully.'"
             }
         }
@@ -26,8 +27,10 @@ pipeline {
                 usernameVariable: env.DOCKERHUB_CREDENTIALS_USR,
                 passwordVariable: env.DOCKERHUB_CREDENTIALS_PSW,
             )]){
-                sh "echo 'Logging into Dockerhub Registry..'"
                 sh "docker login -u ${env.DOCKERHUB_CREDENTIALS_USR} -p ${env.DOCKERHUB_CREDENTIALS_PSW}"
+                sh "docker tag insfrastructure_image ${env.DOCKER_REGISTRY_REPO}"
+                sh "docker push ${env.DOCKER_REGISTRY_REPO}"
+                success "echo 'New Version Source Of the Application has been Pushed to Remote Registry Successfully!'"
             }
         }
         always {

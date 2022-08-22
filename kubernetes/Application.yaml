@@ -59,6 +59,15 @@ data:
   SUPPORT_CLIENT_EMAIL_ADDRESS: email_infra_server@gmail.com 
   SUPPORT_CLIENT_EMAIL_PASSWORD: email_infra_server_password
 
+
+  # VMware Configuration Source Parameters 
+
+  VMWARE_SOURCE_IP: ""
+  VMWARE_SOURCE_USER: ""
+  VMWARE_SOURCE_PASSWORD: ""
+
+
+
 --- 
 
 apiVersion: v1

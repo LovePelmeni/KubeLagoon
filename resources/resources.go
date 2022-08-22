@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/vmware/govmomi/find"
@@ -44,10 +45,12 @@ type ResourceRequirements interface {
 
 type DatacenterResourceRequirements struct {
 	ResourceRequirements
-	// Network Requirements
+
+	// Resource Requirements 
+	HostSystemResourceRequirements HostSystemResourceRequirements    `json:"HostSystemRequirements;"`
 	NetworkResourceRequirements   NetworkResourceRequirements        `json:"NetworkRequirements;omitempty;"`
 	DatastoreResourceRequirements DatastoreResourceRequirements      `json:"DatastoreRequirements;omitempty;"`
-	StorageResourceRequirements   StorageResourceRequirements      `json:"StorageRequirements;omitempty;"`
+	StorageResourceRequirements   StorageResourceRequirements        `json:"StorageRequirements;omitempty;"`
 	ClusterResourceRequirements   ClusterComputeResourceRequirements `json:"ClusterComputeRequirements;omitempty"`
 	FolderResourceRequirements    FolderResourceRequirements         `json:"FolderRequirements;omitempty"`
 }
@@ -68,6 +71,23 @@ type NetworkResourceRequirements struct {
 func NewNetworkResourceRequirements() *NetworkResourceRequirements {
 	return &NetworkResourceRequirements{}
 }
+
+
+type HostSystemResourceRequirements struct {
+	ResourceRequirements 
+	SystemName string `json:"SystemName"`
+	Bit int64 `json:"Bit"`
+}
+
+func NewHostSystemResourceRequirements(SystemName string, Bit int64) *HostSystemResourceRequirements {
+	return &HostSystemResourceRequirements{
+		SystemName: strings.ToLower(SystemName),
+		Bit: Bit, 
+	}
+}
+
+
+
 
 type DatastoreResourceRequirements struct {
 	ResourceRequirements
@@ -163,8 +183,8 @@ func (this *DatacenterResourceManager) GetComputeResources(Datacenter *mo.Datace
 		return make(map[string]object.Reference), ResourceError
 	}
 
-	if FolderResources := NewFolderResourceManager(this.Client).GetAvailableResources(Datacenter, Requirements.FolderResourceRequirements); len(FolderResources) != nil {
-		Resources["Folder"] = FolderResources[0]
+	if HostSystemResources := NewHostSystemResourceManager(*this.Client).GetAvailableResources(Datacenter, Requirements.FolderResourceRequirements); len(FolderResources) != nil {
+		Resources["HostSystem"] = HostSystemResources[0]
 	} else {
 		return make(map[string]object.Reference), ResourceError
 	}
@@ -438,21 +458,21 @@ func (this *ClusterComputeResourceManager) GetAvailableResources(Datacenter *mo.
 	return ClusterComputeResources
 }
 
-type HostSystemManager struct {
+type HostSystemResourceManager struct {
 	ResourceManagerInterface
 	Client vim25.Client
 }
 
-func NewFolderResourceManager(Client vim25.Client) *HostSystemManager {
-	return &HostSystemManager{
+func NewHostSystemResourceManager(Client vim25.Client) *HostSystemResourceManager {
+	return &HostSystemResourceManager{
 		Client: Client,
 	}
 }
 
-func (this *HostSystemManager) HasEnoughResources(Folder *mo.HostSystem, HostSystemRequirements HostSystemResourceRequirements) {
+func (this *HostSystemResourceManager) HasEnoughResources(Folder *mo.HostSystem, HostSystemRequirements HostSystemResourceRequirements) bool {
 	// Checks if Folder Entity is fullfilling the Requirements
 }
-func (this *HostSystemManager) GetAvailableResources(Datacenter *mo.Datacenter, FolderRequirements HostSystemResourceRequirements) []*object.HostSystem {
+func (this *HostSystemResourceManager) GetAvailableResources(Datacenter *mo.Datacenter, HostSystemRequirements HostSystemResourceRequirements) []*object.HostSystem {
 		// Method Returns List of Available Host Systems of the specific Datacenter, depending on the Requirements
 		var HostSystemResources []*object.HostSystem
 		Collector := property.DefaultCollector(&this.Client)
@@ -466,10 +486,11 @@ func (this *HostSystemManager) GetAvailableResources(Datacenter *mo.Datacenter, 
 		if FindError != nil {
 			return HostSystemResources
 		}
+
 		for _, HostSystem := range HostSystems {
 			var MoHostSystem mo.HostSystem
 			RetrieveError := Collector.RetrieveOne(TimeoutContext, HostSystem.Reference(), []string{"*"}, MoHostSystem)
-			if IsEnough := this.HasEnoughResources(&HostSystem, Requirements); IsEnough == true {
+			if IsEnough := this.HasEnoughResources(&MoHostSystem, HostSystemRequirements); IsEnough == true {
 				HostSystemResources = append(HostSystemResources, object.NewReference(&this.Client, HostSystem.Reference()).(*object.HostSystem))
 			} else {
 				continue
