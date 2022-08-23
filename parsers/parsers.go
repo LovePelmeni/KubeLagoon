@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/LovePelmeni/Infrastructure/host_system"
 	models "github.com/LovePelmeni/Infrastructure/models"
 	resource_config "github.com/LovePelmeni/Infrastructure/resource_config"
 	storage_config "github.com/LovePelmeni/Infrastructure/storage_config"
@@ -75,7 +76,13 @@ type VirtualMachineCustomSpec struct {
 
 	Metadata struct {
 		VirtualMachineId string `json:"VirtualMachineId" xml:"VirtualMachineId"`
+		VmOwnerId        string `json:"VmOwnerId" xml:"VmOwnerId"`
 	} `json:"Metadata" xml:"Metadata"`
+
+	HostSystem struct {
+		DistributionName string `json:"DistributionName"`
+		Bit              int64  `json:"Bit;omitempty"`
+	} `json:"HostSystem"`
 
 	// Hardware Resourcs for the VM Configuration
 	Resources struct {
@@ -94,49 +101,56 @@ func NewCustomConfig(Config string) (*VirtualMachineCustomSpec, error) {
 	return &config, DecodeError
 }
 
-func (this *VirtualMachineCustomSpec) GetDeployConfigurations(Client vim25.Client) map[string]*types.VirtualMachineConfigSpec {
-	// Parses the Custom Configuration Provided by the Client, and Converts it to the Map
-	// of the Following Structure: Key - Name of the Resource and the Value is the Resource Instance
+func (this *VirtualMachineCustomSpec) GetHostSystemConfig(Client vim25.Client) (types.VirtualMachineGuestSummary, error) {
 
-	var VirtualMachineModel models.VirtualMachine
-	var VirtualMachine mo.VirtualMachine
+	// Converting JSON Host System Configuration, Provided By Customer, to the Configuration Instance
 
-	if Gorm := models.Database.Model(&models.VirtualMachine{}).Where("id = ?", this.Metadata.VirtualMachineId).Find(&VirtualMachineModel); Gorm.Error != nil {
-		return nil
+	HostSystemManager := host_system.NewVirtualMachineHostSystemManager()
+	HostSystemCredentials := host_system.NewHostSystemCredentials(this.HostSystem.DistributionName, this.HostSystem.Bit)
+
+	HostSystemConfiguration, SetupError := HostSystemManager.SetupHostSystem(*HostSystemCredentials)
+	return *HostSystemConfiguration, SetupError
+}
+
+func (this *VirtualMachineCustomSpec) GetResourceConfig(Client vim25.Client) (types.VirtualMachineConfigSpec, error) {
+
+	// Converting JSON Resource Configuration, Provided By Customer, to the Configuration Instance
+
+	ResourceCredentials := resource_config.NewVirtualMachineResources(this.Resources.CpuNum, this.Resources.MemoryInMegabytes)
+	ResourceManager := resource_config.NewVirtualMachineResourceManager()
+
+	ResourceConfiguration, ResourceError := ResourceManager.SetupResources(ResourceCredentials)
+	return *ResourceConfiguration, ResourceError
+}
+
+func (this *VirtualMachineCustomSpec) GetDiskStorageConfig(Client vim25.Client) (*types.VirtualDeviceConfigSpec, error) {
+	// Converting JSON Disk Storage Configuration, Provided By Customer, to te Configuration Instance
+
+	// Receiving Virtual Machine by the Metadata, Provided in the Configuration...
+	VirtualMachine, FindError := func() (*object.VirtualMachine, error) {
+		var Vm models.VirtualMachine
+
+		TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
+		defer CancelFunc()
+
+		Gorm := models.Database.Model(&models.VirtualMachine{}).Where("id = ? AND owner_id = ?",
+			this.Metadata.VirtualMachineId, this.Metadata.VmOwnerId).Find(&Vm)
+		if Gorm.Error != nil {
+			return nil, Gorm.Error
+		}
+
+		VirtualMachine, FindError := object.NewSearchIndex(&Client).FindByInventoryPath(TimeoutContext, Vm.ItemPath)
+		return VirtualMachine.(*object.VirtualMachine), FindError
+	}()
+
+	if FindError != nil {
+		return nil, FindError
 	}
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	defer CancelFunc()
 
-	// Receiving Mo Instance of the Virtual Machine
-	VirtualMachineRef, VmError := object.NewSearchIndex(&vim25.Client{}).FindByInventoryPath(TimeoutContext, VirtualMachineModel.ItemPath)
-	FindError := property.DefaultCollector(&Client).RetrieveOne(TimeoutContext,
-		VirtualMachineRef.Reference(), []string{"*"}, VirtualMachine)
+	Datastore := object.NewDatastore(&Client, object.NewReference(&Client, VirtualMachine.Reference()).(*mo.VirtualMachine).Datastore[0])
+	DiskDeviceStorageCredentials := storage_config.NewVirtualMachineStorage(this.Disk.CapacityInKB)
+	DiskDeviceManager := storage_config.NewVirtualMachineStorageManager()
 
-	if VmError != nil || FindError != nil {
-		DebugLogger.Printf("Vm Not Found")
-		return nil
-	}
-
-	// Setting up Disk Config
-	DiskConfigSpec, DiskError := storage_config.NewVirtualMachineStorageManager().SetupStorageDisk(VirtualMachineRef.(*object.VirtualMachine),
-		*storage_config.NewVirtualMachineStorage(this.Disk.CapacityInKB), &VirtualMachine.Datastore[0])
-
-	if DiskError != nil {
-		DebugLogger.Printf("Disk Configuration Failure, %s", DiskError)
-		return nil
-	}
-
-	// Setting up Datastore Config
-	ResourcesSpec, ResourcesError := resource_config.NewVirtualMachineResourceManager().SetupResources(
-		resource_config.NewVirtualMachineResources(this.Resources.CpuNum, this.Resources.MemoryInMegabytes))
-
-	if ResourcesError != nil {
-		DebugLogger.Printf("Resource Configuration Failure, %s", ResourcesError)
-		return nil
-	}
-
-	return map[string]*types.VirtualMachineConfigSpec{
-		"Disk":      DiskConfigSpec,
-		"Resources": ResourcesSpec,
-	}
+	Configuration, SetupError := DiskDeviceManager.SetupStorageDisk(*DiskDeviceStorageCredentials, *Datastore)
+	return Configuration, SetupError
 }

@@ -10,41 +10,49 @@ import (
 
 type CPUInfo struct {
 	// Reprensents Current CPU Info of the Virtual Machine Server
-	CpuNums        int32 `json:"CpuNums"`
-	CpuUsage       int32 `json:"CpuUsage"`
-	CpuReservation int32 `json:"CpuReservation"`
+	OverallCpuUsage    int32 `json:"OverallCpuUsage"`
+	OverallCpuReadness int32 `json:"OverallCpuReadness"`
+	CpuNums            int32 `json:"CpuNums"`
+	MaxCpuUsage        int32 `json:"CpuUsage"`
+	CpuReservation     int32 `json:"CpuReservation"`
 }
 
-func NewCPUInfo(CpuUsage int32, CpuNums int32, CpuReservation int32) *CPUInfo {
+func NewCPUInfo(OverallCpuUsage int32, OverallCpuReadness int32, MaxCpuUsage int32, CpuNums int32, CpuReservation int32) *CPUInfo {
 	return &CPUInfo{
 		CpuNums:        CpuNums,
-		CpuUsage:       CpuUsage,
+		MaxCpuUsage:    MaxCpuUsage,
 		CpuReservation: CpuReservation,
 	}
 }
 
 type MemoryUsageInfo struct {
 	// Represents Current Memory state of the Virtual Machine Server
-	MemoryInUse int32 `json:"MemoryInUse"`
-	MemoryLeft  int64 `json"MemoryLeft"`
+	Shared         int32 `json:"SharedMemory"`
+	Granted        int32 `json:"GrantedMemory"`
+	MemoryOverhead int64 `json:"MemoryOverhead"`
+	MaxMemoryUsage int32 `json:"MaxMemoryUsage"`
 }
 
-func NewMemoryUsageInfo(MemoryInUse int32, MemoryLeft int64) *MemoryUsageInfo {
+func NewMemoryUsageInfo(SharedMemory int32, GrantedMemory int32, MemoryOverhead int64, MaxMemoryUsage int32) *MemoryUsageInfo {
 	return &MemoryUsageInfo{
-		MemoryInUse: MemoryInUse,
-		MemoryLeft:  MemoryLeft,
+		Shared:         SharedMemory,
+		Granted:        GrantedMemory,
+		MemoryOverhead: MemoryOverhead,
+		MaxMemoryUsage: MaxMemoryUsage,
 	}
 }
 
 type AliveInfo struct {
 	// Represents Current State of the Virtual Machine
+	OverallStatus   string `json:"OverallStatus"`
 	ConnectionState string `json:"ConnectionState"`
 	PowerState      string `json:"PowerState"`
 	BootTime        time.Time
 }
 
-func NewAliveInfo(ConnectionState string, PowerState string, BootTime time.Time) *AliveInfo {
+func NewAliveInfo(OverallStatus string, ConnectionState string, PowerState string, BootTime time.Time) *AliveInfo {
 	return &AliveInfo{
+		OverallStatus:   OverallStatus,
 		ConnectionState: ConnectionState,
 		PowerState:      PowerState,
 		BootTime:        BootTime,
@@ -74,25 +82,35 @@ func NewVirtualMachineHealthCheckManager() *VirtualMachineHealthCheckManager {
 }
 
 func (this *VirtualMachineHealthCheckManager) GetCpuMetrics() CPUInfo {
-	CpuUsageInfo := this.VirtualMachine.Summary.Runtime.MaxCpuUsage
+
+	OverallCpuUsage := this.VirtualMachine.Summary.QuickStats.OverallCpuUsage
+	OverallCpuReadness := this.VirtualMachine.Summary.QuickStats.OverallCpuReadiness
+
+	MaxCpuUsageInfo := this.VirtualMachine.Summary.Runtime.MaxCpuUsage
 	CpuNumsInfo := this.VirtualMachine.Summary.Config.NumCpu
 	CpuReservation := this.VirtualMachine.Summary.Config.CpuReservation
-	newCpuInfo := NewCPUInfo(CpuUsageInfo, CpuNumsInfo, CpuReservation)
+	newCpuInfo := NewCPUInfo(OverallCpuUsage, OverallCpuReadness, MaxCpuUsageInfo, CpuNumsInfo, CpuReservation)
 	return *newCpuInfo
 }
 
 func (this *VirtualMachineHealthCheckManager) GetAliveMetrics() AliveInfo {
+	OverallStatus := this.VirtualMachine.Summary.OverallStatus
 	ConnectionState := this.VirtualMachine.Summary.Runtime.ConnectionState
 	PowerState := this.VirtualMachine.Summary.Runtime.PowerState
 	BootTime := this.VirtualMachine.Summary.Runtime.BootTime
-	NewAliveMetric := NewAliveInfo(string(ConnectionState), string(PowerState), *BootTime)
+	NewAliveMetric := NewAliveInfo(string(OverallStatus), string(ConnectionState), string(PowerState), *BootTime)
 	return *NewAliveMetric
 }
 
 func (this *VirtualMachineHealthCheckManager) GetMemoryUsageMetrics() MemoryUsageInfo {
-	MemoryUsage := this.VirtualMachine.Summary.Runtime.MaxMemoryUsage
+
+	MaxMemoryUsage := this.VirtualMachine.Summary.Runtime.MaxMemoryUsage
 	MemoryOverhead := this.VirtualMachine.Summary.Runtime.MemoryOverhead
-	NewMemoryMetric := NewMemoryUsageInfo(MemoryUsage, MemoryOverhead)
+
+	OverallSharedMemory := this.VirtualMachine.Summary.QuickStats.SharedMemory
+	GrantedMemory := this.VirtualMachine.Summary.QuickStats.GrantedMemory
+
+	NewMemoryMetric := NewMemoryUsageInfo(OverallSharedMemory, GrantedMemory, MemoryOverhead, MaxMemoryUsage)
 	return *NewMemoryMetric
 }
 

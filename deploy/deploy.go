@@ -4,17 +4,20 @@ import (
 	"context"
 	"errors"
 	"log"
+	"sync"
 
 	"os"
 	"time"
 
 	"github.com/LovePelmeni/Infrastructure/exceptions"
-
-	"github.com/LovePelmeni/Infrastructure/models"
 	"github.com/LovePelmeni/Infrastructure/parsers"
 
+	"github.com/LovePelmeni/Infrastructure/models"
+
 	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/simulator/esx"
 	"github.com/vmware/govmomi/vim25"
+	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 
 	"github.com/vmware/govmomi/object"
@@ -150,7 +153,7 @@ func (this *VirtualMachineResourceKeyManager) GetResourceKeys(
 }
 
 type VirtualMachineManager struct {
-
+	Reconfig sync.RWMutex
 	// Class, that Is Taking care of the Virtual Machine Deployment Process
 	// It is responsible for Deploying/ Starting / Stopping / Updating Virtual Machines
 	// Owned by Customers
@@ -207,7 +210,6 @@ func (this *VirtualMachineManager) GetVirtualMachine(VmId string, CustomerId str
 func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 	VimClient vim25.Client,
 	VirtualMachineName string,
-	HostSystem *object.HostSystem,
 	DataStore *object.Datastore, // Name, Customer Decided to set up for this Virtual Server
 	DatacenterNetwork *object.Network,
 	DatacenterClusterComputeResource *object.ClusterComputeResource,
@@ -315,79 +317,95 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 
 	// Applies Custom Configuration: Num's of CPU's, Memory etc... onto the Initialized Virtual Machine
 
-	// Resource Manager, that allows to return Initialized Resource Instances, by ID, UniqueName, etc...
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
 
-	// If Failed to Obtain one of the Hardware Resources, Returns Exception, that it Does Not Exist
+	// Receiving Virtual Machine Configurations to Apply
 
-	// Applying Hardware Configurations, such as CPU, Memory, Disk etc....
-
-	Configs := Configuration.GetDeployConfigurations(this.VimClient)
-
-	for _, VmConfig := range []types.VirtualMachineConfigSpec{*Configs["Disk"], *Configs["Resources"]} {
-
-		HardwareError := func() error {
-			TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
-			defer CancelFunc()
-
-			NewApplyTask, ApplyError := VirtualMachine.Reconfigure(TimeoutContext, VmConfig)
-			WaitError := NewApplyTask.Wait(TimeoutContext)
-
-			switch {
-			case ApplyError != nil || WaitError != nil:
-				ErrorLogger.Printf(
-					"Hardware Configuration has been Failed to be Applied! For VM: %s",
-					VirtualMachine.Reference().Value)
-				return ApplyError
-
-			case ApplyError == nil && WaitError == nil:
-				DebugLogger.Printf(
-					"Hardware Configuration has been Applied Successfully! For VM: %s",
-					VirtualMachine.Reference().Value)
-				return nil
-
-			default:
-				return ApplyError
-			}
-		}()
-		if HardwareError != nil {
-			return HardwareError
-		} else {
-			continue
-		}
+	HostSystemConfig, HostSystemError := Configuration.GetHostSystemConfig(this.VimClient) // HostSystem Configuration for the Vm
+	if HostSystemError != nil {
+		return HostSystemError
 	}
 
-	// Applying Customization Configurations, such as IP, Profiles, etc...
+	ResourceConfig, ResourceError := Configuration.GetResourceConfig(this.VimClient) // Resource (CPU, Memory) Configuration for the VM
+	if ResourceError != nil {
+		return ResourceError
+	}
 
-	for _, VmCustomizationConfig := range []types.CustomizationSpec{} {
-		CustomizationError := func() error {
+	DiskStorageConfig, DiskError := Configuration.GetDiskStorageConfig(this.VimClient) // Disk Storage Configuration for the VM
+	if DiskError != nil {
+		return DiskError
+	}
 
-			TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
-			defer CancelFunc()
+	vm := &mo.VirtualMachine{}
 
-			NewApplyTask, ApplyError := VirtualMachine.Customize(TimeoutContext, VmCustomizationConfig)
-			WaitError := NewApplyTask.Wait(TimeoutContext)
+	rspec := types.DefaultResourceConfigSpec()
+	vm.Guest = &types.GuestInfo{GuestId: HostSystemConfig.GuestId}
+	vm.Config = &types.VirtualMachineConfigInfo{
+		ExtraConfig:        []types.BaseOptionValue{&types.OptionValue{Key: "govcsim", Value: "TRUE"}},
+		MemoryAllocation:   &rspec.MemoryAllocation,
+		CpuAllocation:      &rspec.CpuAllocation,
+		LatencySensitivity: &types.LatencySensitivity{Level: types.LatencySensitivitySensitivityLevelNormal},
+		BootOptions:        &types.VirtualMachineBootOptions{},
+		CreateDate:         types.NewTime(time.Now()),
+	}
+	vm.Layout = &types.VirtualMachineFileLayout{}
+	vm.LayoutEx = &types.VirtualMachineFileLayoutEx{
+		Timestamp: time.Now(),
+	}
+	vm.Snapshot = nil // intentionally set to nil until a snapshot is created
+	vm.Storage = &types.VirtualMachineStorageInfo{
+		Timestamp: time.Now(),
+	}
+	vm.Summary.Guest = &HostSystemConfig
+	vm.Summary.Vm = &vm.Self
+	vm.Summary.Storage = &types.VirtualMachineStorageSummary{
+		Timestamp: time.Now(),
+	}
 
-			switch {
-			case ApplyError != nil || WaitError != nil:
-				ErrorLogger.Printf(
-					"Customized Configuration has been Failed to be Applied! For VM: %s",
-					VirtualMachine.Reference().Value)
-				return ApplyError
+	// Initializing New Devices
 
-			case ApplyError == nil && WaitError == nil:
-				DebugLogger.Printf(
-					"Customized Configuration has been Applied Successfully! For VM: %s",
-					VirtualMachine.Reference().Value)
-				return nil
-			default:
-				return ApplyError
-			}
-		}()
-		if CustomizationError != nil {
-			return CustomizationError
-		} else {
-			continue
-		}
+	Devices, DeviceError := VirtualMachine.Device(TimeoutContext)
+
+	if DeviceError != nil {
+		ErrorLogger.Printf(DeviceError.Error())
+		return errors.New("Failed to Receive Available Devices for the Virtual Machine")
+	}
+	DiskController, ControllerError := Devices.FindDiskController("scsi")
+
+	if ControllerError != nil {
+		ErrorLogger.Printf(ControllerError.Error())
+		return errors.New("Failed to Receive DiskController for the Virtual Machine")
+	}
+
+	// Assigning Resource Configurations
+	Devices.AssignController(DiskStorageConfig.Device, DiskController)
+	defaults := types.VirtualMachineConfigSpec{
+		NumCPUs:             ResourceConfig.NumCPUs,
+		NumCoresPerSocket:   ResourceConfig.NumCoresPerSocket,
+		MemoryMB:            ResourceConfig.MemoryMB,
+		Version:             esx.HardwareVersion,
+		CpuHotAddEnabled:    ResourceConfig.CpuHotAddEnabled,
+		MemoryHotAddEnabled: ResourceConfig.MemoryHotAddEnabled,
+		Firmware:            string(types.GuestOsDescriptorFirmwareTypeBios),
+		DeviceChange:        []types.BaseVirtualDeviceConfigSpec{DiskStorageConfig},
+	}
+
+	// Setting up Configure Response Timeout on 5 mins...
+	ConfigureTimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*5)
+	defer CancelFunc()
+
+	// Running Apply Configuration Task
+	ConfigureTask, ConfiguredError := object.NewReference(&this.VimClient, vm.Reference()).(*object.VirtualMachine).Reconfigure(ConfigureTimeoutContext, defaults)
+	if ConfiguredError != nil {
+		ErrorLogger.Printf("Failed to Configure Virtual Machine, Error has Occurred")
+		return ConfiguredError
+	}
+
+	// Waiting for task Response
+	WaitResponseError := ConfigureTask.Wait(ConfigureTimeoutContext)
+	if WaitResponseError != nil {
+		ErrorLogger.Printf("Failed to Configure Virtual Machine, Error: %s", WaitResponseError)
+		return WaitResponseError
 	}
 	return nil
 }

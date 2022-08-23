@@ -1,13 +1,9 @@
 package storage_config
 
 import (
-	"context"
-	"time"
-
 	"log"
 	"os"
 
-	"github.com/LovePelmeni/Infrastructure/exceptions"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/types"
 )
@@ -56,25 +52,14 @@ func NewVirtualMachineStorageManager() *VirtualMachineStorageManager {
 
 func (this *VirtualMachineStorageManager) SetupStorageDisk(
 
-	VirtualMachine *object.VirtualMachine,
 	StorageCredentials VirtualMachineStorage,
-	DataStore *types.ManagedObjectReference,
+	DataStore object.Datastore,
 
-) (*types.VirtualMachineConfigSpec, error) {
+) (*types.VirtualDeviceConfigSpec, error) {
 
-	VirtualMachineSpec := types.VirtualMachineConfigSpec{}
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	defer CancelFunc()
-
-	// Initializing New Device
-	Devices, DeviceError := VirtualMachine.Device(TimeoutContext)
-	DiskController, ControllerError := Devices.FindDiskController("scsi")
-
-	if DeviceError != nil || ControllerError != nil {
-		return nil, exceptions.StorageSetupFailure()
-	}
 	// Initializing New Virtual Disk
 
+	ReferencedDatastore := DataStore.Reference()
 	DeviceDisk := types.VirtualDisk{
 
 		CapacityInKB: StorageCredentials.DiskCapacityKB,
@@ -85,19 +70,15 @@ func (this *VirtualMachineStorageManager) SetupStorageDisk(
 				DiskMode:        string(types.VirtualDiskModePersistent),
 				ThinProvisioned: types.NewBool(true),
 				VirtualDeviceFileBackingInfo: types.VirtualDeviceFileBackingInfo{
-					Datastore: DataStore,
+					Datastore: &ReferencedDatastore,
 				},
 			},
 		},
 	}
-	// Assigning New Device Controller
-	Devices.AssignController(&DeviceDisk, DiskController)
 	DeviceSpec := &types.VirtualDeviceConfigSpec{
 		Operation:     types.VirtualDeviceConfigSpecOperationAdd,
 		FileOperation: types.VirtualDeviceConfigSpecFileOperationCreate,
 		Device:        &DeviceDisk,
 	}
-
-	VirtualMachineSpec.DeviceChange = append(VirtualMachineSpec.DeviceChange, DeviceSpec)
-	return &VirtualMachineSpec, nil
+	return DeviceSpec, nil
 }
