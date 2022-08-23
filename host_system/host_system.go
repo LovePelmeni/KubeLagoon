@@ -77,11 +77,11 @@ func (this *VirtualMachineHostSystemManager) SelectLinuxHostSystemGuest(Distribu
 	return nil, errors.New("Unsupported Operational System has been Specified")
 }
 
-func (this *VirtualMachineHostSystemManager) GetDefaultCustomizationOptions(SystemName string) (types.BaseCustomizationOptions, error) {
+func (this *VirtualMachineHostSystemManager) GetDefaultCustomizationOptions(SystemName string, Bit int) (types.BaseCustomizationOptions, error) {
 	// Returns Customization Options, based on the Operational System passed
 
 	// Returning Linux Customization Options, if the Operational System for the VM is Linux Distribution
-	if Contains := slices.Contains(maps.Keys(LinuxDistributions), strings.ToLower(SystemName)); Contains {
+	if Contains := slices.Contains(maps.Keys(LinuxDistributions), strings.ToLower(SystemName) + "_" + strconv.Itoa(Bit)); Contains {
 		return &types.CustomizationLinuxOptions{}, nil
 	}
 	// Returning Windows Customization Options, if the Operational System for the VM is Windows Distribution
@@ -99,14 +99,15 @@ func (this *VirtualMachineHostSystemManager) GetDefaultCustomizationOptions(Syst
 
 func (this *VirtualMachineHostSystemManager) SetupHostSystem(HostSystemCredentials HostSystemCredentials) (*types.VirtualMachineGuestSummary, *types.CustomizationSpec, error) {
 
-	DefaultCustomizationOptions, OptionsError := this.GetDefaultCustomizationOptions(HostSystemCredentials.SystemName)
+	// Returns Host Operational System based on the OS Name and Bit passed from the Customer Configuration 
+	DefaultCustomizationOptions, OptionsError := this.GetDefaultCustomizationOptions(HostSystemCredentials.SystemName, int(HostSystemCredentials.Bit))
 	if OptionsError != nil {
 		return nil, nil, OptionsError
 	}
 	HostSystemCustomizationConfig := types.CustomizationSpec{
 		Options: DefaultCustomizationOptions,
 	}
-	OSGuest, SelectError := this.SelectLinuxHostSystemGuest(HostSystemCredentials.SystemName)
+	OSGuest, SelectError := this.SelectLinuxHostSystemGuest(HostSystemCredentials.SystemName, HostSystemCredentials.Bit)
 	if SelectError != nil {
 		return nil, nil, SelectError
 	}
