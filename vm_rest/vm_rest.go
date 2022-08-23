@@ -50,7 +50,7 @@ var (
 
 func init() {
 
-	LogFile, Error := os.OpenFile("RestVm.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	LogFile, Error := os.OpenFile("../logs/RestVm.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if Error != nil {
 		panic(Error)
 	}
@@ -334,4 +334,75 @@ func RemoveVirtualMachineRestController(RequestContext *gin.Context) {
 	case StartedError == nil && Started:
 		RequestContext.JSON(http.StatusCreated, gin.H{"Operation": "Success"})
 	}
+}
+
+func RebootGuestOSRestController(RequestContext *gin.Context) {
+	// Rest Controller, that allows to Reboot Operational System of the Virtual Machine
+	VirtualMachineId := RequestContext.Query("VirtualMachineId")
+	VmOwnerId := RequestContext.Query("VmOwnerId")
+
+	VmManager := deploy.NewVirtualMachineManager(*Client.Client)
+	VirtualMachine, FindError := VmManager.GetVirtualMachine(VirtualMachineId, VmOwnerId)
+	if FindError != nil {
+		RequestContext.AbortWithStatusJSON(http.StatusBadRequest,
+			gin.H{"Error": "Virtual Machine Server not found"})
+		return
+	}
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*20)
+	defer CancelFunc()
+
+	RebootedError := VirtualMachine.RebootGuest(TimeoutContext)
+	if RebootedError != nil {
+		ErrorLogger.Printf("Failed to Reboot OS on Virtual Machine Server, Error: %s", RebootedError)
+		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to Reboot Operational System"})
+		return
+	}
+	RequestContext.JSON(http.StatusOK, gin.H{"Status": "Rebooted"})
+}
+
+func StartGuestOSRestController(RequestContext *gin.Context) {
+	// Rest Controller, that allows to Start Operational System on the Virtual machine
+	VirtualMachineId := RequestContext.Query("VirtualMachineId")
+	VmOwnerId := RequestContext.Query("VmOwnerId")
+
+	VmManager := deploy.NewVirtualMachineManager(*Client.Client)
+	VirtualMachine, FindError := VmManager.GetVirtualMachine(VirtualMachineId, VmOwnerId)
+	if FindError != nil {
+		RequestContext.AbortWithStatusJSON(http.StatusBadRequest,
+			gin.H{"Error": "Virtual Machine Server not found"})
+		return
+	}
+	// Starting Virtual Machine...
+	RebootedError := VmManager.StartVirtualMachine(VirtualMachine)
+	if RebootedError != nil {
+		ErrorLogger.Printf("Failed to Reboot OS on Virtual Machine Server, Error: %s", RebootedError)
+		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to Reboot Operational System"})
+		return
+	}
+	RequestContext.JSON(http.StatusOK, gin.H{"Status": "Rebooted"})
+
+}
+
+func ShutdownGuestOsRestController(RequestContext *gin.Context) {
+	// Rest Controller, that allows to Shutdown Operational System on the Virtual Machine
+	VirtualMachineId := RequestContext.Query("VirtualMachineId")
+	VmOwnerId := RequestContext.Query("VmOwnerId")
+
+	VmManager := deploy.NewVirtualMachineManager(*Client.Client)
+	VirtualMachine, FindError := VmManager.GetVirtualMachine(VirtualMachineId, VmOwnerId)
+	if FindError != nil {
+		RequestContext.AbortWithStatusJSON(http.StatusBadRequest,
+			gin.H{"Error": "Virtual Machine Server not found"})
+		return
+	}
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*20)
+	defer CancelFunc()
+
+	RebootedError := VirtualMachine.ShutdownGuest(TimeoutContext)
+	if RebootedError != nil {
+		ErrorLogger.Printf("Failed to Shutdown OS on Virtual Machine Server, Error: %s", RebootedError)
+		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to shutdown Operational System"})
+		return
+	}
+	RequestContext.JSON(http.StatusOK, gin.H{"Status": "Rebooted"})
 }

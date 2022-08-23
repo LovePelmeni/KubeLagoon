@@ -51,16 +51,6 @@ type VirtualMachineHostSystemManager struct{}
 func NewVirtualMachineHostSystemManager() *VirtualMachineHostSystemManager {
 	return &VirtualMachineHostSystemManager{}
 }
-func (this *VirtualMachineHostSystemManager) GetHostSystemLocalPath(SystemName string) (string, error) {
-	// Picking up default Local Path, depending on the Operational System
-	if SystemName == "ubuntu" {
-		return "", nil
-	}
-	if SystemName == "windows" {
-		return "", nil
-	}
-	return "", errors.New("Invalid System Name")
-}
 
 func (this *VirtualMachineHostSystemManager) SelectLinuxHostSystemGuest(DistributionName string, Bit ...int64) (*types.VirtualMachineGuestOsIdentifier, error) {
 	// Picking up const for the Operational System User, depending on the Linux Distribution
@@ -107,15 +97,18 @@ func (this *VirtualMachineHostSystemManager) GetDefaultCustomizationOptions(Syst
 
 // Returns Default Operational System Options, depending on the System Name.
 
-func (this *VirtualMachineHostSystemManager) SetupHostSystem(HostSystemCredentials HostSystemCredentials) (*types.VirtualMachineGuestSummary, error) {
+func (this *VirtualMachineHostSystemManager) SetupHostSystem(HostSystemCredentials HostSystemCredentials) (*types.VirtualMachineGuestSummary, *types.CustomizationSpec, error) {
 
 	DefaultCustomizationOptions, OptionsError := this.GetDefaultCustomizationOptions(HostSystemCredentials.SystemName)
 	if OptionsError != nil {
-		return nil, OptionsError
+		return nil, nil, OptionsError
+	}
+	HostSystemCustomizationConfig := types.CustomizationSpec{
+		Options: DefaultCustomizationOptions,
 	}
 	OSGuest, SelectError := this.SelectLinuxHostSystemGuest(HostSystemCredentials.SystemName)
 	if SelectError != nil {
-		return nil, SelectError
+		return nil, nil, SelectError
 	}
 
 	VmGuestSummaryConfig := types.VirtualMachineGuestSummary{
@@ -123,5 +116,5 @@ func (this *VirtualMachineHostSystemManager) SetupHostSystem(HostSystemCredentia
 		HostName:  HostSystemCredentials.Hostname,
 		IpAddress: HostSystemCredentials.VmIPAddress,
 	}
-	return &VmGuestSummaryConfig, nil
+	return &VmGuestSummaryConfig, &HostSystemCustomizationConfig, nil
 }

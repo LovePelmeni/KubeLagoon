@@ -97,19 +97,19 @@ type VirtualMachineCustomSpec struct {
 
 func NewCustomConfig(Config string) (*VirtualMachineCustomSpec, error) {
 	var config VirtualMachineCustomSpec
-	DecodeError := json.Unmarshal([]byte(Config), config)
+	DecodeError := json.Unmarshal([]byte(Config), &config)
 	return &config, DecodeError
 }
 
-func (this *VirtualMachineCustomSpec) GetHostSystemConfig(Client vim25.Client) (types.VirtualMachineGuestSummary, error) {
+func (this *VirtualMachineCustomSpec) GetHostSystemConfig(Client vim25.Client) (types.VirtualMachineGuestSummary, types.CustomizationSpec, error) {
 
 	// Converting JSON Host System Configuration, Provided By Customer, to the Configuration Instance
 
 	HostSystemManager := host_system.NewVirtualMachineHostSystemManager()
 	HostSystemCredentials := host_system.NewHostSystemCredentials(this.HostSystem.DistributionName, this.HostSystem.Bit)
 
-	HostSystemConfiguration, SetupError := HostSystemManager.SetupHostSystem(*HostSystemCredentials)
-	return *HostSystemConfiguration, SetupError
+	HostSystemConfiguration, HostSystemCustomizationConfig, SetupError := HostSystemManager.SetupHostSystem(*HostSystemCredentials)
+	return *HostSystemConfiguration, *HostSystemCustomizationConfig, SetupError
 }
 
 func (this *VirtualMachineCustomSpec) GetResourceConfig(Client vim25.Client) (types.VirtualMachineConfigSpec, error) {

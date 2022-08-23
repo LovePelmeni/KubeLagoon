@@ -321,7 +321,7 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 
 	// Receiving Virtual Machine Configurations to Apply
 
-	HostSystemConfig, HostSystemError := Configuration.GetHostSystemConfig(this.VimClient) // HostSystem Configuration for the Vm
+	HostSystemConfig, HostSystemCustomizationConfig, HostSystemError := Configuration.GetHostSystemConfig(this.VimClient) // HostSystem Configuration for the Vm
 	if HostSystemError != nil {
 		return HostSystemError
 	}
@@ -394,19 +394,35 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 	ConfigureTimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*5)
 	defer CancelFunc()
 
-	// Running Apply Configuration Task
+	// Applying Configurations to the VM Server 
+
 	ConfigureTask, ConfiguredError := object.NewReference(&this.VimClient, vm.Reference()).(*object.VirtualMachine).Reconfigure(ConfigureTimeoutContext, defaults)
+	CustomizationTask, CustomizationError := object.NewReference(&this.VimClient, vm.Reference()).(*object.VirtualMachine).Customize(ConfigureTimeoutContext, HostSystemCustomizationConfig)
+
+
+	if CustomizationError != nil {
+		ErrorLogger.Printf("Failed to Apply Customization Specification to the VM Server with OS Specifications, Error: %s", CustomizationError)
+		return CustomizationError
+	}
+	
 	if ConfiguredError != nil {
 		ErrorLogger.Printf("Failed to Configure Virtual Machine, Error has Occurred")
 		return ConfiguredError
 	}
 
-	// Waiting for task Response
+	// Waiting for Hardware and Resource Configuration to Apply 
 	WaitResponseError := ConfigureTask.Wait(ConfigureTimeoutContext)
 	if WaitResponseError != nil {
 		ErrorLogger.Printf("Failed to Configure Virtual Machine, Error: %s", WaitResponseError)
 		return WaitResponseError
 	}
+	// Waiting for OS Customization to Apply 
+	WaitCustomizationResponseError := CustomizationTask.Wait(ConfigureTimeoutContext)
+	if WaitCustomizationResponseError != nil {
+		ErrorLogger.Printf("Failed to Configure OS Customization Specification for the VM Server, Error: %s", WaitCustomizationResponseError)
+		return WaitCustomizationResponseError
+	}
+
 	return nil
 }
 

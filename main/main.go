@@ -122,6 +122,13 @@ func (this *Server) Run() {
 		}
 	}
 
+	Router.Group("/os/").Use(middlewares.IsVirtualMachineOwnerMiddleware())
+	{
+		Router.POST("/start/", vm_rest.StartGuestOSRestController)
+		Router.PUT("/restart/", vm_rest.RebootGuestOSRestController)
+		Router.DELETE("/shutdown/", vm_rest.ShutdownGuestOsRestController)
+	}
+
 	Router.Group("/suggestions/")
 	{
 		Router.Use(middlewares.JwtAuthenticationMiddleware())

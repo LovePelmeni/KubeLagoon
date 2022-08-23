@@ -27,14 +27,16 @@ func NewCPUInfo(OverallCpuUsage int32, OverallCpuReadness int32, MaxCpuUsage int
 
 type MemoryUsageInfo struct {
 	// Represents Current Memory state of the Virtual Machine Server
+	Active         int32 `json:"ActiveMemory"`
 	Shared         int32 `json:"SharedMemory"`
 	Granted        int32 `json:"GrantedMemory"`
 	MemoryOverhead int64 `json:"MemoryOverhead"`
 	MaxMemoryUsage int32 `json:"MaxMemoryUsage"`
 }
 
-func NewMemoryUsageInfo(SharedMemory int32, GrantedMemory int32, MemoryOverhead int64, MaxMemoryUsage int32) *MemoryUsageInfo {
+func NewMemoryUsageInfo(ActiveMemory int32, SharedMemory int32, GrantedMemory int32, MemoryOverhead int64, MaxMemoryUsage int32) *MemoryUsageInfo {
 	return &MemoryUsageInfo{
+		Active:         ActiveMemory,
 		Shared:         SharedMemory,
 		Granted:        GrantedMemory,
 		MemoryOverhead: MemoryOverhead,
@@ -73,6 +75,20 @@ func NewStorageInfo(UnShared int64, Committed int64, Uncommitted int64) *Storage
 	}
 }
 
+type HostSystemInfo struct {
+	GuestOsHeartbeat   string `json:"Heartbeat"`
+	GuestOsFullName    string `json:"FullName"`
+	GuestOsMemoryUsage int32  `json:"MemoryUsage"`
+}
+
+func NewHostSystemInfo(GuestHeartbeatStatus string, GuestFullName string, GuestMemoryUsage int32) *HostSystemInfo {
+	return &HostSystemInfo{
+		GuestOsHeartbeat:   GuestHeartbeatStatus,
+		GuestOsFullName:    GuestFullName,
+		GuestOsMemoryUsage: GuestMemoryUsage,
+	}
+}
+
 type VirtualMachineHealthCheckManager struct {
 	VirtualMachine *mo.VirtualMachine
 }
@@ -104,13 +120,14 @@ func (this *VirtualMachineHealthCheckManager) GetAliveMetrics() AliveInfo {
 
 func (this *VirtualMachineHealthCheckManager) GetMemoryUsageMetrics() MemoryUsageInfo {
 
+	ActiveMemory := this.VirtualMachine.Summary.QuickStats.ActiveMemory
 	MaxMemoryUsage := this.VirtualMachine.Summary.Runtime.MaxMemoryUsage
 	MemoryOverhead := this.VirtualMachine.Summary.Runtime.MemoryOverhead
 
 	OverallSharedMemory := this.VirtualMachine.Summary.QuickStats.SharedMemory
 	GrantedMemory := this.VirtualMachine.Summary.QuickStats.GrantedMemory
 
-	NewMemoryMetric := NewMemoryUsageInfo(OverallSharedMemory, GrantedMemory, MemoryOverhead, MaxMemoryUsage)
+	NewMemoryMetric := NewMemoryUsageInfo(ActiveMemory, OverallSharedMemory, GrantedMemory, MemoryOverhead, MaxMemoryUsage)
 	return *NewMemoryMetric
 }
 
@@ -120,4 +137,13 @@ func (this *VirtualMachineHealthCheckManager) GetStorageUsageMetrics() StorageIn
 	StorageUnCommitted := this.VirtualMachine.Summary.Storage.Uncommitted
 	NewStorageMetric := NewStorageInfo(StorageShared, StorageCommitted, StorageUnCommitted)
 	return *NewStorageMetric
+}
+
+func (this *VirtualMachineHealthCheckManager) GetHostSystemHealthMetrics() HostSystemInfo {
+
+	GuestHeartbeatStatus := this.VirtualMachine.Summary.QuickStats.GuestHeartbeatStatus
+	GuestOsMemoryUsage := this.VirtualMachine.Summary.QuickStats.GuestMemoryUsage
+	GuestOsFullName := this.VirtualMachine.Summary.Guest.GuestFullName
+	HostSystemMetric := NewHostSystemInfo(string(GuestHeartbeatStatus), GuestOsFullName, GuestOsMemoryUsage)
+	return *HostSystemMetric
 }
