@@ -55,20 +55,24 @@ func NewVirtualMachineHostSystemManager() *VirtualMachineHostSystemManager {
 func (this *VirtualMachineHostSystemManager) SelectLinuxHostSystemGuest(DistributionName string, Bit ...int64) (*types.VirtualMachineGuestOsIdentifier, error) {
 	// Picking up const for the Operational System User, depending on the Linux Distribution
 	// Currently Supported: Ubuntu64, Debian6, Debian7, Debian8, Debian9, Fedora, Asianux, CentOS, Freebsd
-	Oss := map[string]types.VirtualMachineGuestOsIdentifier{
-		"ubuntu64":    types.VirtualMachineGuestOsIdentifierUbuntu64Guest,
-		"ubuntu":      types.VirtualMachineGuestOsIdentifierUbuntuGuest,
-		"debian10_64": types.VirtualMachineGuestOsIdentifierDebian10_64Guest,
-		"debian10":    types.VirtualMachineGuestOsIdentifierDebian10Guest,
-		"centos64":    types.VirtualMachineGuestOsIdentifierCentos64Guest,
-		"centos":      types.VirtualMachineGuestOsIdentifierCentosGuest,
-		"fedora":      types.VirtualMachineGuestOsIdentifierFedoraGuest,
-		"fedora64":    types.VirtualMachineGuestOsIdentifierFedora64Guest,
-	}
 
-	for OsName, Identifier := range Oss {
+	for OsName, Identifier := range LinuxDistributions {
 		if HasPrefix := strings.HasPrefix(strings.ToLower(OsName),
 			strings.ToLower(DistributionName)) && strings.HasSuffix(OsName, strconv.Itoa(int(Bit[0]))); HasPrefix != false {
+			return &Identifier, nil
+		} else {
+			continue
+		}
+	}
+	return nil, errors.New("Unsupported Operational System has been Specified")
+}
+
+func (this *VirtualMachineHostSystemManager) SelectWindowsSystemGuest(SystemName string, Bit ...int) (*types.VirtualMachineGuestOsIdentifier, error) {
+	// Returning Windows Guest Interface, depending on the Distribution version of the Operational System
+
+	for OsName, Identifier := range WindowsDistributions {
+		if HasPrefix := strings.HasPrefix(strings.ToLower(OsName),
+			strings.ToLower(OsName)) && strings.HasSuffix(OsName, strconv.Itoa(int(Bit[0]))); HasPrefix != false {
 			return &Identifier, nil
 		} else {
 			continue
@@ -81,7 +85,7 @@ func (this *VirtualMachineHostSystemManager) GetDefaultCustomizationOptions(Syst
 	// Returns Customization Options, based on the Operational System passed
 
 	// Returning Linux Customization Options, if the Operational System for the VM is Linux Distribution
-	if Contains := slices.Contains(maps.Keys(LinuxDistributions), strings.ToLower(SystemName) + "_" + strconv.Itoa(Bit)); Contains {
+	if Contains := slices.Contains(maps.Keys(LinuxDistributions), strings.ToLower(SystemName)+"_"+strconv.Itoa(Bit)); Contains {
 		return &types.CustomizationLinuxOptions{}, nil
 	}
 	// Returning Windows Customization Options, if the Operational System for the VM is Windows Distribution
@@ -99,7 +103,7 @@ func (this *VirtualMachineHostSystemManager) GetDefaultCustomizationOptions(Syst
 
 func (this *VirtualMachineHostSystemManager) SetupHostSystem(HostSystemCredentials HostSystemCredentials) (*types.VirtualMachineGuestSummary, *types.CustomizationSpec, error) {
 
-	// Returns Host Operational System based on the OS Name and Bit passed from the Customer Configuration 
+	// Returns Host Operational System based on the OS Name and Bit passed from the Customer Configuration
 	DefaultCustomizationOptions, OptionsError := this.GetDefaultCustomizationOptions(HostSystemCredentials.SystemName, int(HostSystemCredentials.Bit))
 	if OptionsError != nil {
 		return nil, nil, OptionsError
@@ -118,4 +122,12 @@ func (this *VirtualMachineHostSystemManager) SetupHostSystem(HostSystemCredentia
 		IpAddress: HostSystemCredentials.VmIPAddress,
 	}
 	return &VmGuestSummaryConfig, &HostSystemCustomizationConfig, nil
+}
+
+func (this *VirtualMachineHostSystemManager) GetAvailableLinuxOsSystems() map[string]types.VirtualMachineGuestOsIdentifier {
+	return LinuxDistributions
+}
+
+func (this *VirtualMachineHostSystemManager) GetAvailableWindowsOsSystems() map[string]types.VirtualMachineGuestOsIdentifier {
+	return WindowsDistributions
 }

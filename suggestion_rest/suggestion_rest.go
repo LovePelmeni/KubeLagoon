@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/LovePelmeni/Infrastructure/host_system"
 	"github.com/LovePelmeni/Infrastructure/resources"
 	"github.com/gin-gonic/gin"
 	"github.com/vmware/govmomi"
@@ -95,4 +96,14 @@ func GetDatacenterSuggestions(RequestContext *gin.Context) {
 		RequestContext.JSON(http.StatusOK,
 			gin.H{"Datacenters": make([]*object.Datacenter, 0)})
 	}
+}
+
+func GetAvailableOsSystemsRestController(RequestContext *gin.Context) {
+	// Returns List of Available System Distributions for Linux and Windows
+
+	HostSystemManager := host_system.NewVirtualMachineHostSystemManager()
+	WindowsHostSystems := HostSystemManager.GetAvailableWindowsOsSystems()
+	LinuxHostSystems := HostSystemManager.GetAvailableLinuxOsSystems()
+	RequestContext.JSON(http.StatusOK, gin.H{"Linux": LinuxHostSystems,
+		"Windows": WindowsHostSystems})
 }

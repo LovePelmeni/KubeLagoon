@@ -27,7 +27,5 @@ RUN go test -v ./tests/storage/storage_test.go
 RUN go test -v ./tests/suggestions/suggestions_test.go 
 RUN go test -v ./tests/resources/resource_test.go 
 
-# Building Application Main Package 
-RUN go build -o ./main/. 
 # Running Application, Once All Previous Steps Done Correctly
 ENTRYPOINT ["go", "run", "./main/main.go"]

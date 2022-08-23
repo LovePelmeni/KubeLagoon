@@ -64,7 +64,12 @@ func LoginRestController(RequestContext *gin.Context) {
 	}
 
 	// Generating New Jwt Authentication Token
-	NewJwtToken := authentication.CreateJwtToken(Customer.Username, Customer.Email)
+	NewJwtToken, JwtError := authentication.CreateJwtToken(int(Customer.ID), Customer.Username, Customer.Email)
+	if JwtError != nil {
+		ErrorLogger.Printf("Failed to Initialize New Jwt Token, Error: %s", JwtError)
+		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Login Error"})
+		return
+	}
 
 	// Setting UP New Generated Auth Token
 	RequestContext.SetCookie("jwt-token", NewJwtToken, int(time.Now().Add(time.Minute*10000).Unix()), "/", "", true, false)
