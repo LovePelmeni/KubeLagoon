@@ -1,9 +1,15 @@
-package network 
+package network
 
 import (
 	"log"
 	"os"
+	"reflect"
+	"regexp"
+	"strings"
+
 	"github.com/vmware/govmomi/vim25/types"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 )
 
 var (
@@ -25,10 +31,42 @@ func init() {
 type VirtualMachineIPAddress struct {
 	// Struct, Representing Virtual Machine IP Address 
 	Options types.BaseCustomizationOptions 
-	IP       string `json:"IP"`
-	Netmask  string `json:"Netmask"`
-	Gateway  string `json:"Gateway"`
-	Hostname string `json:"Hostname"`
+	IP       string `json:"IP,omitempty"`
+	Netmask  string `json:"Netmask,omitempty"`
+	Gateway  string `json:"Gateway,omitempty"`
+	Hostname string `json:"Hostname,omitempty"`
+}
+
+func (this *VirtualMachineIPAddress) GetValidationRegexPatterns() map[string]string{
+	// returns Slice of the Regexes 
+	return map[string]string{}
+}
+
+func (this *VirtualMachineIPAddress) ValidateCredentials() VirtualMachineIPAddress{
+
+	// Checks if the Input has appropriate format and has valid values 
+	var InvalidValues []string // array of the Invalid Value Field names
+	FieldValueGenerators := map[string]func() string {
+
+	}
+
+	//  Validating Inputs 
+	Patterns := this.GetValidationRegexPatterns()
+	for Index := 0; Index < reflect.TypeOf(this).NumField(); Index ++ {
+		if Matches, MatchError := regexp.MatchString(Patterns[strings.ToLower(reflect.ValueOf(this).Type().Field(Index).Name)],
+	    reflect.ValueOf(this).Field(Index).String()); MatchError != nil || Matches != true {
+			InvalidValues = append(InvalidValues, reflect.ValueOf(this).Type().Field(Index).Name)
+		}
+	}
+
+	// Generating new Values if Some of the Are Empty 
+	for _, Field := range InvalidValues {
+		if slices.Contains(maps.Keys(FieldValueGenerators), Field){ 
+			GeneratedValue := FieldValueGenerators[Field]()
+			reflect.ValueOf(this).FieldByName(Field).Set(reflect.ValueOf(GeneratedValue))
+		}
+	}
+	return *this
 }
 
 func NewVirtualMachineIPAddress(IP string, Netmask string, Gateway string, Hostname string) *VirtualMachineIPAddress {
@@ -48,8 +86,9 @@ func NewVirtualMachineIPManager() *VirtualMachineIPManager {
 	return &VirtualMachineIPManager{}
 }
 
-func (this *VirtualMachineIPManager) SetupPublicNetwork(IPCredentials *VirtualMachineIPAddress) (*types.CustomizationSpec, error) {
+func (this *VirtualMachineIPManager) SetupPublicNetwork(IPCredentials VirtualMachineIPAddress) (*types.CustomizationSpec, error) {
 
+	IPCredentials = IPCredentials.ValidateCredentials()
 	// Setting up Customized IP Credentials for the Virtual Machine
 	CustomizedIP := types.CustomizationAdapterMapping{
 		Adapter: types.CustomizationIPSettings{

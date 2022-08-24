@@ -321,19 +321,27 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 
 	// Receiving Virtual Machine Configurations to Apply
 
+	// Receiving OS HostSystem Config
 	HostSystemConfig, HostSystemCustomizationConfig, HostSystemError := Configuration.GetHostSystemConfig(this.VimClient) // HostSystem Configuration for the Vm
 	if HostSystemError != nil {
 		return HostSystemError
 	}
-
+	// Getting Resource Storage Config
 	ResourceConfig, ResourceError := Configuration.GetResourceConfig(this.VimClient) // Resource (CPU, Memory) Configuration for the VM
 	if ResourceError != nil {
 		return ResourceError
 	}
 
+	// Getting Disk Storage Config
 	DiskStorageConfig, DiskError := Configuration.GetDiskStorageConfig(this.VimClient) // Disk Storage Configuration for the VM
 	if DiskError != nil {
 		return DiskError
+	}
+
+	// Getting Network Config
+	NetworkConfig, NetworkError := Configuration.GetNetworkConfig(this.VimClient)
+	if NetworkError != nil {
+		return NetworkError
 	}
 
 	vm := &mo.VirtualMachine{}
@@ -347,6 +355,10 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 		LatencySensitivity: &types.LatencySensitivity{Level: types.LatencySensitivitySensitivityLevelNormal},
 		BootOptions:        &types.VirtualMachineBootOptions{},
 		CreateDate:         types.NewTime(time.Now()),
+		InitialOverhead: &types.VirtualMachineConfigInfoOverheadInfo{
+			InitialMemoryReservation: 100, // In Megabytes
+			InitialSwapReservation:   100, // In Megabytes
+		},
 	}
 	vm.Layout = &types.VirtualMachineFileLayout{}
 	vm.LayoutEx = &types.VirtualMachineFileLayoutEx{
@@ -397,11 +409,17 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 	// Applying Configurations to the VM Server
 
 	ConfigureTask, ConfiguredError := object.NewReference(&this.VimClient, vm.Reference()).(*object.VirtualMachine).Reconfigure(ConfigureTimeoutContext, defaults)
-	CustomizationTask, CustomizationError := object.NewReference(&this.VimClient, vm.Reference()).(*object.VirtualMachine).Customize(ConfigureTimeoutContext, HostSystemCustomizationConfig)
+	HostSystemCustomizationTask, HostSystemCustomizationError := object.NewReference(&this.VimClient, vm.Reference()).(*object.VirtualMachine).Customize(ConfigureTimeoutContext, HostSystemCustomizationConfig)
+	NetworkCustomizationTask, NetworkCustomizationError := object.NewReference(&this.VimClient, vm.Reference()).(*object.VirtualMachine).Customize(ConfigureTimeoutContext, *NetworkConfig)
 
-	if CustomizationError != nil {
-		ErrorLogger.Printf("Failed to Apply Customization Specification to the VM Server with OS Specifications, Error: %s", CustomizationError)
-		return CustomizationError
+	if HostSystemCustomizationError != nil {
+		ErrorLogger.Printf("Failed to Apply Customization Specification to the VM Server with OS Specifications, Error: %s", HostSystemCustomizationError)
+		return HostSystemCustomizationError
+	}
+
+	if NetworkCustomizationError != nil {
+		ErrorLogger.Printf("Failed to Setup Customized Network")
+		return NetworkCustomizationError
 	}
 
 	if ConfiguredError != nil {
@@ -415,11 +433,17 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 		ErrorLogger.Printf("Failed to Configure Virtual Machine, Error: %s", WaitResponseError)
 		return WaitResponseError
 	}
-	// Waiting for OS Customization to Apply
-	WaitCustomizationResponseError := CustomizationTask.Wait(ConfigureTimeoutContext)
+	// Waiting for OS Customization Response
+	WaitCustomizationResponseError := HostSystemCustomizationTask.Wait(ConfigureTimeoutContext)
 	if WaitCustomizationResponseError != nil {
 		ErrorLogger.Printf("Failed to Configure OS Customization Specification for the VM Server, Error: %s", WaitCustomizationResponseError)
 		return WaitCustomizationResponseError
+	}
+	// Waiting for the Network Customization Response
+	WaitNetworkCustomizationError := NetworkCustomizationTask.Wait(ConfigureTimeoutContext)
+	if WaitNetworkCustomizationError != nil {
+		ErrorLogger.Printf("Failed to Apply Network Configuration, Error: %s", WaitNetworkCustomizationError)
+		return WaitNetworkCustomizationError
 	}
 	return nil
 }

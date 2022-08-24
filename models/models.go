@@ -49,21 +49,22 @@ func init() {
 	}
 
 	Database = DatabaseInstance
-	Database.AutoMigrate(&Customer{}, &VirtualMachine{})
-	LogFile, Error := os.OpenFile("../logs/Models.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	Database.AutoMigrate(&VirtualMachine{}, &Customer{})
+	LogFile, Error := os.OpenFile("Models.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
 	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
-	if Error != nil {panic(Error)}
+	if Error != nil {
+		panic(Error)
+	}
 
 }
 
 type Customer struct {
 	gorm.Model
-	Username string           `json:"Username" gorm:"type:varchar(100); not null; unique;"`
-	Email    string           `json:"Email" gorm:"type:varchar(100); not null; unique;"`
-	Password string           `json:"Password" gorm:"type:varchar(100); not null;"`
-	Vms      []VirtualMachine `json:"Vms" gorm:"many2many:Vms;"`
+	Username string `json:"Username" gorm:"type:varchar(100); not null; unique;"`
+	Email    string `json:"Email" gorm:"type:varchar(100); not null; unique;"`
+	Password string `json:"Password" gorm:"type:varchar(100); not null;"`
 }
 
 func NewCustomer(Username string, Password string, Email string) *Customer {
@@ -79,16 +80,15 @@ func NewCustomer(Username string, Password string, Email string) *Customer {
 }
 
 func (this *Customer) Create() (*gorm.DB, error) {
-	// Creates New Customer Profile 
-	CreatedCustomer := Database.Clauses(clause.OnConflict{Columns:
-    []clause.Column{{Name: "Vms", Table: "Customer"}},
-    DoUpdates: clause.AssignmentColumns([]string{"Vms"}),
+	// Creates New Customer Profile
+	CreatedCustomer := Database.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "Vms", Table: "Customer"}},
+		DoUpdates: clause.AssignmentColumns([]string{"Vms"}),
 	}).Model(&Customer{}).Create(this)
 	return CreatedCustomer, CreatedCustomer.Error
 }
 
 func (this *Customer) Delete() (*gorm.DB, error) {
-	// Deletes Customer Profile 
+	// Deletes Customer Profile
 	DeletedCustomer := Database.Model(&Customer{}).Delete(&this)
 	Database.Model(&Customer{}).Unscoped().Delete(&this)
 	return DeletedCustomer, DeletedCustomer.Error

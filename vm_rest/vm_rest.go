@@ -50,7 +50,7 @@ var (
 
 func init() {
 
-	LogFile, Error := os.OpenFile("../logs/RestVm.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	LogFile, Error := os.OpenFile("RestVm.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if Error != nil {
 		panic(Error)
 	}
@@ -135,7 +135,7 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 	// On Parse Failure Returning Bad Request with Error Explanation
 	if InvalidError != nil {
 		RequestContext.JSON(http.StatusBadRequest, gin.H{"Error": "Invalid Configuration has been Passed."})
-		return 
+		return
 	}
 
 	// Initializing Hardware Configuration Based on the Resource Requirements
@@ -333,6 +333,14 @@ func RemoveVirtualMachineRestController(RequestContext *gin.Context) {
 			gin.H{"Error": fmt.Sprintf("Failed to Start the Server, %s", StartedError)})
 
 	case StartedError == nil && Started:
+		var VirtualMachine models.VirtualMachine
+		models.Database.Model(&models.VirtualMachine{}).Where("id = ?", VirtualMachineId).Find(&VirtualMachine)
+		_, Error := VirtualMachine.Delete()
+
+		if Error != nil {
+			DebugLogger.Printf(
+				"Failed to Delete Virtual Machine Object, Error: %s", Error)
+		}
 		RequestContext.JSON(http.StatusCreated, gin.H{"Operation": "Success"})
 	}
 }

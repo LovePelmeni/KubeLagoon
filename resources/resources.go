@@ -30,7 +30,7 @@ var (
 )
 
 func init() {
-	LogFile, Error := os.OpenFile("../logs/Resources.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	LogFile, Error := os.OpenFile("Resources.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	DebugLogger = log.New(LogFile, "DEBUG:", log.Ldate|log.Ltime|log.Lshortfile)
 	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)

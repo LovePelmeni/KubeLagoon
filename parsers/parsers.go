@@ -11,6 +11,7 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/host_system"
 	models "github.com/LovePelmeni/Infrastructure/models"
+	"github.com/LovePelmeni/Infrastructure/network"
 	resource_config "github.com/LovePelmeni/Infrastructure/resource_config"
 	storage_config "github.com/LovePelmeni/Infrastructure/storage_config"
 	"github.com/vmware/govmomi/object"
@@ -27,7 +28,7 @@ var (
 )
 
 func init() {
-	LogFile, Error := os.OpenFile("../logs/Parsers.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	LogFile, Error := os.OpenFile("Parsers.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
 	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
 	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
@@ -70,7 +71,7 @@ func (this *DatacenterConfig) GetDatacenter(Client vim25.Client) (*mo.Datacenter
 		return MoDatacenter, nil
 	}
 }
- 
+
 type VirtualMachineCustomSpec struct {
 	// Represents Configuration of the Virtual Machine
 
@@ -83,6 +84,15 @@ type VirtualMachineCustomSpec struct {
 		DistributionName string `json:"DistributionName"`
 		Bit              int64  `json:"Bit;omitempty"`
 	} `json:"HostSystem"`
+
+	Network struct {
+		IP       string `json:"IP,omitempty"`
+		Netmask  string `json:"Netmask,omitempty"`
+		Hostname string `json:"Hostname,omitempty"`
+		Gateway  string `json:"Gateway,omitempty"`
+		Enablev6 bool   `json:"Enablev6,omitempty"`
+		Enablev4 bool   `json:"Enablev4,omitempty"`
+	} `json:"Network"`
 
 	// Hardware Resourcs for the VM Configuration
 	Resources struct {
@@ -124,6 +134,7 @@ func (this *VirtualMachineCustomSpec) GetResourceConfig(Client vim25.Client) (ty
 }
 
 func (this *VirtualMachineCustomSpec) GetDiskStorageConfig(Client vim25.Client) (*types.VirtualDeviceConfigSpec, error) {
+
 	// Converting JSON Disk Storage Configuration, Provided By Customer, to te Configuration Instance
 
 	// Receiving Virtual Machine by the Metadata, Provided in the Configuration...
@@ -153,4 +164,12 @@ func (this *VirtualMachineCustomSpec) GetDiskStorageConfig(Client vim25.Client) 
 
 	Configuration, SetupError := DiskDeviceManager.SetupStorageDisk(*DiskDeviceStorageCredentials, *Datastore)
 	return Configuration, SetupError
+}
+
+func (this *VirtualMachineCustomSpec) GetNetworkConfig(Client vim25.Client) (*types.CustomizationSpec, error) {
+	// Returns Virtual Machine Network Configuration for the Virtual Machine
+	IPCredentials := network.NewVirtualMachineIPAddress(this.Network.IP, this.Network.Netmask, this.Network.Gateway, this.Network.Hostname)
+	NewNetworkManager := network.NewVirtualMachineIPManager()
+	NetworkConfig, SetupError := NewNetworkManager.SetupPublicNetwork(*IPCredentials)
+	return NetworkConfig, SetupError
 }
