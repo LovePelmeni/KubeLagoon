@@ -66,6 +66,7 @@ func NewDatacenterResourceRequirements(Requirements string) (*DatacenterResource
 
 type NetworkResourceRequirements struct {
 	ResourceRequirements
+	Private bool `json:"Private"`
 }
 
 func NewNetworkResourceRequirements() *NetworkResourceRequirements {
@@ -245,7 +246,7 @@ func (this *NetworkResourceManager) HasEnoughResources(Network *mo.Network, Requ
 		return true
 	} else {
 		return false
-	}
+	} 
 }
 
 func (this *NetworkResourceManager) GetAvailableResources(Datacenter *mo.Datacenter, Requirements *NetworkResourceRequirements) []*object.Network {
@@ -254,6 +255,11 @@ func (this *NetworkResourceManager) GetAvailableResources(Datacenter *mo.Datacen
 	var Networks []*object.Network
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*20)
 	defer CancelFunc()
+
+	if Requirements.Private == true {
+		// Creating New Private Network 
+		 
+	}
 
 	for _, Network := range Datacenter.Network {
 		var MoNetwork mo.Network
@@ -295,7 +301,6 @@ func (this *DatastoreResourceManager) HasEnoughResources(Datastore *mo.Datastore
 		DebugLogger.Printf("Datastore with Name: `%s` is not accessible", Datastore.Name)
 		return false
 	}
-
 	// Checking if Datastore has enough Free Space, to Run the Customer Application
 	if !(Datastore.Summary.FreeSpace >= int64(Requirements.FreeSpace)) {
 		DebugLogger.Printf("Datastore with Name: `%s` does not Have Enough Free space, according to Resource Requirements", Datastore.Name)
@@ -348,13 +353,11 @@ func (this *StorageResourceManager) HasEnoughResources(StoragePod *mo.StoragePod
 		DebugLogger.Printf("Storage Pod with Name `%s` Does not Have Enough Capacity", StoragePod.Name)
 		return false
 	}
-
 	// Checking if Storage has enough Free Space
 	if !(StoragePod.Summary.FreeSpace >= int64(Requirements.FreeSpace)) {
 		DebugLogger.Printf("Storage Pod with Name: `%s` does not Have Enough FreeSpace to Perform an Action", StoragePod.Name)
 		return false
 	}
-
 	return true
 }
 

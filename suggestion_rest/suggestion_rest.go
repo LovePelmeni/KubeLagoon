@@ -105,5 +105,5 @@ func GetAvailableOsSystemsRestController(RequestContext *gin.Context) {
 	WindowsHostSystems := HostSystemManager.GetAvailableWindowsOsSystems()
 	LinuxHostSystems := HostSystemManager.GetAvailableLinuxOsSystems()
 	RequestContext.JSON(http.StatusOK, gin.H{"Linux": LinuxHostSystems,
-		"Windows": WindowsHostSystems})
+	"Windows": WindowsHostSystems})
 }

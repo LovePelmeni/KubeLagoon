@@ -166,6 +166,10 @@ func DeleteCustomerRestController(RequestContext *gin.Context) {
 	}
 }
 
+
+func GetCustomerProfileRestController(RequestContext *gin.Context) {
+	// Returns Customer's Profile, based on the Jwt token passed
+}
 func SupportRestController(RequestContext *gin.Context) {
 	// Rest Controller, that is Responsible for Sending out Messages / Notifications to the Support Email
 }

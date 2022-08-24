@@ -95,6 +95,7 @@ func (this *Server) Run() {
 		Router.POST("/create/", customer_rest.CreateCustomerRestController)
 		Router.PUT("/reset/password/", customer_rest.ResetPasswordRestController)
 		Router.DELETE("/delete/", customer_rest.DeleteCustomerRestController)
+		Router.GET("/get/profile/", customer_rest.GetCustomerProfileRestController)
 	}
 
 

@@ -84,5 +84,3 @@ spec:
     - name: postgres-claim 
       namespace: app-namespace 
 
-
---- 

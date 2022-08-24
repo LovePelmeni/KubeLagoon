@@ -79,11 +79,16 @@ func NewCustomer(Username string, Password string, Email string) *Customer {
 }
 
 func (this *Customer) Create() (*gorm.DB, error) {
-	CreatedCustomer := Database.Model(&Customer{}).Create(&this)
+	// Creates New Customer Profile 
+	CreatedCustomer := Database.Clauses(clause.OnConflict{Columns:
+    []clause.Column{{Name: "Vms", Table: "Customer"}},
+    DoUpdates: clause.AssignmentColumns([]string{"Vms"}),
+	}).Model(&Customer{}).Create(this)
 	return CreatedCustomer, CreatedCustomer.Error
 }
 
 func (this *Customer) Delete() (*gorm.DB, error) {
+	// Deletes Customer Profile 
 	DeletedCustomer := Database.Model(&Customer{}).Delete(&this)
 	Database.Model(&Customer{}).Unscoped().Delete(&this)
 	return DeletedCustomer, DeletedCustomer.Error
