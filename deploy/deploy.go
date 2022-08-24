@@ -445,6 +445,13 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 		ErrorLogger.Printf("Failed to Apply Network Configuration, Error: %s", WaitNetworkCustomizationError)
 		return WaitNetworkCustomizationError
 	}
+
+	// Applying SSH Credentials to the Virtual Machine Server....
+
+	SSHManager := ssh_config.NewVirtualMachineSshManager(this.VimClient)
+	GeneratedSSHKeys := SSHManager.GenerateSSHKeys()
+	UploadSSHError := SSHManager.UploadSSHKeys()
+
 	return nil
 }
 

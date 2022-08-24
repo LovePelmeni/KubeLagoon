@@ -47,7 +47,12 @@ func (this *VirtualMachineIPAddress) ValidateCredentials() VirtualMachineIPAddre
 	// Checks if the Input has appropriate format and has valid values 
 	var InvalidValues []string // array of the Invalid Value Field names
 	FieldValueGenerators := map[string]func() string {
-
+		"Gateway": func() string {
+			return ""
+		},
+		"Netmask": func() string {
+			return ""
+		},
 	}
 
 	//  Validating Inputs 
@@ -61,7 +66,7 @@ func (this *VirtualMachineIPAddress) ValidateCredentials() VirtualMachineIPAddre
 
 	// Generating new Values if Some of the Are Empty 
 	for _, Field := range InvalidValues {
-		if slices.Contains(maps.Keys(FieldValueGenerators), Field){ 
+		if slices.Contains(maps.Keys(FieldValueGenerators), strings.ToTitle(Field)){ 
 			GeneratedValue := FieldValueGenerators[Field]()
 			reflect.ValueOf(this).FieldByName(Field).Set(reflect.ValueOf(GeneratedValue))
 		}

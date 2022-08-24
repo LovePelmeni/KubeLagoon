@@ -133,3 +133,38 @@ func (this *VirtualMachine) Delete() (*gorm.DB, error) {
 	Database.Model(&VirtualMachine{}).Unscoped().Model(&VirtualMachine{}).Delete(&this)
 	return Deleted, Deleted.Error
 }
+
+type SSHPublicKey struct {
+	gorm.Model
+	Key              []byte         `json:"Key" gorm:"type:varchar(10000);default:null;"`
+	VirtualMachineId string         `json:"VirtualMachineId" gorm:"unique;primaryKey"`
+	VirtualMachine   VirtualMachine `gorm:"foreignKey:VirtualMachine;references:VirtualMachineId"`
+}
+
+func NewSshPublicKey(KeyContent []byte) *SSHPublicKey {
+	return &SSHPublicKey{
+		Key: KeyContent,
+	}
+}
+
+func (this *SSHPublicKey) Create() (*gorm.DB, error) {
+	// Only Create new
+	newSSHKey := Database.Model(&SSHPublicKey{}).Create(this)
+	return newSSHKey, newSSHKey.Error
+}
+
+func (this *SSHPublicKey) Delete() (*gorm.DB, error) {
+	// Deletes Public SSH Key Related to the Virtual Machine
+	Deleted := Database.Clauses(clause.OnConflict{Columns: []clause.Column{
+		{
+			Name:  "virtual_machine_id", // Checking if ForeignKey Constraint is not Throwing An Error
+			Table: "SSHPublicKey",
+		},
+		{
+			Name:  "virtual_machine",
+			Table: "SSHPublicKey",
+		},
+	}, DoUpdates: clause.AssignmentColumns([]string{})}).Model(&SSHPublicKey{}).Delete(&this)
+	Database.Model(&SSHPublicKey{}).Unscoped().Delete(&this)
+	return Deleted, Deleted.Error
+}
