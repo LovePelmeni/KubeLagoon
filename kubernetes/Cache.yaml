@@ -36,3 +36,26 @@ spec:
             - containerPort: 6379 
               protocol: TCP 
           imagePullPolicy: IfNotPresent 
+          volumeMounts:
+            - name: redis-config
+              mount: /etc/redis/redis.conf 
+
+      volumes:
+        - name: redis-config 
+          configMap:
+            - name: redis-config-map 
+              namespace: app-namespace 
+              items:
+                key: redis.conf 
+                subPath: redis.conf
+
+--- 
+
+apiVersion: v1
+kind: ConfigMap 
+metadata:
+  name: redis-config-map 
+  namespace: app-namespace 
+data:
+  redis.conf: | 
+    max_connections 1024;

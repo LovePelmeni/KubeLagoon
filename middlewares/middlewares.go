@@ -42,7 +42,7 @@ func IsVirtualMachineOwnerMiddleware() gin.HandlerFunc {
 	}
 }
 
-func IdempotencyMiddleware() gin.HandlerFunc {
+func RequestIdempotencyMiddleware() gin.HandlerFunc {
 	// Middleware checks for the Idempotency Of the HTTP Requests 
 	// To Avoid Unpleasent Situations 
 	return func(RequestContext *gin.Context){

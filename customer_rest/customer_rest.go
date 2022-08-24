@@ -166,10 +166,20 @@ func DeleteCustomerRestController(RequestContext *gin.Context) {
 	}
 }
 
-
 func GetCustomerProfileRestController(RequestContext *gin.Context) {
 	// Returns Customer's Profile, based on the Jwt token passed
+	Token := RequestContext.GetHeader("jwt-token")
+	if len(Token) == 0 {RequestContext.JSON(http.StatusForbidden, gin.H{"Error": "UnAuthorized"}); return }
+	JwtCredentials, JwtError := authentication.GetCustomerJwtCredentials(Token)
+	if JwtError != nil {RequestContext.JSON(http.StatusForbidden, gin.H{"Error": "Invalid Jwt Token"}); return } 
+
+	if Customer := models.Database.Model(&models.Customer{}).Where("id = ?", JwtCredentials["user_id"],
+    JwtCredentials["username"], JwtCredentials["email"]).Find(&Customer); Customer.Error != nil {RequestContext.JSON(
+	http.StatusBadRequest, gin.H{"Error": "No Such Profile has been Found"})}else{
+	RequestContext.JSON(http.StatusOK, gin.H{"Profile": Customer})}
 }
+
+
 func SupportRestController(RequestContext *gin.Context) {
 	// Rest Controller, that is Responsible for Sending out Messages / Notifications to the Support Email
 }
