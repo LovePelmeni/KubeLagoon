@@ -36,4 +36,3 @@ spec:
             - containerPort: 6379 
               protocol: TCP 
           imagePullPolicy: IfNotPresent 
-

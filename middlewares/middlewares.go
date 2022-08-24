@@ -1,11 +1,17 @@
 package middlewares
 
 import (
+	"fmt"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/models"
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis"
 )
 
 func JwtAuthenticationMiddleware() gin.HandlerFunc {
@@ -40,6 +46,28 @@ func IdempotencyMiddleware() gin.HandlerFunc {
 	// Middleware checks for the Idempotency Of the HTTP Requests 
 	// To Avoid Unpleasent Situations 
 	return func(RequestContext *gin.Context){
+		RedisClient := redis.NewClient(&redis.Options{
+			Password: os.Getenv("CACHE_STORAGE_PASSWORD"),
+			DB: func() int {Db, _ := strconv.Atoi(os.Getenv("CACHE_STORAGE_DB_NUMBER")); return Db}(), 
+			Addr: fmt.Sprintf("%s:%s", os.Getenv("CACHE_STORAGE_HOST"), os.Getenv("CACHE_STORAGE_PORT")), 
+		})
+		RequestNumber := RequestContext.GetHeader("X-Idempotency-Key")
+		var UrlCacheKey string 
+		for _, Property := range RequestContext.Params {
+			UrlCacheKey += fmt.Sprintf("&%s", Property)
+		}
+		if Result, Error := RedisClient.Get(UrlCacheKey + "=" + RequestNumber).Result(); Error != nil {
+			RedisClient.Set(UrlCacheKey + "=" + RequestNumber, "Request is Being Processed", 10 * time.Minute)
+		}else{
+			MapValuesResponse := func() map[string]string{
+				var Map map[string]string;  
+				for Index, Key := range strings.Split(Result, "=")[0] {
+					Map[string(Key)] = string(strings.Split(Result, "=")[1][Index])
+				}
+				return Map
+			}()
+			RequestContext.AbortWithStatusJSON(http.StatusNotModified, MapValuesResponse)
+		}
 	}
 }
 
