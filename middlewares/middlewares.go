@@ -36,6 +36,11 @@ func IsVirtualMachineOwnerMiddleware() gin.HandlerFunc {
 	}
 }
 
+func IdempotencyMiddleware() gin.HandlerFunc {
+	return func(RequestContext *gin.Context){
+	}
+}
+
 func AuthorizationRequiredMiddleware() gin.HandlerFunc {
 	return func(RequestContext *gin.Context) {
 

@@ -28,7 +28,7 @@ func (this *ParseTestSuite) TestParsers() {
 			{"Testing Datacenter Configuration Parser using Valid Configuration", func(t *testing.T) {
 				SerializedConfig, _ := json.Marshal(struct {
 					Datacenter struct {
-						ItemPath string `json"ItemPath"`
+					  ItemPath string `json:"ItemPath"`
 					} `json:"Datacenter"`
 				}{})
 				Configuration, ParserError := parsers.NewHardwareConfig(string(SerializedConfig))

@@ -32,15 +32,16 @@ var (
 	Client govmomi.Client
 )
 
-// package provides Rest API Controllers, that Provides Info about the Virtual Machine Server Health Metrics
+// package consists of Rest API Controllers, that Provides Info about the Virtual Machine Server Health Metrics
 
 func GetVirtualMachineHealthMetricRestController(RequestContext *gin.Context) {
 
 	type HealthMetric struct {
-		Storage healthcheck.StorageInfo     `json:"StorageInfo"`
-		State   healthcheck.AliveInfo       `json:"StateInfo"`
-		Memory  healthcheck.MemoryUsageInfo `json:"MemoryInfo"`
-		Cpu     healthcheck.CPUInfo         `json:"CpuInfo"`
+		Storage    healthcheck.StorageInfo     `json:"StorageInfo"`
+		State      healthcheck.AliveInfo       `json:"StateInfo"`
+		Memory     healthcheck.MemoryUsageInfo `json:"MemoryInfo"`
+		Cpu        healthcheck.CPUInfo         `json:"CpuInfo"`
+		HostSystem healthcheck.HostSystemInfo  `json:"HostSystemInfo"`
 	}
 
 	// Receiving Virtual Machine Instance
@@ -64,10 +65,11 @@ func GetVirtualMachineHealthMetricRestController(RequestContext *gin.Context) {
 
 	HealthCheckManager := healthcheck.NewVirtualMachineHealthCheckManager()
 	HealthCheckMetrics := HealthMetric{
-		Storage: HealthCheckManager.GetStorageUsageMetrics(),
-		Cpu:     HealthCheckManager.GetCpuMetrics(),
-		Memory:  HealthCheckManager.GetMemoryUsageMetrics(),
-		State:   HealthCheckManager.GetAliveMetrics(),
+		Storage:    HealthCheckManager.GetStorageUsageMetrics(),
+		Cpu:        HealthCheckManager.GetCpuMetrics(),
+		Memory:     HealthCheckManager.GetMemoryUsageMetrics(),
+		State:      HealthCheckManager.GetAliveMetrics(),
+		HostSystem: HealthCheckManager.GetHostSystemHealthMetrics(),
 	}
 	RequestContext.JSON(http.StatusOK, gin.H{"Metrics": HealthCheckMetrics})
 }

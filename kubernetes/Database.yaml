@@ -83,4 +83,3 @@ spec:
   claimRef:
     - name: postgres-claim 
       namespace: app-namespace 
-
