@@ -70,7 +70,7 @@ func (this *DatacenterConfig) GetDatacenter(Client vim25.Client) (*mo.Datacenter
 		return MoDatacenter, nil
 	}
 }
-
+ 
 type VirtualMachineCustomSpec struct {
 	// Represents Configuration of the Virtual Machine
 

@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"reflect"
+	_ "reflect"
 	"strings"
 	"time"
 
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
+	"github.com/vmware/govmomi/view"
 
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/vim25"
@@ -66,7 +69,10 @@ func NewDatacenterResourceRequirements(Requirements string) (*DatacenterResource
 
 type NetworkResourceRequirements struct {
 	ResourceRequirements
-	Private bool `json:"Private"`
+	Private struct {
+		IpSubnetAddr string `json:"IpSubnetAddr; omitempty;"`
+		IpSubnetMask string `json:"IpSubnetMask; omitempty;"`
+	} `json:"Private;omitempty"`
 }
 
 func NewNetworkResourceRequirements() *NetworkResourceRequirements {
@@ -98,8 +104,8 @@ func NewDatastoreResourceRequirements(FreeSpace int32, Capacity int64) *Datastor
 
 type StorageResourceRequirements struct {
 	ResourceRequirements
-	FreeSpace int32
-	Capacity  int64
+	FreeSpace int32 `json:"FreeSpace"`
+	Capacity  int64 `json:"Capacity"`
 }
 
 func NewStorageResourceRequirements() *StorageResourceRequirements {
@@ -108,8 +114,8 @@ func NewStorageResourceRequirements() *StorageResourceRequirements {
 
 type ClusterComputeResourceRequirements struct {
 	ResourceRequirements
-	CpuNum            int32
-	MemoryInMegabytes int64
+	CpuNum            int32 `json:"CpuNum"`
+	MemoryInMegabytes int64 `json:"MemoryInMegabytes"`
 }
 
 func NewClusterComputeRequirements() *ClusterComputeResourceRequirements {
@@ -256,10 +262,25 @@ func (this *NetworkResourceManager) GetAvailableResources(Datacenter *mo.Datacen
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*20)
 	defer CancelFunc()
 
-	if Requirements.Private == true {
-		// Creating New Private Network 
-		 
+	// Checking if Customer Has Specified Any Configuration for the Private Network 
+	// If so, instead of picking up existing one from the Public List, we are going to craete 
+	// a new one, and make it Isolated from others
+
+	if !reflect.ValueOf(Requirements.Private).IsNil() {
+		// Creating New Private Network if Customer Decided to Create One
+		Manager := view.NewManager(&this.Client)
+		Network, NetworkError := Manager.CreateContainerView(TimeoutContext,
+		this.Client.ServiceContent.RootFolder, []string{"Network"}, false) 
+
+		if NetworkError != nil {ErrorLogger.Printf(
+		"Failed to Initialize New Network, Error: %s", NetworkError); return Networks}
+
+		Networks = append(Networks, object.NewReference(
+		&this.Client, Network.Reference()).(*object.Network))
 	}
+
+	// if the Customer has chosen the Public Network, looking for the Public One 
+	// that matches specified Requirements 
 
 	for _, Network := range Datacenter.Network {
 		var MoNetwork mo.Network

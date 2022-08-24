@@ -37,18 +37,40 @@ func IsVirtualMachineOwnerMiddleware() gin.HandlerFunc {
 }
 
 func IdempotencyMiddleware() gin.HandlerFunc {
+	// Middleware checks for the Idempotency Of the HTTP Requests 
+	// To Avoid Unpleasent Situations 
 	return func(RequestContext *gin.Context){
 	}
 }
 
 func AuthorizationRequiredMiddleware() gin.HandlerFunc {
-	return func(RequestContext *gin.Context) {
+	// Middleware checks for customer is being Authorized 
+	return func(context *gin.Context) {
+		if len(context.GetHeader("jwt-token")) == 0 {
+			context.AbortWithStatusJSON(
+				http.StatusForbidden, gin.H{"Error": "Authorized"})
+		}
 
+		if _, Error := authentication.GetCustomerJwtCredentials(
+			context.GetHeader("jwt-token")); Error != nil {
+			context.AbortWithStatusJSON(
+				http.StatusForbidden, gin.H{"Error": "Authorized"})
+		}
 	}
 }
 
 func NonAuthorizationRequiredMiddleware() gin.HandlerFunc {
-	return func(RequestContext *gin.Context) {
+	// Middleware checks for the Customer is not being authorized 
+	return func(context *gin.Context) {
+		if len(context.GetHeader("jwt-token")) != 0 {
+			context.AbortWithStatusJSON(
+				http.StatusForbidden, gin.H{"Error": "Authorized"})
+		}
 
+		if _, Error := authentication.GetCustomerJwtCredentials(
+			context.GetHeader("jwt-token")); Error == nil {
+			context.AbortWithStatusJSON(
+				http.StatusForbidden, gin.H{"Error": "Authorized"})
+		}
 	}
 }

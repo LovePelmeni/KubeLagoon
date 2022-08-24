@@ -135,6 +135,7 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 	// On Parse Failure Returning Bad Request with Error Explanation
 	if InvalidError != nil {
 		RequestContext.JSON(http.StatusBadRequest, gin.H{"Error": "Invalid Configuration has been Passed."})
+		return 
 	}
 
 	// Initializing Hardware Configuration Based on the Resource Requirements
