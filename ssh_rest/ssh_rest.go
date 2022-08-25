@@ -2,7 +2,6 @@ package ssh_rest
 
 import (
 	"net/http"
-
 	"log"
 	"os"
 

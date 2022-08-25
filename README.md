@@ -70,6 +70,6 @@ curl -X GET -f http://localhost:3000/ping/
 
 Great! Now you setup the Frontend Application for the Project and The Whole App is Fully Configured 
 
-You can go to your Browser at (http://localhost:3000/)["http://localhost:3000/"] and it will redirect you to the Cloud Infrastructure App 
+You can go to your Browser at "http://localhost:3000/" and it will redirect you to the Cloud Infrastructure App 
 
 

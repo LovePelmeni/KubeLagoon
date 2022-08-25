@@ -2,23 +2,13 @@ package installer
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"log"
 	"net/url"
 	"os"
 	"strings"
-	"time"
-
-	"github.com/LovePelmeni/Infrastructure/host_system"
-	"github.com/vmware/govmomi/object"
-	"github.com/vmware/govmomi/property"
-
-	"github.com/vmware/govmomi/vim25/mo"
+	"github.com/LovePelmeni/Infrastructure/models"
 	"golang.org/x/crypto/ssh"
-
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 )
 
 var (
@@ -124,25 +114,22 @@ type EnvironmentDependencyInstallerInterface interface {
 }
 
 
-type EnviromentDependencyInstaller struct {
-	VirtualMachine object.VirtualMachine
+type EnviromentDependencyInstaller struct {}
+
+func NewEnviromentDependencyInstaller() *EnviromentDependencyInstaller {
+	return &EnviromentDependencyInstaller{}
 }
 
-func (this *EnviromentDependencyInstaller) GetSshConnection() (*ssh.Client, error){
+func (this *EnviromentDependencyInstaller) GetSshConnection(VirtualMachineId string) (*ssh.Client, error){
 	// Returns SSH Connection to the VM Server 
-	ClientConfig := &ssh.Config{
-
+	var VirtualMachine models.VirtualMachine
+	models.Database.Model(&models.VirtualMachine{}).Where("id = ?", VirtualMachineId).Find(&VirtualMachine)
+	ClientConfig := &ssh.ClientConfig{
+		Timeout: 10,
+		User: "root", 
+		Auth: []ssh.AuthMethod{},
 	}
-	var MoVirtualMachine mo.VirtualMachine
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
-	defer CancelFunc()
-
-	RetrieveError := property.DefaultCollector(this.VirtualMachine.Client()).RetrieveOne(
-	TimeoutContext, this.VirtualMachine.Reference(), []string{"guest"}, &MoVirtualMachine)
-
-	VirtualMachineIPAddress := MoVirtualMachine.Config.ToConfigSpec().VAppConfig.GetVmConfigSpec().IpAssignment
-
-	NewSshConnection, ConnectionError := ssh.Dial("TCP", VirtualMachineIPAddress, ClientConfig)
+	NewSshConnection, ConnectionError := ssh.Dial("TCP", VirtualMachine.IPAddress, ClientConfig)
 	return NewSshConnection, ConnectionError
 }
 
@@ -151,45 +138,28 @@ func (this *EnviromentDependencyInstaller) GetDependency(PackageName string, Ins
 	return NewDependency(PackageName, url.URL{Path: InstallUrl}), nil
 }
 
-func (this *EnviromentDependencyInstaller) InstallDependencies(Dependencies []Dependency) (int, int, error) {
+func (this *EnviromentDependencyInstaller) GetLinuxDeploymentCommand()
 
-	// Installes all Dependencies that has been Provided by the Customer to the Virtual Machine 
+func (this *EnviromentDependencyInstaller) GetWindowsDeploymentCommand()
 
-	SSHServerConnection, SSHError := this.GetSshConnection()
-	if SSHError != nil {return 0, 0, SSHError}
+func (this *EnviromentDependencyInstaller) GetCentosDeploymentCommand()
 
-	var MoVirtualMachine mo.VirtualMachine
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
-	defer CancelFunc()
 
-	RetrieveError := property.DefaultCollector(this.VirtualMachine.Client()).RetrieveOne(
-	TimeoutContext, this.VirtualMachine.Reference(), []string{"guest"}, &MoVirtualMachine)
-
-	if RetrieveError != nil {return 0, 0, RetrieveError}
-
-	//Checking Operational System of the VM Server 
-
-	LinuxDistributions := maps.Keys(host_system.LinuxDistributions)
-	if !slices.Contains(LinuxDistributions, strings.ToLower(MoVirtualMachine.Guest.GuestId)) {
-		return 0, 0, errors.New("Unsupported Operational System")
+func (this *EnviromentDependencyInstaller) InstallDeploymentDependencies(SshConnection ssh.Client) error {
+	// Installs deployment Dependencies such as Docker and Docker-Compose and Kubectl
+	var InstallationCommands = []string{
+		"curl -fsSL https://get.docker.com -o get-docker.sh" +
+		"$ DRY_RUN=1 sh ./get-docker.sh", 
+		"usermod -aG docker root",
 	}
-
-	var SuccessInstallPackages int
-	var FailedInstallPackages int
-
-	CommandManager := NewInstallCommandFormer(this.VirtualMachine)
-	for _, Dependency := range Dependencies {
-
-		DependencyCommands := CommandManager.GetCommands(Dependency)
-
-		if InstalledOutput := Dependency.UploadToVm(
-		DependencyCommands, *SSHServerConnection); InstalledOutput == "ERROR" {
-			ErrorLogger.Printf("Failed to Install Dependency with Name: %s, Error: %s", 
-			Dependency.PackageName, InstalledOutput); 
-			FailedInstallPackages ++; continue 
-		}else{
-			SuccessInstallPackages ++
-		}
+	var Responses []string 
+	NewSession, SSHError := SshConnection.NewSession()
+	if SSHError != nil {return SSHError}
+	for _, Command := range InstallationCommands {
+		var stdOut bytes.Buffer 
+		ResponseError := NewSession.Run(Command)
+		if len(stdOut.String()) != 0 {Responses = append(Responses, )}
+		if strings.Contains(stdOut.String(), "error") || ResponseError != nil {
+		return errors.New(ResponseError.Error())}
 	}
-	return SuccessInstallPackages, FailedInstallPackages, nil
 }

@@ -421,6 +421,13 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 	HostSystemCustomizationTask, HostSystemCustomizationError := object.NewReference(&this.VimClient, vm.Reference()).(*object.VirtualMachine).Customize(ConfigureTimeoutContext, HostSystemCustomizationConfig)
 	NetworkCustomizationTask, NetworkCustomizationError := object.NewReference(&this.VimClient, vm.Reference()).(*object.VirtualMachine).Customize(ConfigureTimeoutContext, *NetworkConfig)
 
+	if ConfiguredError != nil {
+		// If Failing To Apply First Configuration, Destroying Virtual Machine
+		ErrorLogger.Printf("Failed to Configure Virtual Machine, Error has Occurred")
+		_, Error := this.DestroyVirtualMachine(VirtualMachine)
+		return nil, Error
+	}
+
 	if HostSystemCustomizationError != nil {
 		ErrorLogger.Printf("Failed to Apply Customization Specification to the VM Server with OS Specifications, Error: %s", HostSystemCustomizationError)
 		return nil, HostSystemCustomizationError
@@ -429,11 +436,6 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 	if NetworkCustomizationError != nil {
 		ErrorLogger.Printf("Failed to Setup Customized Network")
 		return nil, NetworkCustomizationError
-	}
-
-	if ConfiguredError != nil {
-		ErrorLogger.Printf("Failed to Configure Virtual Machine, Error has Occurred")
-		return nil, ConfiguredError
 	}
 
 	// Waiting for Hardware and Resource Configuration to Apply
@@ -477,6 +479,14 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 			"Failed to Upload SSH Private Key to the VM OS, Error: %s", UploadSSHError)
 		return nil, UploadSSHError
 	}
+
+	// Installing Initial Dependencies on the Virtual Machine 
+
+	DepInstaller := dependency_installer.NewEnviromentDependencyInstaller()
+	SshConnection := DepInstaller.GetSshConnection(IPAddress)
+	Installed, InstallError := DepInstaller.InstallDependencies(VirtualMachine)
+	if InstallError != nil {return nil, InstallError}
+
 	return &VmInfo{
 		IPAddress:    VmIPAddress,
 		SshPublicKey: *PublicKey,
@@ -567,6 +577,6 @@ func (this *VirtualMachineManager) DestroyVirtualMachine(VirtualMachine *object.
 	return true, nil
 }
 
-func (this *VirtualMachineManager) CloneVirtualMachine(TimeoutContext context.Context, VirtualMachine *object.VirtualMachine) {
-	// Clones Existing Virtual Machine Server
+func (this *VirtualMachineManager) ReplicateVirtualMachine(TimeoutContext context.Context, VirtualMachine *object.VirtualMachine) {
+	// Replicates Virtual Machine Server
 }
