@@ -46,12 +46,16 @@ func (this *VirtualMachineIPAddress) ValidateCredentials() VirtualMachineIPAddre
 
 	// Checks if the Input has appropriate format and has valid values 
 	var InvalidValues []string // array of the Invalid Value Field names
-	FieldValueGenerators := map[string]func() string {
-		"Gateway": func() string {
-			return ""
+	FieldValueGenerators := map[string]func() types.CustomizationDhcpIpGenerator {
+		
+		"Gateway": func() types.CustomizationDhcpIpGenerator {
+			return types.CustomizationDhcpIpGenerator{}
 		},
-		"Netmask": func() string {
-			return ""
+		"Netmask": func() types.CustomizationDhcpIpGenerator {
+			return types.CustomizationDhcpIpGenerator{}
+		},
+		"Hostname": func() types.CustomizationDhcpIpGenerator {
+			return types.CustomizationDhcpIpGenerator{}
 		},
 	}
 

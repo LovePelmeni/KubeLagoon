@@ -3,17 +3,19 @@ package ssh_config
 import (
 	"context"
 	"errors"
-	"io/fs"
-	"io/ioutil"
+	"fmt"
+	"io"
 	"log"
 	"net/url"
 	"os"
 	"time"
 
 	"github.com/vmware/govmomi/object"
+	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/vapi/appliance/access/ssh"
 	"github.com/vmware/govmomi/vapi/rest"
 	"github.com/vmware/govmomi/vim25"
+	"github.com/vmware/govmomi/vim25/mo"
 )
 
 var (
@@ -60,6 +62,13 @@ type VirtualMachineSshManager struct {
 	VirtualMachine *object.VirtualMachine
 }
 
+func NewVirtualMachineSshManager(Client vim25.Client, VirtualMachine *object.VirtualMachine) *VirtualMachineSshManager {
+	return &VirtualMachineSshManager{
+		Client:         Client,
+		VirtualMachine: VirtualMachine,
+	}
+}
+
 func (this *VirtualMachineSshManager) GetDefaultPEMPath() string {
 	// Returns Default SSH Path on the VM, where the SSH Keys is going to be Uploaded To
 	return "/ssh-pem/"
@@ -67,11 +76,27 @@ func (this *VirtualMachineSshManager) GetDefaultPEMPath() string {
 
 func (this *VirtualMachineSshManager) GetVirtualMachineUrl() (*url.URL, error) {
 	// Returns Full Virtual Machine Url
-	VmFolder := this.VirtualMachine.Client().ServiceContent.RootFolder.Value
-	return &url.URL{Host: os.Getenv("VMWARE_SOURCE_IP"),
+	var MoVirtualMachine mo.VirtualMachine
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
+	defer CancelFunc()
+
+	Collector := property.DefaultCollector(&this.Client)
+	MoVirtualMachineError := Collector.RetrieveOne(TimeoutContext,
+		this.VirtualMachine.Reference(), []string{"*"}, &MoVirtualMachine)
+
+	if MoVirtualMachineError != nil {
+		ErrorLogger.Printf(
+			"Failed to Obtain Vm `MO` Version, Error: %s", MoVirtualMachineError)
+	}
+
+	return &url.URL{
+		Scheme: "vmrc",
+		Host:   MoVirtualMachine.Summary.Config.VmPathName,
 		User: url.UserPassword(os.Getenv("VMWARE_SOURCE_USERNAME"),
 			os.Getenv("VMWARE_SOURCE_PASSWORD")),
-		Path: VmFolder}, nil
+
+		RawQuery: fmt.Sprintf("moid=%s", this.VirtualMachine.Name()),
+		Path:     "/"}, nil
 }
 
 func (this *VirtualMachineSshManager) UploadSshKeys(Key PrivateKey) error {
@@ -97,6 +122,7 @@ func (this *VirtualMachineSshManager) UploadSshKeys(Key PrivateKey) error {
 	Access := ssh.Access{Enabled: true}
 
 	// Setting up PEM Paths....
+
 	PEMPathSetupError := SshManager.SetRootCAs(this.GetDefaultPEMPath())
 	if PEMPathSetupError != nil {
 		ErrorLogger.Printf("Failed to Setup Default Private Key Paths, Error: %s", PEMPathSetupError)
@@ -113,20 +139,32 @@ func (this *VirtualMachineSshManager) UploadSshKeys(Key PrivateKey) error {
 	return nil
 }
 
-func (this *VirtualMachineSshManager) GenerateSshKeys(Manager ssh.Manager) (*PrivateKey, error) {
-	// Returns Generated SSH Keys
+func (this *VirtualMachineSshManager) GenerateSshKeys() (*PublicKey, *PrivateKey, error) {
+	// Returns Generated SSH Keys for the Virtual Machine Server
 
+	Manager := ssh.NewManager(rest.NewClient(&this.Client))
 	GeneratedCertificate := Manager.Certificate()
 	PrivateKey := GeneratedCertificate.Leaf.Raw
 	PublicKey := Manager.Certificate().Leaf.RawSubjectPublicKeyInfo
 
 	var GenerationError error
 
-	NewPrivateKeyFileError := ioutil.WriteFile("ssh-key.pem", PrivateKey, fs.FileMode(fs.ModeExclusive))
-	NewPublicKeyFileError := ioutil.WriteFile("ssh-key.json", PublicKey, fs.FileMode(fs.ModeExclusive))
+	// Writing Private Key to the Temporary Buffer
+	PrivateKeyWriter := io.MultiWriter()
+	PrivateKeyWriter.Write(PrivateKey)
+
+	// Writing Public Key to the Temporary Buffer
+	PublicKeyWriter := io.MultiWriter()
+	PublicKeyWriter.Write(PublicKey)
+
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
+	defer CancelFunc()
+
+	NewPrivateKeyFileError := Manager.WriteFile(TimeoutContext, "ssh_key.pem", io.MultiReader(), 2048, nil, PrivateKeyWriter)
+	NewPublicKeyFileError := Manager.WriteFile(TimeoutContext, "ssh_key.pub", io.MultiReader(), 2048, nil, PublicKeyWriter)
 
 	if NewPrivateKeyFileError != nil || NewPublicKeyFileError != nil {
 		GenerationError = errors.New("Failed to Generate SSH Keys")
 	}
-	return NewPrivateKey(PrivateKey, "ssh-key.pem"), GenerationError
+	return NewPublicKey(PublicKey, "ssh_key.pub"), NewPrivateKey(PrivateKey, "ssh_key.pem"), GenerationError
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/exceptions"
 	"github.com/LovePelmeni/Infrastructure/parsers"
+	"github.com/LovePelmeni/Infrastructure/ssh_config"
 
 	"github.com/LovePelmeni/Infrastructure/models"
 
@@ -56,6 +57,13 @@ func NewDeployResourceKeys(NetworkKey string, StorageKey string) *ResourceKeys {
 		NetworkKey: NetworkKey,
 		StorageKey: StorageKey,
 	}
+}
+
+type VmInfo struct {
+	// Response Configuration after the Config has been Applied Successfully
+	IPAddress        string               `json:"IPAddress"`
+	SshPublicKey     ssh_config.PublicKey `json:"PublicKey"`
+	NetworkIPAddress string               `json:"NetworkIPAddress"`
 }
 
 type VirtualMachineResourceKeyManager struct {
@@ -313,7 +321,7 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 	return nil, exceptions.VMDeployFailure()
 }
 
-func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.VirtualMachine, Configuration parsers.VirtualMachineCustomSpec) error {
+func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.VirtualMachine, Configuration parsers.VirtualMachineCustomSpec) (*VmInfo, error) {
 
 	// Applies Custom Configuration: Num's of CPU's, Memory etc... onto the Initialized Virtual Machine
 
@@ -324,24 +332,24 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 	// Receiving OS HostSystem Config
 	HostSystemConfig, HostSystemCustomizationConfig, HostSystemError := Configuration.GetHostSystemConfig(this.VimClient) // HostSystem Configuration for the Vm
 	if HostSystemError != nil {
-		return HostSystemError
+		return nil, HostSystemError
 	}
 	// Getting Resource Storage Config
 	ResourceConfig, ResourceError := Configuration.GetResourceConfig(this.VimClient) // Resource (CPU, Memory) Configuration for the VM
 	if ResourceError != nil {
-		return ResourceError
+		return nil, ResourceError
 	}
 
 	// Getting Disk Storage Config
 	DiskStorageConfig, DiskError := Configuration.GetDiskStorageConfig(this.VimClient) // Disk Storage Configuration for the VM
 	if DiskError != nil {
-		return DiskError
+		return nil, DiskError
 	}
 
 	// Getting Network Config
 	NetworkConfig, NetworkError := Configuration.GetNetworkConfig(this.VimClient)
 	if NetworkError != nil {
-		return NetworkError
+		return nil, NetworkError
 	}
 
 	vm := &mo.VirtualMachine{}
@@ -380,13 +388,13 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 
 	if DeviceError != nil {
 		ErrorLogger.Printf(DeviceError.Error())
-		return errors.New("Failed to Receive Available Devices for the Virtual Machine")
+		return nil, errors.New("Failed to Receive Available Devices for the Virtual Machine")
 	}
 	DiskController, ControllerError := Devices.FindDiskController("scsi")
 
 	if ControllerError != nil {
 		ErrorLogger.Printf(ControllerError.Error())
-		return errors.New("Failed to Receive DiskController for the Virtual Machine")
+		return nil, errors.New("Failed to Receive DiskController for the Virtual Machine")
 	}
 
 	// Assigning Resource Configurations
@@ -400,6 +408,7 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 		MemoryHotAddEnabled: ResourceConfig.MemoryHotAddEnabled,
 		Firmware:            string(types.GuestOsDescriptorFirmwareTypeBios),
 		DeviceChange:        []types.BaseVirtualDeviceConfigSpec{DiskStorageConfig},
+		Files:               &types.VirtualMachineFileInfo{},
 	}
 
 	// Setting up Configure Response Timeout on 5 mins...
@@ -414,45 +423,65 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 
 	if HostSystemCustomizationError != nil {
 		ErrorLogger.Printf("Failed to Apply Customization Specification to the VM Server with OS Specifications, Error: %s", HostSystemCustomizationError)
-		return HostSystemCustomizationError
+		return nil, HostSystemCustomizationError
 	}
 
 	if NetworkCustomizationError != nil {
 		ErrorLogger.Printf("Failed to Setup Customized Network")
-		return NetworkCustomizationError
+		return nil, NetworkCustomizationError
 	}
 
 	if ConfiguredError != nil {
 		ErrorLogger.Printf("Failed to Configure Virtual Machine, Error has Occurred")
-		return ConfiguredError
+		return nil, ConfiguredError
 	}
 
 	// Waiting for Hardware and Resource Configuration to Apply
 	WaitResponseError := ConfigureTask.Wait(ConfigureTimeoutContext)
 	if WaitResponseError != nil {
 		ErrorLogger.Printf("Failed to Configure Virtual Machine, Error: %s", WaitResponseError)
-		return WaitResponseError
+		return nil, WaitResponseError
 	}
 	// Waiting for OS Customization Response
 	WaitCustomizationResponseError := HostSystemCustomizationTask.Wait(ConfigureTimeoutContext)
 	if WaitCustomizationResponseError != nil {
 		ErrorLogger.Printf("Failed to Configure OS Customization Specification for the VM Server, Error: %s", WaitCustomizationResponseError)
-		return WaitCustomizationResponseError
+		return nil, WaitCustomizationResponseError
 	}
 	// Waiting for the Network Customization Response
 	WaitNetworkCustomizationError := NetworkCustomizationTask.Wait(ConfigureTimeoutContext)
 	if WaitNetworkCustomizationError != nil {
 		ErrorLogger.Printf("Failed to Apply Network Configuration, Error: %s", WaitNetworkCustomizationError)
-		return WaitNetworkCustomizationError
+		return nil, WaitNetworkCustomizationError
 	}
-
 	// Applying SSH Credentials to the Virtual Machine Server....
 
-	SSHManager := ssh_config.NewVirtualMachineSshManager(this.VimClient)
-	GeneratedSSHKeys := SSHManager.GenerateSSHKeys()
-	UploadSSHError := SSHManager.UploadSSHKeys()
+	NewVirtualMachine := object.NewVirtualMachine(&this.VimClient, vm.Reference())
 
-	return nil
+	VmIPAddress, VmIPError := NewVirtualMachine.WaitForIP(TimeoutContext, true)
+	if VmIPError != nil {
+		ErrorLogger.Printf("Failed to Fetch IP Addresses for the VM, Errors: [%s]", VmIPError)
+	}
+
+	// Setting up SSH Credentials for the Virtual Machine
+	SSHManager := ssh_config.NewVirtualMachineSshManager(this.VimClient, VirtualMachine)
+	PublicKey, PrivateKey, SSHError := SSHManager.GenerateSshKeys()
+	if SSHError != nil {
+		ErrorLogger.Printf("Failed to Generate SSH Keys for the VM, Error: %s", SSHError)
+		return nil, SSHError
+	}
+	UploadSSHError := SSHManager.UploadSshKeys(*PrivateKey)
+
+	if UploadSSHError != nil {
+		ErrorLogger.Printf(
+			"Failed to Upload SSH Private Key to the VM OS, Error: %s", UploadSSHError)
+		return nil, UploadSSHError
+	}
+
+	return &VmInfo{
+		IPAddress:    VmIPAddress,
+		SshPublicKey: *PublicKey,
+	}, nil
 }
 
 func (this *VirtualMachineManager) StartVirtualMachine(VirtualMachine *object.VirtualMachine) error {
@@ -537,4 +566,8 @@ func (this *VirtualMachineManager) DestroyVirtualMachine(VirtualMachine *object.
 	InfoLogger.Printf("Virtual Machine with ItemPath: %s has been Destroyed",
 		VirtualMachine.InventoryPath)
 	return true, nil
+}
+
+func (this *VirtualMachineManager) CloneVirtualMachine(TimeoutContext context.Context, VirtualMachine *object.VirtualMachine) {
+	// Clones Existing Virtual Machine Server
 }

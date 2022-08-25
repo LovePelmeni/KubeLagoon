@@ -226,11 +226,12 @@ func DeployVirtualMachineRestController(RequestContext *gin.Context) {
 
 	// Applying Converted Configuration to the Virtual Machine Instance
 
-	ApplyError := Deployer.ApplyConfiguration(VirtualMachine, *VmCustomConfig)
+	VmInfo, ApplyError := Deployer.ApplyConfiguration(VirtualMachine, *VmCustomConfig)
 
 	switch ApplyError {
 	case nil:
-		RequestContext.JSON(http.StatusOK, gin.H{"Status": "Applied"})
+		RequestContext.JSON(http.StatusOK, gin.H{"Status": "Applied", 
+		"IPAddress": VmInfo.IPAddress, "SshPublicKey": VmInfo.SshPublicKey})
 	default:
 		ErrorLogger.Printf("Failed to Apply Configuration to the Virtual Machine, Error: %s", ApplyError)
 		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": ApplyError})
