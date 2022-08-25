@@ -6,8 +6,11 @@ import (
 	"log"
 	"os"
 
+	"github.com/LovePelmeni/Infrastructure/deploy"
 	"github.com/LovePelmeni/Infrastructure/models"
+	"github.com/LovePelmeni/Infrastructure/ssh_config"
 	"github.com/gin-gonic/gin"
+	"github.com/vmware/govmomi/vim25"
 	"gorm.io/gorm"
 )
 
@@ -48,6 +51,54 @@ func GetCustomerVirtualMachineSSHKeysRestController(RequestContext *gin.Context)
 	RequestContext.JSON(http.StatusOK, gin.H{"QuerySet": Query})
 }
 
+func RecoverSSHKeyRestController(RequestContext *gin.Context) {
+	// Recovering SSH Keys, by picking them out from the Temp Buffer
+}
+
 func UpdateVirtualMachineSshKeysRestController(RequestContext *gin.Context) {
 	// Rest Controller, that Allows to Update SSH Key Pairs with new Ones
+	VirtualMachineId := RequestContext.Query("VirtualMachineId")
+	VmOwnerId := RequestContext.Query("Customerid")
+
+	var SshKeys models.SSHPublicKey
+	models.Database.Model(&models.SSHPublicKey{}).Where(
+		"virtual_machine_id = ?", VirtualMachineId).Find(&SshKeys)
+
+	VmManager := deploy.NewVirtualMachineManager(vim25.Client{})
+	VirtualMachine, FindError := VmManager.GetVirtualMachine(VirtualMachineId, VmOwnerId)
+
+	if FindError != nil {
+		RequestContext.JSON(http.StatusBadRequest,
+			gin.H{"Error": "Virtual Machine Server not Found"})
+		return
+	}
+
+	SshManager := ssh_config.NewVirtualMachineSshManager(vim25.Client{}, VirtualMachine)
+	PublicKey, PrivateKey, GenerateError := SshManager.GenerateSshKeys()
+
+	if GenerateError != nil {
+		RequestContext.JSON(http.StatusBadGateway,
+			gin.H{"Error": "Failed to Generate New SSH Keys"})
+		return
+	}
+
+	switch GenerateError {
+	case nil:
+		var UpdatedStatus bool = true
+		UploadedError := SshManager.UploadSshKeys(*PrivateKey)
+		_, Error := SshKeys.Update(PublicKey.Content, PublicKey.FileName)
+
+		if Error != nil {
+			UpdatedStatus = false
+			ErrorLogger.Printf("Failed to Update SSH keys for the VM wit ID: %s", VirtualMachineId)
+		}
+		if UploadedError != nil {
+			UpdatedStatus = false
+			RequestContext.JSON(
+				http.StatusCreated, gin.H{"NewPublicKey": PublicKey, "Status": UpdatedStatus})
+		}
+	default:
+		RequestContext.JSON(http.StatusBadGateway,
+			gin.H{"Error": "Failed to Generate New SSH Keys"})
+	}
 }

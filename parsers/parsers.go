@@ -81,6 +81,7 @@ type VirtualMachineCustomSpec struct {
 	} `json:"Metadata" xml:"Metadata"`
 
 	HostSystem struct {
+		Type 			 string `json:"Type"` // OS Distribution Type Like: Linux, Windows etc.... 
 		DistributionName string `json:"DistributionName"`
 		Bit              int64  `json:"Bit;omitempty"`
 	} `json:"HostSystem"`
