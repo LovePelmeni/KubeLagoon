@@ -400,6 +400,7 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 	// Assigning Resource Configurations
 	Devices.AssignController(DiskStorageConfig.Device, DiskController)
 	defaults := types.VirtualMachineConfigSpec{
+		GuestId: vm.Guest.GuestId,
 		NumCPUs:             ResourceConfig.NumCPUs,
 		NumCoresPerSocket:   ResourceConfig.NumCoresPerSocket,
 		MemoryMB:            ResourceConfig.MemoryMB,
@@ -408,7 +409,6 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 		MemoryHotAddEnabled: ResourceConfig.MemoryHotAddEnabled,
 		Firmware:            string(types.GuestOsDescriptorFirmwareTypeBios),
 		DeviceChange:        []types.BaseVirtualDeviceConfigSpec{DiskStorageConfig},
-		Files:               &types.VirtualMachineFileInfo{},
 	}
 
 	// Setting up Configure Response Timeout on 5 mins...
@@ -464,6 +464,7 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 	}
 
 	// Setting up SSH Credentials for the Virtual Machine
+
 	SSHManager := ssh_config.NewVirtualMachineSshManager(this.VimClient, VirtualMachine)
 	PublicKey, PrivateKey, SSHError := SSHManager.GenerateSshKeys()
 	if SSHError != nil {
@@ -471,13 +472,11 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 		return nil, SSHError
 	}
 	UploadSSHError := SSHManager.UploadSshKeys(*PrivateKey)
-
 	if UploadSSHError != nil {
 		ErrorLogger.Printf(
 			"Failed to Upload SSH Private Key to the VM OS, Error: %s", UploadSSHError)
 		return nil, UploadSSHError
 	}
-
 	return &VmInfo{
 		IPAddress:    VmIPAddress,
 		SshPublicKey: *PublicKey,

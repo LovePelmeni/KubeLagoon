@@ -12,8 +12,10 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/deploy"
 	"github.com/LovePelmeni/Infrastructure/models"
+	
 	"github.com/LovePelmeni/Infrastructure/parsers"
 	"github.com/LovePelmeni/Infrastructure/resources"
+
 	"github.com/gin-gonic/gin"
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/object"
@@ -308,7 +310,6 @@ func ShutdownVirtualMachineRestController(RequestContext *gin.Context) {
 	case StartedError == nil:
 		RequestContext.JSON(http.StatusCreated, gin.H{"Operation": "Success"})
 	}
-
 }
 
 func RemoveVirtualMachineRestController(RequestContext *gin.Context) {
@@ -389,8 +390,7 @@ func StartGuestOSRestController(RequestContext *gin.Context) {
 		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to Reboot Operational System"})
 		return
 	}
-	RequestContext.JSON(http.StatusOK, gin.H{"Status": "Rebooted"})
-
+	RequestContext.JSON(http.StatusOK, gin.H{"Status": "Started"})
 }
 
 func ShutdownGuestOsRestController(RequestContext *gin.Context) {
@@ -414,5 +414,5 @@ func ShutdownGuestOsRestController(RequestContext *gin.Context) {
 		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to shutdown Operational System"})
 		return
 	}
-	RequestContext.JSON(http.StatusOK, gin.H{"Status": "Rebooted"})
+	RequestContext.JSON(http.StatusOK, gin.H{"Status": "Shutdowned"})
 }

@@ -136,21 +136,30 @@ func (this *VirtualMachine) Delete() (*gorm.DB, error) {
 
 type SSHPublicKey struct {
 	gorm.Model
-	Key              []byte         `json:"Key" gorm:"type:varchar(10000);default:null;"`
-	VirtualMachineId string         `json:"VirtualMachineId" gorm:"unique;primaryKey"`
+	Key              []byte         `json:"Key" xml:"Key" gorm:"type:varchar(10000);default:null;"`
+	Filename         string         `json:"Filename" xml:"Filename" gorm:"type:varchar(100); not null;"`
+	VirtualMachineId string         `json:"VirtualMachineId" xml:"VirtualMachineId" gorm:"unique;primaryKey"`
 	VirtualMachine   VirtualMachine `gorm:"foreignKey:VirtualMachine;references:VirtualMachineId"`
 }
 
-func NewSshPublicKey(KeyContent []byte) *SSHPublicKey {
+func NewSshPublicKey(KeyContent []byte, Filename string) *SSHPublicKey {
 	return &SSHPublicKey{
 		Key: KeyContent,
+		Filename: Filename,
 	}
 }
 
 func (this *SSHPublicKey) Create() (*gorm.DB, error) {
-	// Only Create new
-	newSSHKey := Database.Model(&SSHPublicKey{}).Create(this)
+	// Creates New Record of the SSHPublicKey Model at the Database 
+	newSSHKey := Database.Model(&SSHPublicKey{}).Create(&this)
 	return newSSHKey, newSSHKey.Error
+}
+
+func (this *SSHPublicKey) Update(NewSshKey []byte, Filename ...string) (*gorm.DB, error) {
+	// Updates SSH Keys Locally at the Database 
+	Gorm := Database.Model(&SSHPublicKey{}).Unscoped().Where(
+	"virtual_machine_id = ?", this.VirtualMachineId).Update("Key", NewSshKey)
+	return Gorm, Gorm.Error
 }
 
 func (this *SSHPublicKey) Delete() (*gorm.DB, error) {

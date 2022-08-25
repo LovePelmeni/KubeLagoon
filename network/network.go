@@ -29,48 +29,48 @@ func init() {
 }
 
 type VirtualMachineIPAddress struct {
-	// Struct, Representing Virtual Machine IP Address 
-	Options types.BaseCustomizationOptions 
-	IP       string `json:"IP,omitempty"`
+	// Struct, Representing Virtual Machine IP Address
+	Options  types.BaseCustomizationOptions
+	IPv4     string `json:"IP,omitempty"`
 	Netmask  string `json:"Netmask,omitempty"`
 	Gateway  string `json:"Gateway,omitempty"`
 	Hostname string `json:"Hostname,omitempty"`
 }
 
-func (this *VirtualMachineIPAddress) GetValidationRegexPatterns() map[string]string{
-	// returns Slice of the Regexes 
+func (this *VirtualMachineIPAddress) GetValidationRegexPatterns() map[string]string {
+	// returns Slice of the Regexes
 	return map[string]string{}
 }
 
-func (this *VirtualMachineIPAddress) ValidateCredentials() VirtualMachineIPAddress{
+func (this *VirtualMachineIPAddress) ValidateCredentials() VirtualMachineIPAddress {
 
-	// Checks if the Input has appropriate format and has valid values 
+	// Checks if the Input has appropriate format and has valid values
 	var InvalidValues []string // array of the Invalid Value Field names
-	FieldValueGenerators := map[string]func() types.CustomizationDhcpIpGenerator {
-		
-		"Gateway": func() types.CustomizationDhcpIpGenerator {
-			return types.CustomizationDhcpIpGenerator{}
+	FieldValueGenerators := map[string]func() types.BaseCustomizationIpGenerator{
+
+		"Gateway": func() types.BaseCustomizationIpGenerator {
+			return &types.CustomizationCustomIpGenerator{}
 		},
-		"Netmask": func() types.CustomizationDhcpIpGenerator {
-			return types.CustomizationDhcpIpGenerator{}
+		"Netmask": func() types.BaseCustomizationIpGenerator {
+			return &types.CustomizationDhcpIpGenerator{}
 		},
-		"Hostname": func() types.CustomizationDhcpIpGenerator {
-			return types.CustomizationDhcpIpGenerator{}
+		"Hostname": func() types.BaseCustomizationIpGenerator {
+			return &types.CustomizationCustomIpGenerator{}
 		},
 	}
 
-	//  Validating Inputs 
+	//  Validating Inputs
 	Patterns := this.GetValidationRegexPatterns()
-	for Index := 0; Index < reflect.TypeOf(this).NumField(); Index ++ {
+	for Index := 0; Index < reflect.TypeOf(this).NumField(); Index++ {
 		if Matches, MatchError := regexp.MatchString(Patterns[strings.ToLower(reflect.ValueOf(this).Type().Field(Index).Name)],
-	    reflect.ValueOf(this).Field(Index).String()); MatchError != nil || Matches != true {
+			reflect.ValueOf(this).Field(Index).String()); MatchError != nil || Matches != true {
 			InvalidValues = append(InvalidValues, reflect.ValueOf(this).Type().Field(Index).Name)
 		}
 	}
 
-	// Generating new Values if Some of the Are Empty 
+	// Generating new Values if Some of the Are Empty
 	for _, Field := range InvalidValues {
-		if slices.Contains(maps.Keys(FieldValueGenerators), strings.ToTitle(Field)){ 
+		if slices.Contains(maps.Keys(FieldValueGenerators), strings.ToTitle(Field)) {
 			GeneratedValue := FieldValueGenerators[Field]()
 			reflect.ValueOf(this).FieldByName(Field).Set(reflect.ValueOf(GeneratedValue))
 		}
@@ -78,9 +78,9 @@ func (this *VirtualMachineIPAddress) ValidateCredentials() VirtualMachineIPAddre
 	return *this
 }
 
-func NewVirtualMachineIPAddress(IP string, Netmask string, Gateway string, Hostname string) *VirtualMachineIPAddress {
+func NewVirtualMachineIPAddress(IPv4 string, Netmask string, Gateway string, Hostname string) *VirtualMachineIPAddress {
 	return &VirtualMachineIPAddress{
-		IP:       IP,
+		IPv4:     IPv4,
 		Netmask:  Netmask,
 		Gateway:  Gateway,
 		Hostname: Hostname,
@@ -89,7 +89,7 @@ func NewVirtualMachineIPAddress(IP string, Netmask string, Gateway string, Hostn
 
 type VirtualMachineIPManager struct{}
 
-// Virtual Machine IP Manager Class 
+// Virtual Machine IP Manager Class
 
 func NewVirtualMachineIPManager() *VirtualMachineIPManager {
 	return &VirtualMachineIPManager{}
@@ -102,27 +102,31 @@ func (this *VirtualMachineIPManager) SetupPublicNetwork(IPCredentials VirtualMac
 	CustomizedIP := types.CustomizationAdapterMapping{
 		Adapter: types.CustomizationIPSettings{
 
-			Ip:         &types.CustomizationFixedIp{IpAddress: IPCredentials.IP}, // Setting UP IP Address
-			SubnetMask: IPCredentials.Netmask,                                    // Setting UP Subnet Mask
-			Gateway:    []string{IPCredentials.Gateway},                          // Setting up Gateway
+			Ip:         &types.CustomizationFixedIp{IpAddress: IPCredentials.IPv4}, // Setting UP IP Address
+			SubnetMask: IPCredentials.Netmask,                                      // Setting UP Subnet Mask
+			Gateway:    []string{IPCredentials.Gateway},                            // Setting up Gateway
+			IpV6Spec: &types.CustomizationIPSettingsIpV6AddressSpec{
+
+				Ip: []types.BaseCustomizationIpV6Generator{
+					&types.CustomizationAutoIpV6Generator{}},
+			},
 		},
 	}
 	// Updating Customized IP Setting Configuration with the Previous IP Configuration
 	CustomizedIPSettings := &types.CustomizationSpec{
-		Options: IPCredentials.Options, 
+		Options:       IPCredentials.Options,
 		NicSettingMap: []types.CustomizationAdapterMapping{CustomizedIP}, // Adding Previous Configuration
 		Identity: &types.CustomizationLinuxPrep{
 			HostName: &types.CustomizationFixedName{Name: IPCredentials.Hostname}, // Setting up Identity Hostname
 		}}
-
 	return CustomizedIPSettings, nil
 }
 
 type PrivateNetworkCredentials struct {
-	EnableIPv6 bool 
-	EnableIPv4 bool 
-	SubnetAddr string 
-	SubNetMask string 
+	EnableIPv6 bool
+	EnableIPv4 bool
+	SubnetAddr string
+	SubNetMask string
 }
 
 func NewPrivateNetworkCredentials(Enablev6 bool, Enablev4 bool, Netmask string, SubnetAddr string) *PrivateNetworkCredentials {
@@ -133,31 +137,3 @@ func NewPrivateNetworkCredentials(Enablev6 bool, Enablev4 bool, Netmask string, 
 		SubNetMask: Netmask,
 	}
 }
-
-// type VirtualMachinePrivateNetworkManager struct {}
-
-// func NewVirtualMachinePrivateNetworkManager() *VirtualMachinePrivateNetworkManager {
-// 	return &VirtualMachinePrivateNetworkManager{}
-// }
-
-// func (this *VirtualMachinePrivateNetworkManager) SetupPrivateNetwork(IPCredentials PrivateNetworkCredentials) {
-// 	// Returns Configuration of the Private Network, based on the Customization Parameters 
-
-// 	PrivateHostSpec := types.HostDhcpServiceSpec{
-// 		IpSubnetAddr: IPCredentials.SubnetAddr,  
-// 		IpSubnetMask: IPCredentials.SubNetMask,
-// 	}
-
-// 	PrivateNetworkSpec := types.NetDhcpConfigSpec{
-// 		Ipv6: &types.NetDhcpConfigSpecDhcpOptionsSpec{
-// 			Enable: types.NewBool(IPCredentials.EnableIPv6),
-// 		}, 
-// 		Ipv4: &types.NetDhcpConfigSpecDhcpOptionsSpec{
-// 			Enable: types.NewBool(IPCredentials.EnableIPv4),
-// 		},
-// 	}
-// 	PrivateHostService := types.HostDhcpService{
-// 		Spec: PrivateHostSpec,
-// 	}
-// 	PrivateNetworkService := types.HostService
-// }
