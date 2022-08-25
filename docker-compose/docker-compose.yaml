@@ -42,7 +42,7 @@ services:
       env_file:
           - ../env/project.env
       healthcheck:
-        test: [""]
+        test: ["curl", "-f", "http://localhost:8000/ping/"]
         retries: 5
         interval: 10s 
         timeout: 5s
@@ -50,6 +50,7 @@ services:
         - private_network 
       depends_on:
         - infrastructure_database 
+        - infrastructure_cache_storage
 
     infrastructure_database:
       container_name: infrastructure-sql-database 
@@ -65,7 +66,18 @@ services:
       networks:
         - private_network 
 
-
+    infrastructure_cache_storage:
+      container_name: redis-cache-storage 
+      image: redis:latest 
+      enviroment:
+        REDIS_PASSWORD: redis-password 
+      ports:
+        - containerPort: 6379 
+          targetPort: 6379 
+          protocol: TCP 
+      networks:
+        - private_network 
+      
 networks:
   private_network:
     external: true 

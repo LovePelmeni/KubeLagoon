@@ -32,6 +32,11 @@ var (
 	Client govmomi.Client
 )
 
+
+func init() {
+
+}
+
 // package consists of Rest API Controllers, that Provides Info about the Virtual Machine Server Health Metrics
 
 func GetVirtualMachineHealthMetricRestController(RequestContext *gin.Context) {

@@ -1,19 +1,19 @@
 package suggestion_rest
 
 import (
-	"context"
+	_ "context"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
-	"time"
+	_ "time"
 
 	"github.com/LovePelmeni/Infrastructure/host_system"
 	"github.com/LovePelmeni/Infrastructure/resources"
 	"github.com/gin-gonic/gin"
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/object"
-	"github.com/vmware/govmomi/vapi/rest"
+	_ "github.com/vmware/govmomi/vapi/rest"
 )
 
 // Insfrastructure API Environment Variables
@@ -51,22 +51,22 @@ func init() {
 	InfoLogger = log.New(LogFile, "INFO:", log.Ldate|log.Ltime|log.Lshortfile)
 	ErrorLogger = log.New(LogFile, "ERROR:", log.Ldate|log.Ltime|log.Lshortfile)
 
-	var RestClient *rest.Client
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	defer CancelFunc()
+	// var RestClient *rest.Client
+	// TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
+	// defer CancelFunc()
 
-	APIClient, ConnectionError := govmomi.NewClient(TimeoutContext, APIUrl, false)
-	switch {
-	case ConnectionError != nil:
-		panic(ConnectionError)
+	// APIClient, ConnectionError := govmomi.NewClient(TimeoutContext, APIUrl, false)
+	// switch {
+	// case ConnectionError != nil:
+	// 	panic(ConnectionError)
 
-	case ConnectionError == nil:
-		RestClient = rest.NewClient(APIClient.Client)
-		if FailedToLogin := RestClient.Login(TimeoutContext, APIUrl.User); FailedToLogin != nil {
-			panic(FailedToLogin)
-		}
-	}
-	Client = *APIClient
+	// case ConnectionError == nil:
+	// 	RestClient = rest.NewClient(APIClient.Client)
+	// 	if FailedToLogin := RestClient.Login(TimeoutContext, APIUrl.User); FailedToLogin != nil {
+	// 		panic(FailedToLogin)
+	// 	}
+	// }
+	// Client = *APIClient
 }
 
 // Suggestions Resources API Controllers

@@ -3,11 +3,13 @@ package network
 import (
 	"log"
 	"os"
+
 	"reflect"
 	"regexp"
-	"strings"
 
+	"strings"
 	"github.com/vmware/govmomi/vim25/types"
+
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
@@ -120,20 +122,4 @@ func (this *VirtualMachineIPManager) SetupPublicNetwork(IPCredentials VirtualMac
 			HostName: &types.CustomizationFixedName{Name: IPCredentials.Hostname}, // Setting up Identity Hostname
 		}}
 	return CustomizedIPSettings, nil
-}
-
-type PrivateNetworkCredentials struct {
-	EnableIPv6 bool
-	EnableIPv4 bool
-	SubnetAddr string
-	SubNetMask string
-}
-
-func NewPrivateNetworkCredentials(Enablev6 bool, Enablev4 bool, Netmask string, SubnetAddr string) *PrivateNetworkCredentials {
-	return &PrivateNetworkCredentials{
-		EnableIPv6: Enablev6,
-		EnableIPv4: Enablev4,
-		SubnetAddr: SubnetAddr,
-		SubNetMask: Netmask,
-	}
 }

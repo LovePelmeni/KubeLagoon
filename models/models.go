@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -49,7 +50,7 @@ func init() {
 	}
 
 	Database = DatabaseInstance
-	Database.AutoMigrate(&VirtualMachine{}, &Customer{})
+	Database.AutoMigrate(&VirtualMachine{}, &Customer{}, &SSHPublicKey{})
 	LogFile, Error := os.OpenFile("Models.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
 	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
@@ -57,7 +58,6 @@ func init() {
 	if Error != nil {
 		panic(Error)
 	}
-
 }
 
 type Customer struct {
@@ -144,21 +144,21 @@ type SSHPublicKey struct {
 
 func NewSshPublicKey(KeyContent []byte, Filename string) *SSHPublicKey {
 	return &SSHPublicKey{
-		Key: KeyContent,
+		Key:      KeyContent,
 		Filename: Filename,
 	}
 }
 
 func (this *SSHPublicKey) Create() (*gorm.DB, error) {
-	// Creates New Record of the SSHPublicKey Model at the Database 
+	// Creates New Record of the SSHPublicKey Model at the Database
 	newSSHKey := Database.Model(&SSHPublicKey{}).Create(&this)
 	return newSSHKey, newSSHKey.Error
 }
 
 func (this *SSHPublicKey) Update(NewSshKey []byte, Filename ...string) (*gorm.DB, error) {
-	// Updates SSH Keys Locally at the Database 
+	// Updates SSH Keys Locally at the Database
 	Gorm := Database.Model(&SSHPublicKey{}).Unscoped().Where(
-	"virtual_machine_id = ?", this.VirtualMachineId).Update("Key", NewSshKey)
+		"virtual_machine_id = ?", this.VirtualMachineId).Update("Key", NewSshKey)
 	return Gorm, Gorm.Error
 }
 

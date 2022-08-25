@@ -12,8 +12,10 @@ import (
 
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
+
 	"github.com/vmware/govmomi/vapi/appliance/access/ssh"
 	"github.com/vmware/govmomi/vapi/rest"
+
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
 )
@@ -160,8 +162,9 @@ func (this *VirtualMachineSshManager) GenerateSshKeys() (*PublicKey, *PrivateKey
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
 	defer CancelFunc()
 
-	NewPrivateKeyFileError := Manager.WriteFile(TimeoutContext, "ssh_key.pem", io.MultiReader(), 2048, nil, PrivateKeyWriter)
-	NewPublicKeyFileError := Manager.WriteFile(TimeoutContext, "ssh_key.pub", io.MultiReader(), 2048, nil, PublicKeyWriter)
+	// Writing New SSH Key Files for Public and Private One 
+	NewPrivateKeyFileError := Manager.WriteFile(TimeoutContext, fmt.Sprintf("%s_ssh_key.pem", this.VirtualMachine.Name()), io.MultiReader(), 2048, nil, PrivateKeyWriter)
+	NewPublicKeyFileError := Manager.WriteFile(TimeoutContext, fmt.Sprintf("%s_ssh_key.pub", this.VirtualMachine.Name()), io.MultiReader(), 2048, nil, PublicKeyWriter)
 
 	if NewPrivateKeyFileError != nil || NewPublicKeyFileError != nil {
 		GenerationError = errors.New("Failed to Generate SSH Keys")

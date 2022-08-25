@@ -12,14 +12,14 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/deploy"
 	"github.com/LovePelmeni/Infrastructure/models"
-	
+
 	"github.com/LovePelmeni/Infrastructure/parsers"
 	"github.com/LovePelmeni/Infrastructure/resources"
 
 	"github.com/gin-gonic/gin"
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/object"
-	"github.com/vmware/govmomi/vapi/rest"
+	_ "github.com/vmware/govmomi/vapi/rest"
 )
 
 // Insfrastructure API Environment Variables
@@ -61,22 +61,22 @@ func init() {
 	InfoLogger = log.New(LogFile, "INFO:", log.Ldate|log.Ltime|log.Lshortfile)
 	ErrorLogger = log.New(LogFile, "ERROR:", log.Ldate|log.Ltime|log.Lshortfile)
 
-	var RestClient *rest.Client
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	defer CancelFunc()
+	// var RestClient *rest.Client
+	// TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
+	// defer CancelFunc()
 
-	APIClient, ConnectionError := govmomi.NewClient(TimeoutContext, APIUrl, false)
-	switch {
-	case ConnectionError != nil:
-		panic(ConnectionError)
+	// APIClient, ConnectionError := govmomi.NewClient(TimeoutContext, APIUrl, false)
+	// switch {
+	// case ConnectionError != nil:
+	// 	panic(ConnectionError)
 
-	case ConnectionError == nil:
-		RestClient = rest.NewClient(APIClient.Client)
-		if FailedToLogin := RestClient.Login(TimeoutContext, APIUrl.User); FailedToLogin != nil {
-			panic(FailedToLogin)
-		}
-	}
-	Client = *APIClient
+	// case ConnectionError == nil:
+	// 	RestClient = rest.NewClient(APIClient.Client)
+	// 	if FailedToLogin := RestClient.Login(TimeoutContext, APIUrl.User); FailedToLogin != nil {
+	// 		panic(FailedToLogin)
+	// 	}
+	// }
+	// Client = *APIClient
 }
 
 // Package which Contains Rest API Controllers, for Handling VM's Behaviour
@@ -232,8 +232,8 @@ func DeployVirtualMachineRestController(RequestContext *gin.Context) {
 
 	switch ApplyError {
 	case nil:
-		RequestContext.JSON(http.StatusOK, gin.H{"Status": "Applied", 
-		"IPAddress": VmInfo.IPAddress, "SshPublicKey": VmInfo.SshPublicKey})
+		RequestContext.JSON(http.StatusOK, gin.H{"Status": "Applied",
+			"IPAddress": VmInfo.IPAddress, "SshPublicKey": VmInfo.SshPublicKey})
 	default:
 		ErrorLogger.Printf("Failed to Apply Configuration to the Virtual Machine, Error: %s", ApplyError)
 		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": ApplyError})

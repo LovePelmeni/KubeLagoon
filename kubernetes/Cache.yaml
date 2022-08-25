@@ -39,6 +39,7 @@ spec:
           volumeMounts:
             - name: redis-config
               mount: /etc/redis/redis.conf 
+              readOnly: true 
 
       volumes:
         - name: redis-config 

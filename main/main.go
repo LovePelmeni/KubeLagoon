@@ -61,7 +61,7 @@ func NewServer(ServerHost string, ServerPort string) *Server {
 func (this *Server) Run() {
 
 	Router := gin.Default()
-	httpServer := http.Server{
+	httpServer := &http.Server{
 		Addr:    fmt.Sprintf("%s:%s", this.ServerHost, this.ServerPort),
 		Handler: Router,
 	}
@@ -70,8 +70,8 @@ func (this *Server) Run() {
 
 	Router.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
-			fmt.Sprintf("%s:%s", APPLICATION_HOST, APPLICATION_PORT),
-			fmt.Sprintf("%s:%s", FRONT_APPLICATION_HOST, FRONT_APPLICATION_PORT),
+			fmt.Sprintf("http://%s:%s", APPLICATION_HOST, APPLICATION_PORT),
+			fmt.Sprintf("http://%s:%s", FRONT_APPLICATION_HOST, FRONT_APPLICATION_PORT),
 		},
 		AllowMethods:     []string{"POST", "PUT", "DELETE", "GET", "OPTIONS"},
 		AllowCredentials: true,
@@ -98,36 +98,35 @@ func (this *Server) Run() {
 		Router.GET("/get/profile/", customer_rest.GetCustomerProfileRestController)
 	}
 
-
 	// Virtual Machines Rest API Endpoints
 	Router.Group("/vm/").Use(middlewares.JwtAuthenticationMiddleware(),
 		middlewares.IsVirtualMachineOwnerMiddleware())
 	{
 		{
 			Router.POST("/initialize/", vm_rest.InitializeVirtualMachineRestController) // initialized new Virtual Machine (Emtpy)
-			Router.PUT("/deploy/", vm_rest.DeployVirtualMachineRestController) // Applies Configuration to the Initialized Machine
-			Router.DELETE("/remove/", vm_rest.RemoveVirtualMachineRestController) // Removes Existing Virtual Machine 
-			Router.POST("/start/", vm_rest.StartVirtualMachineRestController) // Starts Virtual Machine 
-			Router.POST("/reboot/", vm_rest.RebootVirtualMachineRestController) // Reboots Virtual Machine 
-			Router.DELETE("/shutdown/", vm_rest.ShutdownVirtualMachineRestController) // Shutting Down Virtual Machine 
+			Router.PUT("/deploy/", vm_rest.DeployVirtualMachineRestController)          // Applies Configuration to the Initialized Machine
+			Router.DELETE("/remove/", vm_rest.RemoveVirtualMachineRestController)       // Removes Existing Virtual Machine
+			Router.POST("/start/", vm_rest.StartVirtualMachineRestController)           // Starts Virtual Machine
+			Router.POST("/reboot/", vm_rest.RebootVirtualMachineRestController)         // Reboots Virtual Machine
+			Router.DELETE("/shutdown/", vm_rest.ShutdownVirtualMachineRestController)   // Shutting Down Virtual Machine
 		}
 
 		Router.Use(middlewares.IsVirtualMachineOwnerMiddleware())
 		{
-			Router.GET("/get/list/", vm_rest.GetCustomerVirtualMachine) // Customer's Virtual Machines 
-			Router.GET("/get/", vm_rest.GetCustomerVirtualMachines) // Customer's Specific Virtual Machine
+			Router.GET("/get/list/", vm_rest.GetCustomerVirtualMachine) // Customer's Virtual Machines
+			Router.GET("/get/", vm_rest.GetCustomerVirtualMachines)     // Customer's Specific Virtual Machine
 		}
 		Router.Use(middlewares.IsVirtualMachineOwnerMiddleware())
 		{
-			Router.GET("/health/metrics/", healthcheck_rest.GetVirtualMachineHealthMetricRestController) // HealthCheck Metrics of the Virtual Machine 
+			Router.GET("/health/metrics/", healthcheck_rest.GetVirtualMachineHealthMetricRestController) // HealthCheck Metrics of the Virtual Machine
 		}
 	}
 
-	Router.Group("/os/").Use(middlewares.IsVirtualMachineOwnerMiddleware())
+	Router.Group("/host/").Use(middlewares.IsVirtualMachineOwnerMiddleware())
 	{
-		Router.POST("/start/", vm_rest.StartGuestOSRestController)
-		Router.PUT("/restart/", vm_rest.RebootGuestOSRestController)
-		Router.DELETE("/shutdown/", vm_rest.ShutdownGuestOsRestController)
+		Router.POST("system/start/", vm_rest.StartGuestOSRestController)
+		Router.PUT("system/restart/", vm_rest.RebootGuestOSRestController)
+		Router.DELETE("system/shutdown/", vm_rest.ShutdownGuestOsRestController)
 	}
 
 	Router.Group("/suggestions/")
@@ -149,9 +148,10 @@ func (this *Server) Run() {
 	}
 
 	NotifyContext, CancelFunc := signal.NotifyContext(
-		context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGSTOP)
-
+	context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGSTOP)
 	defer CancelFunc()
+
+	go this.Shutdown(NotifyContext, *httpServer)
 	Exception := httpServer.ListenAndServe()
 
 	if errors.Is(Exception, http.ErrServerClosed) {
@@ -163,8 +163,11 @@ func (this *Server) Run() {
 
 func (this *Server) Shutdown(Context context.Context, ServerInstance http.Server) {
 	select {
-	case <-Context.Done():
-		ServerInstance.Shutdown(context.Background())
+	case <- Context.Done():
+		defer func() {}()
+		defer func() {}()
+		ShutdownError := ServerInstance.Shutdown(context.Background())
+		DebugLogger.Printf("Server has been Shutdown, Errors: %s", ShutdownError)
 	}
 }
 
