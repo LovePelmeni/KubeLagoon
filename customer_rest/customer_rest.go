@@ -3,10 +3,11 @@ package rest
 import (
 	"fmt"
 	"log"
+
 	"net/http"
 	"os"
-	"reflect"
 
+	"reflect"
 	"time"
 
 	"github.com/LovePelmeni/Infrastructure/authentication"
@@ -95,10 +96,21 @@ func CreateCustomerRestController(RequestContext *gin.Context) {
 	Email := RequestContext.PostForm("Email")
 	Password := RequestContext.PostForm("Password")
 
-	NewCustomer := models.NewCustomer(Username, Email, Password)
+	// Checking If Customer is Already Exists...
+	var Customer models.Customer
+	if Transact := models.Database.Model(
+		&models.Customer{}).Where("username = ? OR email = ?",
+		Username, Email).Find(&Customer); &Transact.Error == nil || len(Customer.Username) != 0 {
+		RequestContext.AbortWithStatusJSON(
+			http.StatusBadRequest, gin.H{"Error": "Customer with this Username or Email already exists, Wanna Login?"})
+		return
+	}
+
+	NewCustomer := models.NewCustomer(Username, Password, Email)
 	Created, Error := NewCustomer.Create()
 
 	if reflect.ValueOf(Created).IsNil() || Error != nil {
+		Created.Rollback()
 
 		switch Error {
 		case gorm.ErrInvalidData:
@@ -116,6 +128,16 @@ func CreateCustomerRestController(RequestContext *gin.Context) {
 				gin.H{"Error": "You missed to Setup Required Fields"})
 			return
 
+		case gorm.ErrInvalidTransaction:
+			RequestContext.JSON(http.StatusBadRequest,
+				gin.H{"Error": "Failed to Perform Transaction"})
+			return
+
+		case gorm.ErrPrimaryKeyRequired:
+			RequestContext.JSON(http.StatusBadRequest,
+				gin.H{"Error": "Some Fields (`Username` or `Email`) you've specified are already being used"})
+			return
+
 		default:
 			RequestContext.JSON(http.StatusBadRequest,
 				gin.H{"Error": fmt.Sprintf("Unknown Error `%s`", Error.Error())})
@@ -126,11 +148,10 @@ func CreateCustomerRestController(RequestContext *gin.Context) {
 			int(NewCustomer.ID), NewCustomer.Username, NewCustomer.Email)
 
 		if JwtError != nil {
-			RequestContext.JSON(http.StatusOK,
+			RequestContext.JSON(http.StatusBadGateway,
 				gin.H{"Error": "Failed to Generate Auth Token"})
 			return
 		}
-
 		RequestContext.SetCookie("jwt-token", NewJwtToken, int(time.Now().Add(10000*time.Minute).Unix()), "/", "", false, false)
 		RequestContext.JSON(http.StatusCreated, gin.H{"Operation": "Success"})
 	}

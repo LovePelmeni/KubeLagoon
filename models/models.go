@@ -50,7 +50,7 @@ func init() {
 	}
 
 	Database = DatabaseInstance
-	Database.AutoMigrate(&VirtualMachine{}, &Customer{}, &SSHPublicKey{})
+	Database.AutoMigrate(&SSHPublicKey{}, &Customer{}, &VirtualMachine{})
 	LogFile, Error := os.OpenFile("Models.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
 	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
@@ -62,8 +62,8 @@ func init() {
 
 type Customer struct {
 	gorm.Model
-	Username string `json:"Username" gorm:"type:varchar(100); not null; unique;"`
-	Email    string `json:"Email" gorm:"type:varchar(100); not null; unique;"`
+	Username string `json:"Username" gorm:"<-:create;type:varchar(100); not null; unique;"`
+	Email    string `json:"Email" gorm:"<-:create;type:varchar(100); not null; unique;"`
 	Password string `json:"Password" gorm:"type:varchar(100); not null;"`
 }
 
@@ -81,9 +81,7 @@ func NewCustomer(Username string, Password string, Email string) *Customer {
 
 func (this *Customer) Create() (*gorm.DB, error) {
 	// Creates New Customer Profile
-	CreatedCustomer := Database.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "Vms", Table: "Customer"}},
-		DoUpdates: clause.AssignmentColumns([]string{"Vms"}),
-	}).Model(&Customer{}).Create(this)
+	CreatedCustomer := Database.Model(&Customer{}).Create(this)
 	return CreatedCustomer, CreatedCustomer.Error
 }
 
@@ -97,9 +95,10 @@ func (this *Customer) Delete() (*gorm.DB, error) {
 type VirtualMachine struct {
 	gorm.Model
 
-	OwnerId            string `json:"OwnerId" gorm:"type:varchar(100); not null; unique;"`
-	VirtualMachineName string `json:"VirtualMachineName" gorm:"type:varchar(100); not null;"`
-	ItemPath           string `json:"ItemPath" gorm:"type:varchar(100); not null;"`
+	OwnerId            string `json:"OwnerId" gorm:"<-:create;type:varchar(100);not null;unique;"`
+	VirtualMachineName string `json:"VirtualMachineName" gorm:"type:varchar(100);not null;"`
+	ItemPath           string `json:"ItemPath" gorm:"<-:create;type:varchar(100);not null;"`
+	IPAddress          string `json:"IPAddress" gorm:"<-:create;type:varchar(100);not null;unique;"`
 }
 
 func NewVirtualMachine(
@@ -107,6 +106,7 @@ func NewVirtualMachine(
 	OwnerId string, // ID Of the Customer, who Owns this Virtual Machine
 	VirtualMachineName string, // Virtual Machine UniqueName
 	ItemPath string,
+	IPAddress string,
 
 ) *VirtualMachine {
 
@@ -114,6 +114,7 @@ func NewVirtualMachine(
 		OwnerId:            OwnerId,
 		VirtualMachineName: VirtualMachineName,
 		ItemPath:           ItemPath,
+		IPAddress:          IPAddress,
 	}
 }
 
@@ -136,15 +137,14 @@ func (this *VirtualMachine) Delete() (*gorm.DB, error) {
 
 type SSHPublicKey struct {
 	gorm.Model
-	Key              []byte         `json:"Key" xml:"Key" gorm:"type:varchar(10000);default:null;"`
-	Filename         string         `json:"Filename" xml:"Filename" gorm:"type:varchar(100); not null;"`
-	VirtualMachineId string         `json:"VirtualMachineId" xml:"VirtualMachineId" gorm:"unique;primaryKey"`
-	VirtualMachine   VirtualMachine `gorm:"foreignKey:VirtualMachine;references:VirtualMachineId"`
+	Key              string `json:"Key" xml:"Key" gorm:"type:varchar(10000);default:null;"`
+	Filename         string `json:"Filename" xml:"Filename" gorm:"type:varchar(100); not null;"`
+	VirtualMachineID int    `json:"VirtualMachineID" xml:"VirtualMachineID" gorm:"unique;primaryKey;"`
 }
 
 func NewSshPublicKey(KeyContent []byte, Filename string) *SSHPublicKey {
 	return &SSHPublicKey{
-		Key:      KeyContent,
+		Key:      string(KeyContent),
 		Filename: Filename,
 	}
 }
@@ -158,7 +158,7 @@ func (this *SSHPublicKey) Create() (*gorm.DB, error) {
 func (this *SSHPublicKey) Update(NewSshKey []byte, Filename ...string) (*gorm.DB, error) {
 	// Updates SSH Keys Locally at the Database
 	Gorm := Database.Model(&SSHPublicKey{}).Unscoped().Where(
-		"virtual_machine_id = ?", this.VirtualMachineId).Update("Key", NewSshKey)
+		"virtual_machine_id = ?", this.VirtualMachineID).Update("Key", NewSshKey)
 	return Gorm, Gorm.Error
 }
 

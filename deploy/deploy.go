@@ -16,6 +16,7 @@ import (
 	"github.com/LovePelmeni/Infrastructure/models"
 
 	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/simulator/esx"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
@@ -352,7 +353,20 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 		return nil, NetworkError
 	}
 
-	vm := &mo.VirtualMachine{}
+	// Getting Extra Tools Configuration, that is going to be Installed on the VM
+	_, ExtraToolsError := Configuration.GetExtraToolsConfig(this.VimClient)
+	if ExtraToolsError != nil {
+		ErrorLogger.Printf("Failed to Obtain Extra Tools that Should be Installed on the VM, Error: %s",
+			ExtraToolsError)
+	}
+
+	// Retrieving Mo Entity of the Virtual Machine
+	var vm mo.VirtualMachine
+	Collector := property.DefaultCollector(&this.VimClient)
+	RetrieveError := Collector.RetrieveOne(TimeoutContext, VirtualMachine.Reference(), []string{"*"}, &vm)
+	if RetrieveError != nil {
+		return nil, errors.New("VM Server not found")
+	}
 
 	rspec := types.DefaultResourceConfigSpec()
 	vm.Guest = &types.GuestInfo{GuestId: HostSystemConfig.GuestId}
@@ -400,7 +414,7 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 	// Assigning Resource Configurations
 	Devices.AssignController(DiskStorageConfig.Device, DiskController)
 	defaults := types.VirtualMachineConfigSpec{
-		GuestId: vm.Guest.GuestId,
+		GuestId:             vm.Guest.GuestId,
 		NumCPUs:             ResourceConfig.NumCPUs,
 		NumCoresPerSocket:   ResourceConfig.NumCoresPerSocket,
 		MemoryMB:            ResourceConfig.MemoryMB,
@@ -480,12 +494,12 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 		return nil, UploadSSHError
 	}
 
-	// Installing Initial Dependencies on the Virtual Machine 
+	// Installing Initial Dependencies on the Virtual Machine
 
-	DepInstaller := dependency_installer.NewEnviromentDependencyInstaller()
-	SshConnection := DepInstaller.GetSshConnection(IPAddress)
-	Installed, InstallError := DepInstaller.InstallDependencies(VirtualMachine)
-	if InstallError != nil {return nil, InstallError}
+	// DepInstaller := dependency_installer.NewEnviromentDependencyInstaller()
+	// SshConnection := DepInstaller.GetSshConnection(IPAddress)
+	// Installed, InstallError := DepInstaller.InstallDependencies(VirtualMachine)
+	// if InstallError != nil {return nil, InstallError}
 
 	return &VmInfo{
 		IPAddress:    VmIPAddress,

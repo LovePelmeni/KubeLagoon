@@ -3,6 +3,7 @@ package parsers
 import (
 	"context"
 	"encoding/json"
+	
 	"errors"
 	"time"
 
@@ -11,12 +12,16 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/host_system"
 	models "github.com/LovePelmeni/Infrastructure/models"
+
 	"github.com/LovePelmeni/Infrastructure/network"
 	resource_config "github.com/LovePelmeni/Infrastructure/resource_config"
+
 	storage_config "github.com/LovePelmeni/Infrastructure/storage_config"
 	"github.com/vmware/govmomi/object"
+
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/vim25"
+
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 )
@@ -81,7 +86,7 @@ type VirtualMachineCustomSpec struct {
 	} `json:"Metadata" xml:"Metadata"`
 
 	HostSystem struct {
-		Type 			 string `json:"Type"` // OS Distribution Type Like: Linux, Windows etc.... 
+		Type             string `json:"Type"` // OS Distribution Type Like: Linux, Windows etc....
 		DistributionName string `json:"DistributionName"`
 		Bit              int64  `json:"Bit;omitempty"`
 	} `json:"HostSystem"`
@@ -94,6 +99,13 @@ type VirtualMachineCustomSpec struct {
 		Enablev6 bool   `json:"Enablev6,omitempty"`
 		Enablev4 bool   `json:"Enablev4,omitempty"`
 	} `json:"Network"`
+
+	// Extra Tools, that is going to be Installed on the VM automatically
+	// Things Like Docker, Docker-Compose, VirtualBox or Podman etc....
+
+	ExtraTools struct {
+		Tools []string `json:"Tools" xml:"Tools"` // Names of the Tools
+	} `json:"ExtraTools;omitempty"`
 
 	// Hardware Resourcs for the VM Configuration
 	Resources struct {
@@ -173,4 +185,9 @@ func (this *VirtualMachineCustomSpec) GetNetworkConfig(Client vim25.Client) (*ty
 	NewNetworkManager := network.NewVirtualMachineIPManager()
 	NetworkConfig, SetupError := NewNetworkManager.SetupPublicNetwork(*IPCredentials)
 	return NetworkConfig, SetupError
+}
+
+func (this *VirtualMachineCustomSpec) GetExtraToolsConfig(Client vim25.Client) ([]string, error) {
+	// Returns Installation Tools
+	return this.ExtraTools.Tools, nil
 }

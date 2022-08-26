@@ -32,16 +32,19 @@ func init() {
 
 func JwtAuthenticationMiddleware() gin.HandlerFunc {
 	return func(context *gin.Context) {
-		if len(context.GetHeader("jwt-token")) == 0 {
+		if len(context.GetHeader("Authorization")) == 0 {
 			context.AbortWithStatusJSON(
 				http.StatusForbidden, gin.H{"Error": "Unauthorized"})
+			return
 		}
 
 		if _, Error := authentication.GetCustomerJwtCredentials(
-			context.GetHeader("jwt-token")); Error != nil {
+			context.GetHeader("Authorization")); Error != nil {
 			context.AbortWithStatusJSON(
 				http.StatusForbidden, gin.H{"Error": "Unauthorized"})
+			return
 		}
+		context.Next()
 	}
 }
 
@@ -55,6 +58,7 @@ func IsVirtualMachineOwnerMiddleware() gin.HandlerFunc {
 				http.StatusForbidden, gin.H{"Status": "You're not the Owner of this VM"})
 			return
 		}
+		context.Next()
 	}
 }
 
@@ -71,6 +75,7 @@ func RequestIdempotencyMiddleware() gin.HandlerFunc {
 		}
 		if Result, Error := RedisClient.Get(UrlCacheKey + "=" + RequestNumber).Result(); Error != nil {
 			RedisClient.Set(UrlCacheKey+"="+RequestNumber, "Request is Being Processed", 10*time.Minute)
+			RequestContext.Next()
 		} else {
 			MapValuesResponse := func() map[string]string {
 				var Map map[string]string
@@ -80,6 +85,7 @@ func RequestIdempotencyMiddleware() gin.HandlerFunc {
 				return Map
 			}()
 			RequestContext.AbortWithStatusJSON(http.StatusNotModified, MapValuesResponse)
+			return
 		}
 	}
 }
@@ -87,31 +93,38 @@ func RequestIdempotencyMiddleware() gin.HandlerFunc {
 func AuthorizationRequiredMiddleware() gin.HandlerFunc {
 	// Middleware checks for customer is being Authorized
 	return func(context *gin.Context) {
-		if len(context.GetHeader("jwt-token")) == 0 {
+		if len(context.GetHeader("Authorization")) == 0 {
 			context.AbortWithStatusJSON(
-				http.StatusForbidden, gin.H{"Error": "Authorized"})
+				http.StatusForbidden, gin.H{"Error": "You are Not Authorized"})
+			return
 		}
 
 		if _, Error := authentication.GetCustomerJwtCredentials(
-			context.GetHeader("jwt-token")); Error != nil {
+			context.GetHeader("Authorization")); Error != nil {
 			context.AbortWithStatusJSON(
-				http.StatusForbidden, gin.H{"Error": "Authorized"})
+				http.StatusForbidden, gin.H{"Error": "You are Not Authorized"})
+			return
 		}
+		context.Next()
 	}
 }
 
 func NonAuthorizationRequiredMiddleware() gin.HandlerFunc {
 	// Middleware checks for the Customer is not being authorized
 	return func(context *gin.Context) {
-		if len(context.GetHeader("jwt-token")) != 0 {
+		if len(context.GetHeader("Authorization")) != 0 {
+			fmt.Printf(context.GetHeader("Authorization"))
 			context.AbortWithStatusJSON(
-				http.StatusForbidden, gin.H{"Error": "Authorized"})
+				http.StatusForbidden, gin.H{"Error": "You are Authorized"})
+			return
 		}
-
 		if _, Error := authentication.GetCustomerJwtCredentials(
-			context.GetHeader("jwt-token")); Error == nil {
+			context.GetHeader("Authorization")); Error == nil && len(context.GetHeader("Authorization")) != 0 {
+			fmt.Printf(context.GetHeader("Authorization"))
 			context.AbortWithStatusJSON(
-				http.StatusForbidden, gin.H{"Error": "Authorized"})
+				http.StatusForbidden, gin.H{"Error": "You are Authorized"})
+			return
 		}
+		context.Next()
 	}
 }

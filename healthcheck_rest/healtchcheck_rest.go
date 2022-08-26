@@ -34,7 +34,7 @@ var (
 
 
 func init() {
-
+	// Initializing Govmomi Client for the VM Server
 }
 
 // package consists of Rest API Controllers, that Provides Info about the Virtual Machine Server Health Metrics

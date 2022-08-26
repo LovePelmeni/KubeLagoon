@@ -183,8 +183,20 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 	switch InitError {
 	case nil:
 		// Creating New Virtual Machine Model ORM Object.... and store it into SQL DB
+
+		TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
+		defer CancelFunc()
+
+		IPAddress, IPError := InitializedInstance.WaitForIP(TimeoutContext)
+		if IPError != nil {
+			ErrorLogger.Printf(
+				"Failed to Parse the IP Address of the Virtual Machine, Timeout: Error: %s", IPError)
+			RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to Initialize Virtual Machine"})
+			return
+		}
+
 		NewVirtualMachine := models.NewVirtualMachine(
-			CustomerId, VirtualMachineName, InitializedInstance.InventoryPath)
+			CustomerId, VirtualMachineName, InitializedInstance.InventoryPath, IPAddress)
 
 		_, CreationError := NewVirtualMachine.Create()
 		if CreationError != nil {

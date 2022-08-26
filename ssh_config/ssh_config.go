@@ -3,10 +3,13 @@ package ssh_config
 import (
 	"context"
 	"errors"
+
 	"fmt"
 	"io"
+
 	"log"
 	"net/url"
+
 	"os"
 	"time"
 
@@ -98,7 +101,7 @@ func (this *VirtualMachineSshManager) GetVirtualMachineUrl() (*url.URL, error) {
 			os.Getenv("VMWARE_SOURCE_PASSWORD")),
 
 		RawQuery: fmt.Sprintf("moid=%s", this.VirtualMachine.Name()),
-		Path:     "/"}, nil
+		Path: "/"}, nil
 }
 
 func (this *VirtualMachineSshManager) UploadSshKeys(Key PrivateKey) error {
@@ -171,3 +174,4 @@ func (this *VirtualMachineSshManager) GenerateSshKeys() (*PublicKey, *PrivateKey
 	}
 	return NewPublicKey(PublicKey, "ssh_key.pub"), NewPrivateKey(PrivateKey, "ssh_key.pem"), GenerationError
 }
+

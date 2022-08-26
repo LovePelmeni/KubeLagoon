@@ -61,11 +61,6 @@ func NewServer(ServerHost string, ServerPort string) *Server {
 func (this *Server) Run() {
 
 	Router := gin.Default()
-	httpServer := &http.Server{
-		Addr:    fmt.Sprintf("%s:%s", this.ServerHost, this.ServerPort),
-		Handler: Router,
-	}
-
 	// Setting Up Cross Origin Resource Sharing Policy
 
 	Router.Use(cors.New(cors.Config{
@@ -87,85 +82,82 @@ func (this *Server) Run() {
 
 	// Customers Rest API Endpoints
 
-	Router.Group("/customer/")
+	CustomerGroup := Router.Group("/customer/")
 	{
-		Router.POST("/login/", customer_rest.LoginRestController)
-		Router.POST("/logout/", customer_rest.LogoutRestController)
+		CustomerGroup.POST("/login/", customer_rest.LoginRestController, middlewares.NonAuthorizationRequiredMiddleware())
+		CustomerGroup.POST("/logout/", customer_rest.LogoutRestController, middlewares.AuthorizationRequiredMiddleware())
 
-		Router.POST("/create/", customer_rest.CreateCustomerRestController)
-		Router.PUT("/reset/password/", customer_rest.ResetPasswordRestController)
-		Router.DELETE("/delete/", customer_rest.DeleteCustomerRestController)
-		Router.GET("/get/profile/", customer_rest.GetCustomerProfileRestController)
+		CustomerGroup.POST("/create/", customer_rest.CreateCustomerRestController, middlewares.NonAuthorizationRequiredMiddleware())
+		CustomerGroup.PUT("/reset/password/", customer_rest.ResetPasswordRestController, middlewares.AuthorizationRequiredMiddleware())
+		CustomerGroup.DELETE("/delete/", customer_rest.DeleteCustomerRestController, middlewares.AuthorizationRequiredMiddleware())
+		CustomerGroup.GET("/get/profile/", customer_rest.GetCustomerProfileRestController, middlewares.AuthorizationRequiredMiddleware())
 	}
 
 	// Virtual Machines Rest API Endpoints
-	Router.Group("/vm/").Use(middlewares.JwtAuthenticationMiddleware(),
+	VirtualMachineGroup := Router.Group("/vm/").Use(middlewares.JwtAuthenticationMiddleware(),
 		middlewares.IsVirtualMachineOwnerMiddleware())
 	{
 		{
-			Router.POST("/initialize/", vm_rest.InitializeVirtualMachineRestController) // initialized new Virtual Machine (Emtpy)
-			Router.PUT("/deploy/", vm_rest.DeployVirtualMachineRestController)          // Applies Configuration to the Initialized Machine
-			Router.DELETE("/remove/", vm_rest.RemoveVirtualMachineRestController)       // Removes Existing Virtual Machine
-			Router.POST("/start/", vm_rest.StartVirtualMachineRestController)           // Starts Virtual Machine
-			Router.POST("/reboot/", vm_rest.RebootVirtualMachineRestController)         // Reboots Virtual Machine
-			Router.DELETE("/shutdown/", vm_rest.ShutdownVirtualMachineRestController)   // Shutting Down Virtual Machine
+			VirtualMachineGroup.POST("/initialize/", vm_rest.InitializeVirtualMachineRestController) // initialized new Virtual Machine (Emtpy)
+			VirtualMachineGroup.PUT("/deploy/", vm_rest.DeployVirtualMachineRestController)          // Applies Configuration to the Initialized Machine
+			VirtualMachineGroup.DELETE("/remove/", vm_rest.RemoveVirtualMachineRestController)       // Removes Existing Virtual Machine
+			VirtualMachineGroup.POST("/start/", vm_rest.StartVirtualMachineRestController)           // Starts Virtual Machine
+			VirtualMachineGroup.POST("/reboot/", vm_rest.RebootVirtualMachineRestController)         // Reboots Virtual Machine
+			VirtualMachineGroup.DELETE("/shutdown/", vm_rest.ShutdownVirtualMachineRestController)   // Shutting Down Virtual Machine
 		}
 
-		Router.Use(middlewares.IsVirtualMachineOwnerMiddleware())
 		{
-			Router.GET("/get/list/", vm_rest.GetCustomerVirtualMachine) // Customer's Virtual Machines
-			Router.GET("/get/", vm_rest.GetCustomerVirtualMachines)     // Customer's Specific Virtual Machine
+			VirtualMachineGroup.GET("/get/list/", vm_rest.GetCustomerVirtualMachine) // Customer's Virtual Machines
+			VirtualMachineGroup.GET("/get/", vm_rest.GetCustomerVirtualMachines)     // Customer's Specific Virtual Machine
 		}
-		Router.Use(middlewares.IsVirtualMachineOwnerMiddleware())
-		{
-			Router.GET("/health/metrics/", healthcheck_rest.GetVirtualMachineHealthMetricRestController) // HealthCheck Metrics of the Virtual Machine
-		}
+		VirtualMachineGroup.GET("/health/metrics/", healthcheck_rest.GetVirtualMachineHealthMetricRestController) // HealthCheck Metrics of the Virtual Machine
 	}
 
-	Router.Group("/host/").Use(middlewares.IsVirtualMachineOwnerMiddleware())
+	HostSystemGroup := Router.Group("/host/").Use(middlewares.IsVirtualMachineOwnerMiddleware())
 	{
-		Router.POST("system/start/", vm_rest.StartGuestOSRestController)
-		Router.PUT("system/restart/", vm_rest.RebootGuestOSRestController)
-		Router.DELETE("system/shutdown/", vm_rest.ShutdownGuestOsRestController)
+		HostSystemGroup.POST("system/start/", vm_rest.StartGuestOSRestController)
+		HostSystemGroup.PUT("system/restart/", vm_rest.RebootGuestOSRestController)
+		HostSystemGroup.DELETE("system/shutdown/", vm_rest.ShutdownGuestOsRestController)
 	}
 
-	Router.Group("/suggestions/")
+	SuggestionsGroup := Router.Group("/suggestions/").Use(middlewares.AuthorizationRequiredMiddleware())
 	{
-		Router.Use(middlewares.JwtAuthenticationMiddleware())
-		{
-			Router.POST("/datacenter/", suggestion_rest.GetDatacenterSuggestions)
-		}
+		SuggestionsGroup.POST("/datacenter/", suggestion_rest.GetDatacenterSuggestions)
 	}
 
 	// Support Rest API Endpoints
 
-	Router.Group("/support/")
+	SupportGroup := Router.Group("/support/").Use(middlewares.AuthorizationRequiredMiddleware())
 	{
-		Router.Use(middlewares.JwtAuthenticationMiddleware())
-		{
-			Router.POST("/feedback/", customer_rest.SupportRestController)
-		}
+		SupportGroup.POST("/feedback/", customer_rest.SupportRestController)
 	}
 
-	NotifyContext, CancelFunc := signal.NotifyContext(
-	context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGSTOP)
-	defer CancelFunc()
+	Server := &http.Server{
+		Addr:    fmt.Sprintf("%s:%s", this.ServerHost, this.ServerPort),
+		Handler: Router,
+	}
 
-	go this.Shutdown(NotifyContext, *httpServer)
-	Exception := httpServer.ListenAndServe()
+	ServerShutDownContext, ErrorCancelMethod := signal.NotifyContext(context.Background(),
+		os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT) // Creating Notify Context that triggers server to shut down
+	// after receiving system SIGTERM or SIGQUIT Signal from Kubernetes / Localhost.
 
+	go this.Shutdown(ServerShutDownContext, ErrorCancelMethod, Server)
+
+	Exception := Server.ListenAndServe()
 	if errors.Is(Exception, http.ErrServerClosed) {
-		NotifyContext.Done()
+		ServerShutDownContext.Done()
 	} else {
-		NotifyContext.Done()
+		fmt.Print("Server has been Shutdown For Some Reason, Check `Main.log` for more info")
+		ErrorLogger.Printf(
+			"Error while Running the Server: %s", Exception.Error())
+		ServerShutDownContext.Done()
 	}
 }
 
-func (this *Server) Shutdown(Context context.Context, ServerInstance http.Server) {
+func (this *Server) Shutdown(Context context.Context, CancelFunc context.CancelFunc, ServerInstance *http.Server) {
 	select {
-	case <- Context.Done():
-		defer func() {}()
-		defer func() {}()
+	case <-Context.Done():
+		defer CancelFunc()
 		ShutdownError := ServerInstance.Shutdown(context.Background())
 		DebugLogger.Printf("Server has been Shutdown, Errors: %s", ShutdownError)
 	}
