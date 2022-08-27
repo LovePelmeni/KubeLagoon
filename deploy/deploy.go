@@ -604,105 +604,110 @@ func (this *VirtualMachineManager) DestroyVirtualMachine(VirtualMachine *object.
 	return true, nil
 }
 
-func (this *VirtualMachineManager) ReplicateVirtualMachine(TimeoutContext context.Context, VirtualMachine *object.VirtualMachine, VirtualMachineId string) (*VmInfo, error) {
-	// Replicates Virtual Machine Server
+// func (this *VirtualMachineManager) ReplicateVirtualMachine(TimeoutContext context.Context, VirtualMachine *object.VirtualMachine, VirtualMachineId string) (*VmInfo, error) {
+// 	// Replicates Virtual Machine Server
 
-	var MoVirtualMachine mo.VirtualMachine
-	var NewVirtualMachine object.VirtualMachine
-	var VirtualMachineConfiguration models.VirtualMachineConfiguration 
-	var NativeConfiguration parsers.VirtualMachineCustomSpec
+// 	var MoVirtualMachine mo.VirtualMachine
+// 	var NewVirtualMachine object.VirtualMachine
+// 	var VirtualMachineConfiguration models.VirtualMachineConfiguration 
+// 	var NativeConfiguration parsers.VirtualMachineCustomSpec
 
-	Collector := property.DefaultCollector(&this.VimClient)
-	RetrieveError := Collector.RetrieveOne(TimeoutContext, 
-	VirtualMachine.Reference(), []string{"*"}, &MoVirtualMachine)
-
-
-	var VirtualMachineModel models.VirtualMachine 
-	var Datacenter *object.Datacenter
-	var Datastore *object.Datastore 
-	var Network *object.Network 
-	var HostSystem *object.HostSystem 
-	var ResourcePool *object.ResourcePool 
-	var Folder *object.Folder 
-	var ClusterComputeResource *object.ClusterComputeResource
-
-	DatastoreRef := Datastore.Reference() 
-	VmRef := NewVirtualMachine.Reference()
-	ResourcePoolRef := ResourcePool.Reference() 
-	HostSystemRef := HostSystem.Reference() 
-	FolderRef := Folder.Reference()
+// 	Collector := property.DefaultCollector(&this.VimClient)
+// 	RetrieveError := Collector.RetrieveOne(TimeoutContext, 
+// 	VirtualMachine.Reference(), []string{"*"}, &MoVirtualMachine)
 
 
-	VmError := models.Database.Model(&models.VirtualMachine{}).Where(
-	"id = ?", VirtualMachineId).Find(&VirtualMachineModel)
-	if VmError.Error != nil {return nil, VmError.Error}
+// 	var VirtualMachineModel models.VirtualMachine 
+// 	var Datacenter *object.Datacenter
+// 	var Datastore *object.Datastore 
+// 	var Network *object.Network 
+// 	var HostSystem *object.HostSystem 
+// 	var ResourcePool *object.ResourcePool 
+// 	var Folder *object.Folder 
+// 	var ClusterComputeResource *object.ClusterComputeResource
 
-	if RetrieveError != nil {ErrorLogger.Printf(
-	"Failed to Fetch Virtual Machine Mo Entity: Error: %s", RetrieveError); return nil, RetrieveError}
+// 	DatastoreRef := Datastore.Reference() 
+// 	VmRef := NewVirtualMachine.Reference()
+// 	ResourcePoolRef := ResourcePool.Reference() 
+// 	HostSystemRef := HostSystem.Reference() 
+// 	FolderRef := Folder.Reference()
+
+
+// 	VmError := models.Database.Model(&models.VirtualMachine{}).Where(
+// 	"id = ?", VirtualMachineId).Find(&VirtualMachineModel)
+// 	if VmError.Error != nil {return nil, VmError.Error}
+
+// 	if RetrieveError != nil {ErrorLogger.Printf(
+// 	"Failed to Fetch Virtual Machine Mo Entity: Error: %s", RetrieveError); return nil, RetrieveError}
 		
-	Finder := find.NewFinder(&this.VimClient)
-	Network = object.NewReference(&this.VimClient, MoVirtualMachine.Network[0]).(*object.Network) 
-	ReplicaCounts := 5 
+// 	Finder := find.NewFinder(&this.VimClient)
+// 	Network = object.NewReference(&this.VimClient, MoVirtualMachine.Network[0]).(*object.Network) 
+// 	ReplicaCounts := 5 
 
 
-	// Obtaining Virtual Machine Configuration, which we are going to copy eventually 
-	models.Database.Model(&models.VirtualMachineConfiguration{}).Where("virtual_machine_id = ?", VirtualMachineId).Find(&VirtualMachineConfiguration)
-	// Converting to parsers.VirtualMahchineCustomSpec as this type is required at the following potential steps 
-	VirtualMachineConfiguration.Scan(NativeConfiguration)
+// 	// Obtaining Virtual Machine Configuration, which we are going to copy eventually 
+// 	models.Database.Model(&models.VirtualMachineConfiguration{}).Where("virtual_machine_id = ?", VirtualMachineId).Find(&VirtualMachineConfiguration)
+// 	// Converting to parsers.VirtualMahchineCustomSpec as this type is required at the following potential steps 
+// 	VirtualMachineConfiguration.Scan(NativeConfiguration)
 
-	if DatacenterRef, FindError := Finder.DefaultDatacenter(TimeoutContext); FindError != nil {
-	return nil, FindError 
-	}else{
-		// Picking Up Datastore Depending on the Virtual Machine Hardware Configuration 
-		DatacenterError := DatacenterRef.Properties(TimeoutContext,
-	    DatacenterRef.Reference(), []string{"name"}, &Datacenter)
+// 	if DatacenterRef, FindError := Finder.DefaultDatacenter(TimeoutContext); FindError != nil {
+// 	return nil, FindError 
+// 	}else{
+// 		// Picking Up Datastore Depending on the Virtual Machine Hardware Configuration 
+// 		DatacenterError := DatacenterRef.Properties(TimeoutContext,
+// 	    DatacenterRef.Reference(), []string{"name"}, &Datacenter)
 
-		if DatacenterError != nil {ErrorLogger.Printf(
-		"Failed to Pick up available Datacenter, Error: %s", DatacenterError); return nil, DatacenterError}
+// 		if DatacenterError != nil {ErrorLogger.Printf(
+// 		"Failed to Pick up available Datacenter, Error: %s", DatacenterError); return nil, DatacenterError}
 
-		StorageReplicateConfiguration := types.StoragePlacementSpec{
-			Vm: &VmRef, 
-			ResourcePool: &ResourcePoolRef, 
-			Host: &HostSystemRef, 
-			Folder: &FolderRef, 
-		}
-		StoragePodResourceManager := object.NewStorageResourceManager(&this.VimClient) 
-		Datastores, FindError := StoragePodResourceManager.RecommendDatastores(
-		TimeoutContext, StorageReplicateConfiguration)
+// 		StorageReplicateConfiguration := types.StoragePlacementSpec{
+// 			Vm: &VmRef, 
+// 			ResourcePool: &ResourcePoolRef, 
+// 			Host: &HostSystemRef, 
+// 			Folder: &FolderRef, 
+// 		}
+// 		StoragePodResourceManager := object.NewStorageResourceManager(&this.VimClient) 
+// 		Datastores, FindError := StoragePodResourceManager.RecommendDatastores(
+// 		TimeoutContext, StorageReplicateConfiguration)
 
-		if FindError != nil {}
+// 		if FindError != nil {}
 
-		if len(Datastores.Recommendations) == 0 {DatastoreRef, DatastoreFindError := Finder.DefaultDatastore(
-		TimeoutContext); Datastore = DatastoreRef; if DatastoreFindError != nil {return nil, DatastoreFindError}}
+// 		if len(Datastores.Recommendations) == 0 {DatastoreRef, DatastoreFindError := Finder.DefaultDatastore(
+// 		TimeoutContext); Datastore = DatastoreRef; if DatastoreFindError != nil {return nil, DatastoreFindError}}
 
-		Datastore = object.NewReference(&this.VimClient, Datastores.Recommendations[0].Action[0].(
-		*types.StoragePlacementAction).Destination).(*object.Datastore)
-	}
+// 		Datastore = object.NewReference(&this.VimClient, Datastores.Recommendations[0].Action[0].(
+// 		*types.StoragePlacementAction).Destination).(*object.Datastore)
+// 	}
+// 	Folders, FindError := Datacenter.Folders(TimeoutContext)
 
-	Folders, FindError := Datacenter.Folders(TimeoutContext)
-
-	if FindError != nil {ErrorLogger.Printf(
-	"Failed to Find Available Folders for the Application, Error: %s", FindError)}
+// 	if FindError != nil {ErrorLogger.Printf(
+// 	"Failed to Find Available Folders for the Application, Error: %s", FindError)}
 
 
-	VirtualMachineReplicateConfiguration := types.VirtualMachineRelocateSpec{
-		Datastore: &DatastoreRef, 
-		Folder: &FolderRef, 
-		Pool: &ResourcePoolRef,
-	}
-	// Initializing new Virtual Machine Instance ..... 
+// 	VirtualMachineReplicateConfiguration := types.VirtualMachineRelocateSpec{
+// 		Datastore: &DatastoreRef, 
+// 		Folder: &FolderRef, 
+// 		Pool: &ResourcePoolRef,
+// 	}
 
-	InitializedVirtualMachine, InitializedError := this.InitializeNewVirtualMachine(
-	this.VimClient, VirtualMachine.Name() + fmt.Sprintf("_%s", ReplicaCounts + 1),
-    Datastore, Network, ClusterComputeResource, object.NewReference(&this.VimClient, Folders.VmFolder.Reference()).(*object.Folder))
+// 	CloneConfiguration := types.VirtualMachineCloneSpec{
+// 		Location: VirtualMachineReplicateConfiguration, 
+// 		PowerOn: false, 
+// 		Template: MoVirtualMachine.Config.Template,
+// 	}
+// 	// Initializing new Virtual Machine Instance ..... 
 
-	// Applying Custom Configuration, catched from the Main VM Server Instance 
-	switch InitializedError {
-	case nil:
-		ReplicatedVirtualMachineConfigInfo, ApplyException := this.ApplyConfiguration(InitializedVirtualMachine, NativeConfiguration)
-		return ReplicatedVirtualMachineConfigInfo, ApplyException 
-	default:
-		ErrorLogger.Printf("Failed to Initialize Base Virtual Machine, Error: %s", InitializedError)
-		return nil, InitializedError
-	}
-}
+// 	InitializedVirtualMachine, InitializedError := this.InitializeNewVirtualMachine(
+// 	this.VimClient, VirtualMachine.Name() + fmt.Sprintf("_%s", ReplicaCounts + 1),
+//     Datastore, Network, ClusterComputeResource, object.NewReference(&this.VimClient, Folders.VmFolder.Reference()).(*object.Folder))
+
+// 	// Applying Custom Configuration, catched from the Main VM Server Instance 
+// 	switch InitializedError {
+// 	case nil:
+// 		ReplicatedVirtualMachineConfigInfo, ApplyException := this.ApplyConfiguration(InitializedVirtualMachine, NativeConfiguration)
+// 		return ReplicatedVirtualMachineConfigInfo, ApplyException 
+// 	default:
+// 		ErrorLogger.Printf("Failed to Initialize Base Virtual Machine, Error: %s", InitializedError)
+// 		return nil, InitializedError
+// 	}
+// }

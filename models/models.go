@@ -95,7 +95,7 @@ func (this *Customer) Delete() (*gorm.DB, error) {
 
 type VirtualMachine struct {
 	ID   			   int 
-	Configuration VirtualMachineConfiguration 
+	Configuration VirtualMachineConfiguration `json:"Configuration" xml:"Configuration" gorm:"column:configuration;type:plaintext;"`
 	OwnerId            string `json:"OwnerId" xml:"OwnerId" gorm:"<-:create;type:varchar(100);not null;unique;"`
 	VirtualMachineName string `json:"VirtualMachineName" xml:"VirtualMachineName" gorm:"type:varchar(100);not null;"`
 	ItemPath           string `json:"ItemPath" xml:"ItemPath" gorm:"<-:create;type:varchar(100);not null;"`
@@ -181,6 +181,7 @@ func (this *SSHPublicKey) Delete() (*gorm.DB, error) {
 
 
 type VirtualMachineConfiguration struct {
+
 	ID int 
 
 	Metadata struct {
