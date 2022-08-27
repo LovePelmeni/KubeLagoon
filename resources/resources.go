@@ -521,4 +521,3 @@ func (this *HostSystemResourceManager) GetAvailableResources(Datacenter *mo.Data
 	}
 	return HostSystemResources
 }
-

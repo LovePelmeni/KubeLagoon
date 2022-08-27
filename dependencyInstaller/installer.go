@@ -41,6 +41,38 @@ type OSDeploymentToolsInstallCommandReturnerInterface interface {
 	GetVirtualBoxCommand() string
 }
 
+type WindowsDeploymentToolsInstallCommandReturner struct {
+	OSDeploymentToolsInstallCommandReturnerInterface
+
+	Installers map[string]func(DistributionName string, Version ...string) string
+}
+
+func NewWindowsDeploymentToolsinstallCommandReturner() *WindowsDeploymentToolsInstallCommandReturner {
+	var CommandReturner WindowsDeploymentToolsInstallCommandReturner
+
+	return &WindowsDeploymentToolsInstallCommandReturner{
+		Installers: map[string]func(DistributionName string, Version ...string) string{
+			"Docker":         CommandReturner.GetDockerCommand(),
+			"Docker-Compose": CommandReturner.GetDockerComposeCommand(),
+			"Podman":         CommandReturner.GetPodmanCommand(),
+			"VirtualBox":     CommandReturner.GetVirtualBoxCommand(),
+		},
+	}
+}
+
+func (this *WindowsDeploymentToolsInstallCommandReturner) GetDockerCommand() string {
+	// Returns Command for the Installation Module, (for the Windows OS), Also Depending on the Version
+}
+func (this *WindowsDeploymentToolsInstallCommandReturner) GetDockerComposeCommand() string {
+	// Returns Command for the Installation Module, (for the Windows OS), Also Depending on the Version
+}
+func (this *WindowsDeploymentToolsInstallCommandReturner) GetPodmanCommand() string {
+	// Returns Command for the Installation Module, (for the Windows OS), Also Depending on the Version
+}
+func (this *WindowsDeploymentToolsInstallCommandReturner) GetVirtualBoxCommand() string {
+	// Returns Command for the Installation Module, (for the Windows OS), Also Depending on the Version
+}
+
 type LinuxDeploymentToolsInstallCommandReturner struct {
 	OSDeploymentToolsInstallCommandReturnerInterface
 

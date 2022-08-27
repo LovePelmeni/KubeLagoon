@@ -74,7 +74,7 @@ data:
 --- 
 
 apiVersion: v1
-kind: 
+kind: Secret
 metadata:
   name: project-secret 
   namespace: app-namespace 
