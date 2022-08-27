@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"sync"
 
@@ -396,6 +397,18 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 		Timestamp: time.Now(),
 	}
 
+
+	// Applying Max CPU/Memory Usage to the Virtual Machine Server 
+
+
+	if Configuration.Resources.MaxCpuUsage != 0 {
+		vm.Summary.Runtime.MaxCpuUsage = int32(Configuration.Resources.MaxCpuUsage)
+	}
+
+	if Configuration.Resources.MaxMemoryUsage != 0 {
+		vm.Summary.Runtime.MaxMemoryUsage = int32(Configuration.Resources.MaxMemoryUsage)
+	}
+
 	// Initializing New Devices
 
 	Devices, DeviceError := VirtualMachine.Device(TimeoutContext)
@@ -591,6 +604,70 @@ func (this *VirtualMachineManager) DestroyVirtualMachine(VirtualMachine *object.
 	return true, nil
 }
 
-func (this *VirtualMachineManager) ReplicateVirtualMachine(TimeoutContext context.Context, VirtualMachine *object.VirtualMachine) {
+func (this *VirtualMachineManager) ReplicateVirtualMachine(TimeoutContext context.Context, VirtualMachine *object.VirtualMachine, VirtualMachineId string) (*VmInfo, error) {
 	// Replicates Virtual Machine Server
+
+	var MoVirtualMachine mo.VirtualMachine
+	var NewVirtualMachine object.VirtualMachine 
+	Collector := property.DefaultCollector(&this.VimClient)
+
+	RetrieveError := Collector.RetrieveOne(TimeoutContext, 
+	VirtualMachine.Reference(), []string{"*"}, &MoVirtualMachine)
+
+
+	var VirtualMachineModel models.VirtualMachine 
+	var Datacenter *object.Datacenter
+	var Datastore *object.Datastore 
+	var Network *object.Network 
+	var HostSystem *object.HostSystem 
+	var ResourcePool *object.ResourcePool 
+	var Folder *object.Folder 
+
+
+	VmError := models.Database.Model(&models.VirtualMachine{}).Where(
+	"id = ?", VirtualMachineId).Find(&VirtualMachineModel)
+	if VmError.Error != nil {return nil, VmError.Error}
+
+	if RetrieveError != nil {ErrorLogger.Printf(
+	"Failed to Fetch Virtual Machine Mo Entity: Error: %s", RetrieveError); return nil, RetrieveError}
+		
+	Finder := find.NewFinder(&this.VimClient)
+	Network = *object.NewReference(&this.VimClient, MoVirtualMachine.Network[0]).(*object.Network) 
+	ReplicaCounts := 5 
+
+	Configuration := VirtualMachineModel.Configuration
+	if DatacenterRef, FindError := Finder.DefaultDatacenter(TimeoutContext); FindError != nil {
+		return nil, FindError 
+	}else{
+		// Picking Up Datastore Depending on the Virtual Machine Hardware Configuration 
+		DatacenterError := DatacenterRef.Properties(TimeoutContext,
+	    DatacenterRef.Reference(), []string{"name"}, &Datacenter)
+
+		StorageReplicateConfiguration := types.StoragePlacementSpec{
+			Vm: NewVirtualMachine.Reference(), 
+			ResourcePool: ResourcePool.Reference(), 
+			Host: HostSystem.Reference(), 
+			Folder: Folder.Reference(), 
+		}
+		StoragePodResourceManager := object.NewStorageResourceManager(&this.VimClient) 
+		Datastores, FindError := StoragePodResourceManager.RecommendDatastores(
+		TimeoutContext, StorageReplicateConfiguration)
+
+		if len(Datastores.Recommendations) == 0 {DatastoreRef, DatastoreFindError := Finder.DefaultDatastore(
+		TimeoutContext); Datastore = DatastoreRef; if DatastoreFindError != nil {return nil, DatastoreFindError}}
+
+		Datastore = object.NewReference(&this.VimClient, Datastores.Recommendations[0].Action[0].(
+		*types.StoragePlacementAction).Destination).(*object.Datastore)
+	}
+
+	Folder, FindError := Datacenter.Folders(TimeoutContext)
+
+
+	VirtualMachineReplicateConfiguration := types.VirtualMachineRelocateSpec{
+		Datastore: Datastore, 
+		Folder: Folder, 
+		Pool: ResourcePool,
+	}
+	Initialized, InitializedError := this.InitializeNewVirtualMachine(
+	this.VimClient, VirtualMachine.Name + fmt.Sprintf("_%s", ReplicaCounts + 1), Datastore, Network, nil, object.NewReference(TimeoutContext, Datacenter.Folders))
 }

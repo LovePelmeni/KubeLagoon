@@ -2,8 +2,9 @@ package parsers
 
 import (
 	"context"
+	"database/sql/driver"
 	"encoding/json"
-	
+
 	"errors"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 	"os"
 
 	"github.com/LovePelmeni/Infrastructure/host_system"
-	models "github.com/LovePelmeni/Infrastructure/models"
+	"github.com/LovePelmeni/Infrastructure/models"
 
 	"github.com/LovePelmeni/Infrastructure/network"
 	resource_config "github.com/LovePelmeni/Infrastructure/resource_config"
@@ -111,6 +112,8 @@ type VirtualMachineCustomSpec struct {
 	Resources struct {
 		CpuNum            int32 `json:"CpuNum" xml:"CpuNum"`
 		MemoryInMegabytes int64 `json:"MemoryInMegabytes" xml:"MemoryInMegabytes"`
+		MaxMemoryUsage    int64 `json:"MaxMemoryUsage,omitempty;" xml:"MaxMemoryUsage"`
+		MaxCpuUsage       int64 `json:"MaxCpuUsage,omitempty;" xml:"MaxCpuUsage"`
 	} `json:"Resources" xml:"Resources"`
 
 	Disk struct {
@@ -122,6 +125,16 @@ func NewCustomConfig(Config string) (*VirtualMachineCustomSpec, error) {
 	var config VirtualMachineCustomSpec
 	DecodeError := json.Unmarshal([]byte(Config), &config)
 	return &config, DecodeError
+}
+
+// SQL Methods, do not touch it!
+
+func (this *VirtualMachineCustomSpec) Scan(src interface{}) error {
+	return json.Unmarshal(src.([]byte), &this)
+}
+func (this *VirtualMachineCustomSpec) Value() (driver.Value, error) {
+	Value, Error := json.Marshal(this)
+	return string(Value), Error
 }
 
 func (this *VirtualMachineCustomSpec) GetHostSystemConfig(Client vim25.Client) (types.VirtualMachineGuestSummary, types.CustomizationSpec, error) {
