@@ -52,3 +52,38 @@ spec:
           resources: 
             limits:
               cpu: 0.5
+        volumes:
+          - name: jenkins-storage 
+            persistentVolumeClaim:
+              - name: jenkins-persistent-volume-claim 
+                namespace: app-namespace 
+--- 
+
+apiVersion: v1
+kind: PersistentVolumeClaim 
+metadata:
+  name: jenkins-persistent-volume-claim 
+  namespace: app-namespace 
+spec:
+  storageClassName: manual 
+  accessModes:
+    - readWriteOnce 
+  resources:
+    limits:
+      storage: 5Gi 
+    
+--- 
+
+apiVersion: v1
+kind: PersistentVolume 
+metadata:
+  name: jenkins-volume 
+  namespace: app-namespace 
+spec:
+  storageClassName: manual 
+  accessModes:
+    - readWriteOnce 
+  hostPath: /mnt/jenkins 
+  capacity: 
+    - storage: 5Gi 
+

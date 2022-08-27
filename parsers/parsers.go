@@ -2,7 +2,6 @@ package parsers
 
 import (
 	"context"
-	"database/sql/driver"
 	"encoding/json"
 
 	"errors"
@@ -125,16 +124,6 @@ func NewCustomConfig(Config string) (*VirtualMachineCustomSpec, error) {
 	var config VirtualMachineCustomSpec
 	DecodeError := json.Unmarshal([]byte(Config), &config)
 	return &config, DecodeError
-}
-
-// SQL Methods, do not touch it!
-
-func (this *VirtualMachineCustomSpec) Scan(src interface{}) error {
-	return json.Unmarshal(src.([]byte), &this)
-}
-func (this *VirtualMachineCustomSpec) Value() (driver.Value, error) {
-	Value, Error := json.Marshal(this)
-	return string(Value), Error
 }
 
 func (this *VirtualMachineCustomSpec) GetHostSystemConfig(Client vim25.Client) (types.VirtualMachineGuestSummary, types.CustomizationSpec, error) {

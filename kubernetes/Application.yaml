@@ -92,3 +92,8 @@ stringData:
   VMWARE_SOURCE_USER: "vmware_api_user"
   VMWARE_SOURCE_PASSWORD: "vmware_api_password"
 
+  CACHE_STORAGE_HOST: redis 
+  CACHE_STORAGE_PORT: 6379 
+  CACHE_STORAGE_DATABASE_NUMBER: 0 
+  CACHE_STORAGE_PASSWORD: redis-password 
+
