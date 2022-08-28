@@ -1,9 +1,57 @@
-# Web Cloud Infrastructure 
+<p align="center">
+  <a href="https://github.com/LovePelmeni/Infrastructure.git"><img src="./logo/logos.png" alt="Infrastructure"></a>
+</p>
+
+<p align="center">
+    <em>Web Cloud Infrastructure, Deploy Your Applications easily, taking less effort</em>
+</p>
+
+
+---
+
+**Documentation**: [https://github.com/LovePelmeni/Web-CloudInfrastructure/README.md]("https://github.com/LovePelmeni/Web-Cloud-Infrastructure/README.md")
+
+**Source Code**: ["https://github.com/LovePelmeni/Web-Cloud-Infrastructure.git]("http://github.com/LovePelmeni/Web-Cloud-Infrastructure.git")
+
 
 --- 
 
-Prototype of the Cloud Infrastructure, that provides ability to setup Virtual Servers with Custom Configuration and OS. Currently is planned to
-be using this Service commercially
+ **KubeLagoon** - Prototype of the Cloud Infrastructure, that provides ability to setup Virtual Servers with Custom Configuration and OS, Private and Public Networks.
+The Service is being developed since 17 August of 2022, and is focused on Design Improvement and Quick Interaction to make User Experience much better
+
+--- 
+
+# Requirements  
+
+*To Deploy this Application onto Your Machine requires Following setup*
+
+
+## *Initial Tools* 
+
+NOTE: In order to make the Cloud Functionality to work you need to setup 
+Host Machine, which going to be immitating Datacenter with the `VMWare ESXI Hypervisor` of any version on top of it
+
+**Source for the licenses and installation files** : http://cios.dhitechnical.com/VMware/
+
+
+**Guide how to set it up on the Host Machine**: https://www.youtube.com/watch?v=Fk1exbFnVfM&t=148s
+
+
+### *Using Kubernetes*
+
+1. Kubectl ~ `1.16.0 or higher`
+2. Docker ~ `4.1 or higher`
+
+
+### *Using Docker* 
+
+1. Docker-Compose ~ `29.0.1 or higher`
+2. Docker ~ ``
+
+## *Extra Requirements* 
+
+1. You need to have port `8000` to be opened 
+2. You also need to have port `3000` to be opened
 
 --- 
 
@@ -21,30 +69,26 @@ Once you've setup Host Machine, you need to follow this steps
 
 ---
 
-### Requirements 
-
-1. ~ Make Sure that the Ports `8000` and `3000` are open, otherwise that would fail with Exception 
-
-2. ~ Make Sure that the `Docker` and `Docker-Compose` is installed on your local machine 
-
----
-
-
 ### Backend Build Steps 
 
 1. Edit Project Environment Variable File located at Root Directory at Path Called `env`
 
-2. Once you've done that, You can run docker-compose File and it will Run the App locally 
-```
-$ git clone https://github.com/LovePelmeni/Cloud-Infrastructure.git  # Cloning Project Repo 
-$ cd ./docker-compose # cd to the directory with docker-compose file 
-$ docker-compose up -d # run docker-compose file 
+2. Once you've done that, You can run docker-compose File and it will Run the App locally
+
+```console
+
+$ git clone https://github.com/LovePelmeni/Cloud-Infrastructure.git 
+
+$ cd ./docker-compose 
+
+$ docker-compose up -d
+
 ```
 
 Great! Now You Successfully Run Backend Application, in order to Check if it's Up and Running, you can Execute: 
 
-```
-curl -X GET -f http://localhost:8000/ping/
+```commandline
+$ curl -X GET -f http://localhost:8000/ping/
 ```
 
 
@@ -53,16 +97,19 @@ curl -X GET -f http://localhost:8000/ping/
 1. Edit Project Environment Variable File located at Root Directory at Path Called `env`
 
 2. Once you've done that, You can run docker-compose File and it will Run the Frontend App locally 
-```
-$ git clone https://github.com/LovePelmeni/Cloud-Infrastructure-Front-App.git  # Cloning Project Repo 
-$ cd ./docker-compose # cd to the directory with docker-compose file 
-$ docker-compose up -d # run docker-compose file 
+```console
+
+$ git clone https://github.com/LovePelmeni/Cloud-Infrastructure-Front-App.git 
+
+$ cd ./docker-compose 
+
+$ docker-compose up -d
 
 ```
 
 Great! Now You Successfully Run Backend Application, in order to Check if it's Up and Running, you can Execute: 
 
-```
+```commandline
 curl -X GET -f http://localhost:3000/ping/
 ```
 
