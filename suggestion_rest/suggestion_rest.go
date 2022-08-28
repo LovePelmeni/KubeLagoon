@@ -2,6 +2,7 @@ package suggestion_rest
 
 import (
 	_ "context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"net/url"
@@ -71,7 +72,7 @@ func init() {
 
 // Suggestions Resources API Controllers
 
-func GetDatacenterSuggestions(RequestContext *gin.Context) {
+func GetDatacentersSuggestions(RequestContext *gin.Context) {
 	// Returns Suggestions for the Datacenter Resource, based on the Customer Needs
 
 	// Initializing Resource Requirements
@@ -106,4 +107,21 @@ func GetAvailableOsSystemsRestController(RequestContext *gin.Context) {
 	LinuxHostSystems := HostSystemManager.GetAvailableLinuxOsSystems()
 	RequestContext.JSON(http.StatusOK, gin.H{"Linux": LinuxHostSystems,
 		"Windows": WindowsHostSystems})
+}
+
+func GetAvailableInstallationTools(RequestContext *gin.Context) {
+	// Return Array of the Tools, that can be pre-installed on the Virtual Machine Server
+	Tools := []struct {
+		ToolName string `json:"ToolName"`
+	}{
+		{ToolName: "Docker"},
+		{ToolName: "Docker-Compose"},
+		{ToolName: "Podman"},
+		{ToolName: "VirtualBox"},
+	}
+	SerializedTools, Error := json.Marshal(Tools)
+	if Error != nil {
+		RequestContext.JSON(http.StatusOK, gin.H{"Error": Error})
+	}
+	RequestContext.JSON(http.StatusOK, gin.H{"Tools": SerializedTools})
 }

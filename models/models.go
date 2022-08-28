@@ -182,12 +182,10 @@ func (this *SSHPublicKey) Delete() (*gorm.DB, error) {
 
 type VirtualMachineConfiguration struct {
 
-	ID int 
-
 	Metadata struct {
 		VirtualMachineId string `json:"VirtualMachineId" xml:"VirtualMachineId"`
 		VmOwnerId        string `json:"VmOwnerId" xml:"VmOwnerId"`
-	} `json:"Metadata" xml:"Metadata" gorm:"column:metadata;type:plaintext;"`
+	} `json:"Metadata" xml:"Metadata" gorm:"column:metadata;type:longtext;"`
 
 	HostSystem struct {
 		Type             string `json:"Type"` // OS Distribution Type Like: Linux, Windows etc....

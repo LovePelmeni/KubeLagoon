@@ -174,4 +174,3 @@ func (this *VirtualMachineSshManager) GenerateSshKeys() (*PublicKey, *PrivateKey
 	}
 	return NewPublicKey(PublicKey, "ssh_key.pub"), NewPrivateKey(PrivateKey, "ssh_key.pem"), GenerationError
 }
-

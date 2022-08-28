@@ -122,7 +122,7 @@ func (this *Server) Run() {
 
 	SuggestionsGroup := Router.Group("/suggestions/").Use(middlewares.AuthorizationRequiredMiddleware())
 	{
-		SuggestionsGroup.POST("/datacenter/", suggestion_rest.GetDatacenterSuggestions)
+		SuggestionsGroup.POST("/datacenter/", suggestion_rest.GetDatacentersSuggestions)
 	}
 
 	// Support Rest API Endpoints

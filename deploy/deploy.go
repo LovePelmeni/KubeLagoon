@@ -3,7 +3,6 @@ package deploy
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"sync"
 
