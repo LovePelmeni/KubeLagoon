@@ -111,10 +111,24 @@ func (this *VirtualMachineHostSystemManager) SetupHostSystem(HostSystemCredentia
 	HostSystemCustomizationConfig := types.CustomizationSpec{
 		Options: DefaultCustomizationOptions,
 	}
-	OSGuest, SelectError := this.SelectLinuxHostSystemGuest(HostSystemCredentials.SystemName, HostSystemCredentials.Bit)
+
+	// Selecting Appropriate Os System Guest, Based on the Virtual Machine Host System Setup Choice
+	var OSGuest *types.VirtualMachineGuestOsIdentifier
+	LinuxOSGuest, SelectError := this.SelectLinuxHostSystemGuest(HostSystemCredentials.SystemName, HostSystemCredentials.Bit)
+	WinOsGuest, SelectError := this.SelectWindowsSystemGuest(HostSystemCredentials.SystemName, int(HostSystemCredentials.Bit))
+
+	if LinuxOSGuest != nil {
+		OSGuest = LinuxOSGuest
+	}
+	if WinOsGuest != nil {
+		OSGuest = WinOsGuest
+	}
+
 	if SelectError != nil {
 		return nil, nil, SelectError
 	}
+
+	// Setting up Configuration Summary
 
 	VmGuestSummaryConfig := types.VirtualMachineGuestSummary{
 		GuestId:   string(*OSGuest),

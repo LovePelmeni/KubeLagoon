@@ -17,7 +17,8 @@ spec:
           path: / 
           pathType: Prefix 
             backend: 
-              serviceName: application-internal-service 
+              serviceName: front-app-service 
               servicePort:
-                number: 8000 
+                number: 3000
+
     

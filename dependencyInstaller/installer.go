@@ -52,7 +52,7 @@ func NewWindowsDeploymentToolsinstallCommandReturner() *WindowsDeploymentToolsIn
 
 	return &WindowsDeploymentToolsInstallCommandReturner{
 		Installers: map[string]func(DistributionName string, Version ...string) string{
-			"Docker":         CommandReturner.GetDockerCommand(),
+			"Docker":         CommandReturner.GetDockerCommand,
 			"Docker-Compose": CommandReturner.GetDockerComposeCommand(),
 			"Podman":         CommandReturner.GetPodmanCommand(),
 			"VirtualBox":     CommandReturner.GetVirtualBoxCommand(),
@@ -60,17 +60,20 @@ func NewWindowsDeploymentToolsinstallCommandReturner() *WindowsDeploymentToolsIn
 	}
 }
 
-func (this *WindowsDeploymentToolsInstallCommandReturner) GetDockerCommand() string {
+func (this *WindowsDeploymentToolsInstallCommandReturner) GetDockerCommand(DistributionName string, Version ...string) string {
 	// Returns Command for the Installation Module, (for the Windows OS), Also Depending on the Version
 }
-func (this *WindowsDeploymentToolsInstallCommandReturner) GetDockerComposeCommand() string {
+func (this *WindowsDeploymentToolsInstallCommandReturner) GetDockerComposeCommand(DistributionName string, Version ...string) string {
 	// Returns Command for the Installation Module, (for the Windows OS), Also Depending on the Version
+	return ""
 }
-func (this *WindowsDeploymentToolsInstallCommandReturner) GetPodmanCommand() string {
+func (this *WindowsDeploymentToolsInstallCommandReturner) GetPodmanCommand(DistributionName string, Version ...string) string {
 	// Returns Command for the Installation Module, (for the Windows OS), Also Depending on the Version
+	return ""
 }
-func (this *WindowsDeploymentToolsInstallCommandReturner) GetVirtualBoxCommand() string {
+func (this *WindowsDeploymentToolsInstallCommandReturner) GetVirtualBoxCommand(DistributionName string, Version ...string) string {
 	// Returns Command for the Installation Module, (for the Windows OS), Also Depending on the Version
+	return ""
 }
 
 type LinuxDeploymentToolsInstallCommandReturner struct {

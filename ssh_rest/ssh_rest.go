@@ -45,9 +45,13 @@ func GetCustomerVirtualMachineSSHKeysRestController(RequestContext *gin.Context)
 		ErrorLogger.Printf(
 			"Failed to Obtain the QuerySet of Customer SSH Public Keys, Error: %s", QuerySet.Error)
 		RequestContext.JSON(
-			http.StatusBadRequest, gin.H{"Error": "Failed to Get Vm SSH Keys"})
+		http.StatusBadRequest, gin.H{"Error": "Failed to Get Vm SSH Keys"}); return 
 	}
 	RequestContext.JSON(http.StatusOK, gin.H{"QuerySet": Query})
+}
+
+func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
+	// Rest Controller, that Initializes SSH Support for the Customer's Virtual Machine Server 
 }
 
 func RecoverSSHKeyRestController(RequestContext *gin.Context) {
