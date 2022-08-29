@@ -98,14 +98,14 @@ type VirtualMachineCustomSpec struct {
 		Gateway  string `json:"Gateway,omitempty"`
 		Enablev6 bool   `json:"Enablev6,omitempty"`
 		Enablev4 bool   `json:"Enablev4,omitempty"`
-	} `json:"Network"`
+	} `json:"Network" xml:"Network"`
 
 	// Extra Tools, that is going to be Installed on the VM automatically
 	// Things Like Docker, Docker-Compose, VirtualBox or Podman etc....
 
 	ExtraTools struct {
 		Tools []string `json:"Tools" xml:"Tools"` // Names of the Tools
-	} `json:"ExtraTools;omitempty"`
+	} `json:"ExtraTools;omitempty" xml:"ExtraTools"`
 
 	// Hardware Resourcs for the VM Configuration
 	Resources struct {
@@ -117,7 +117,7 @@ type VirtualMachineCustomSpec struct {
 
 	Disk struct {
 		CapacityInKB int `json:"CapacityInKB" xml:"CapacityInKB"`
-	} `json:"Disk"`
+	} `json:"Disk" xml:"Disk"`
 }
 
 func NewCustomConfig(Config string) (*VirtualMachineCustomSpec, error) {

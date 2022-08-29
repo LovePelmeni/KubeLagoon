@@ -1,8 +1,8 @@
 package ssh_rest
 
 import (
-	"net/http"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/LovePelmeni/Infrastructure/deploy"
@@ -45,13 +45,18 @@ func GetCustomerVirtualMachineSSHKeysRestController(RequestContext *gin.Context)
 		ErrorLogger.Printf(
 			"Failed to Obtain the QuerySet of Customer SSH Public Keys, Error: %s", QuerySet.Error)
 		RequestContext.JSON(
-		http.StatusBadRequest, gin.H{"Error": "Failed to Get Vm SSH Keys"}); return 
+			http.StatusBadRequest, gin.H{"Error": "Failed to Get Vm SSH Keys"})
+		return
 	}
 	RequestContext.JSON(http.StatusOK, gin.H{"QuerySet": Query})
 }
 
-func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
-	// Rest Controller, that Initializes SSH Support for the Customer's Virtual Machine Server 
+func InitializeVirtualMachineSshKeysRestController(RequestContext *gin.Context) {
+	// Rest Controller, that Initializes SSH Support for the Customer's Virtual Machine Server
+}
+
+func RemoveVirtualMachineSshKeysRestController(RequestContext *gin.Context) {
+	// Rest Controller, that Removes SSH Key Pair from the Virtual Machine Server
 }
 
 func RecoverSSHKeyRestController(RequestContext *gin.Context) {
@@ -89,13 +94,19 @@ func UpdateVirtualMachineSshKeysRestController(RequestContext *gin.Context) {
 	case nil:
 		var UpdatedStatus bool = true
 		UploadedError := SshManager.UploadSshKeys(*PrivateKey)
-		_, Error := SshKeys.Update(PublicKey.Content, PublicKey.FileName)
+		NewPublicKey := models.NewSshPublicKey(PublicKey.Content, PublicKey.FileName)
 
-		if Error != nil {
+		Gorm := models.Database.Model(
+			&models.VirtualMachine{}).Where(
+			"id = ? AND owner_id = ?").Unscoped().Update("ssh_public_key", NewPublicKey)
+
+		if Gorm.Error != nil {
+			Gorm.Rollback()
 			UpdatedStatus = false
 			ErrorLogger.Printf("Failed to Update SSH keys for the VM wit ID: %s", VirtualMachineId)
 		}
 		if UploadedError != nil {
+			Gorm.Rollback()
 			UpdatedStatus = false
 			RequestContext.JSON(
 				http.StatusCreated, gin.H{"NewPublicKey": PublicKey, "Status": UpdatedStatus})

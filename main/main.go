@@ -95,8 +95,10 @@ func (this *Server) Run() {
 	}
 
 	// Virtual Machines Rest API Endpoints
-	VirtualMachineGroup := Router.Group("/vm/").Use(middlewares.JwtAuthenticationMiddleware(),
-		middlewares.IsVirtualMachineOwnerMiddleware(), middlewares.InfrastructureHealthCircuitBreakerMiddleware())
+	VirtualMachineGroup := Router.Group("/vm/").Use(
+	middlewares.JwtAuthenticationMiddleware(),
+	middlewares.IsVirtualMachineOwnerMiddleware(),
+    middlewares.InfrastructureHealthCircuitBreakerMiddleware())
 	{
 		{
 			VirtualMachineGroup.POST("/initialize/", vm_rest.InitializeVirtualMachineRestController) // initialized new Virtual Machine (Emtpy)
@@ -115,7 +117,8 @@ func (this *Server) Run() {
 	}
 
 	// Host System Rest Endpoints 
-	HostSystemGroup := Router.Group("/host/").Use(middlewares.IsVirtualMachineOwnerMiddleware(),
+	HostSystemGroup := Router.Group("/host/").Use(
+	middlewares.IsVirtualMachineOwnerMiddleware(),
     middlewares.InfrastructureHealthCircuitBreakerMiddleware())
 	{
 		HostSystemGroup.POST("system/start/", vm_rest.StartGuestOSRestController)
@@ -124,12 +127,13 @@ func (this *Server) Run() {
 	}
 
 	// SSH Rest Endpoints 
-	SshSystemGroup := Router.Group("/ssh/").Use(middlewares.IsVirtualMachineOwnerMiddleware(),
+	SshSystemGroup := Router.Group("/ssh/").Use(
+	middlewares.IsVirtualMachineOwnerMiddleware(),
 	middlewares.InfrastructureHealthCircuitBreakerMiddleware())
 	{
 		SshSystemGroup.POST("/initialize/", ssh_rest.InitializeVirtualMachineSshKeysRestController)
 		SshSystemGroup.PUT("/recover/", ssh_rest.UpdateVirtualMachineSshKeysRestController)
-		SshSystemGroup.DELETE("/remove/", ssh_rest.RemoveVirtualMachineSshKeyRestController)
+		SshSystemGroup.DELETE("/remove/", ssh_rest.RemoveVirtualMachineSshKeysRestController)
 	}
 
 	// Suggestions Rest Endpoints 

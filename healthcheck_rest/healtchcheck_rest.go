@@ -32,7 +32,6 @@ var (
 	Client govmomi.Client
 )
 
-
 func init() {
 	// Initializing Govmomi Client for the VM Server
 }
@@ -68,7 +67,7 @@ func GetVirtualMachineHealthMetricRestController(RequestContext *gin.Context) {
 		RequestContext.JSON(http.StatusOK, gin.H{"Error": "Virtual Machine Not Found"})
 	}
 
-	HealthCheckManager := healthcheck.NewVirtualMachineHealthCheckManager()
+	HealthCheckManager := healthcheck.NewVirtualMachineHealthCheckManager(&VirtualMachine)
 	HealthCheckMetrics := HealthMetric{
 		Storage:    HealthCheckManager.GetStorageUsageMetrics(),
 		Cpu:        HealthCheckManager.GetCpuMetrics(),

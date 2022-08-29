@@ -2,6 +2,7 @@ package healthcheck
 
 import (
 	"time"
+
 	"github.com/vmware/govmomi/vim25/mo"
 )
 
@@ -92,8 +93,10 @@ type VirtualMachineHealthCheckManager struct {
 	VirtualMachine *mo.VirtualMachine
 }
 
-func NewVirtualMachineHealthCheckManager() *VirtualMachineHealthCheckManager {
-	return &VirtualMachineHealthCheckManager{}
+func NewVirtualMachineHealthCheckManager(VirtualMachine *mo.VirtualMachine) *VirtualMachineHealthCheckManager {
+	return &VirtualMachineHealthCheckManager{
+		VirtualMachine: VirtualMachine,
+	}
 }
 
 func (this *VirtualMachineHealthCheckManager) GetCpuMetrics() CPUInfo {

@@ -53,27 +53,48 @@ func NewWindowsDeploymentToolsinstallCommandReturner() *WindowsDeploymentToolsIn
 	return &WindowsDeploymentToolsInstallCommandReturner{
 		Installers: map[string]func(DistributionName string, Version ...string) string{
 			"Docker":         CommandReturner.GetDockerCommand,
-			"Docker-Compose": CommandReturner.GetDockerComposeCommand(),
-			"Podman":         CommandReturner.GetPodmanCommand(),
-			"VirtualBox":     CommandReturner.GetVirtualBoxCommand(),
+			"Docker-Compose": CommandReturner.GetDockerComposeCommand,
+			"Podman":         CommandReturner.GetPodmanCommand,
+			"VirtualBox":     CommandReturner.GetVirtualBoxCommand,
 		},
 	}
 }
+func (this *WindowsDeploymentToolsInstallCommandReturner) GetInstallationCommands(Tools []string, DistributionName string, Version ...string) []string {
+	// Returns List of the Commands, for installation tools, that has been specified by the Customer
+	// for the Windows Server
+
+	var ToolNames = []string{"Docker", "Docker-Compose", "Podman", "VirtualBox"}
+	var SelectedTools = make([]string, len(ToolNames))
+	for _, ToolName := range Tools {
+		if slices.Contains(ToolNames, strings.ToLower(ToolName)) {
+			SelectedTools = append(SelectedTools, ToolName)
+		}
+	}
+	var InstallationCommands = make([]string, len(SelectedTools))
+	for _, Tool := range SelectedTools {
+		if slices.Contains(maps.Keys(this.Installers), Tool) {
+			InstallationCommands = append(InstallationCommands,
+				this.Installers[Tool](DistributionName, Version[0]))
+		}
+	}
+	return InstallationCommands
+}
 
 func (this *WindowsDeploymentToolsInstallCommandReturner) GetDockerCommand(DistributionName string, Version ...string) string {
-	// Returns Command for the Installation Module, (for the Windows OS), Also Depending on the Version
+	// Returns Command for the Installation Module, (for the Windows OS), Also Depending on the Version of the OS
+	return "choco install docker-machine && choco install docker-cli"
 }
 func (this *WindowsDeploymentToolsInstallCommandReturner) GetDockerComposeCommand(DistributionName string, Version ...string) string {
-	// Returns Command for the Installation Module, (for the Windows OS), Also Depending on the Version
-	return ""
+	// Returns Command for the Installation Module, (for the Windows OS), Also Depending on the Version of the OS
+	return "choco install docker-compose"
 }
 func (this *WindowsDeploymentToolsInstallCommandReturner) GetPodmanCommand(DistributionName string, Version ...string) string {
-	// Returns Command for the Installation Module, (for the Windows OS), Also Depending on the Version
-	return ""
+	// Returns Command for the Installation Module, (for the Windows OS), Also Depending on the Version of the OS
+	return "choco install podman"
 }
 func (this *WindowsDeploymentToolsInstallCommandReturner) GetVirtualBoxCommand(DistributionName string, Version ...string) string {
-	// Returns Command for the Installation Module, (for the Windows OS), Also Depending on the Version
-	return ""
+	// Returns Command for the Installation Module, (for the Windows OS), Also Depending on the Version of the OS
+	return "choco install virtualbox"
 }
 
 type LinuxDeploymentToolsInstallCommandReturner struct {
@@ -119,14 +140,14 @@ func (this *LinuxDeploymentToolsInstallCommandReturner) GetDockerCommand(Distrib
 }
 
 func (this *LinuxDeploymentToolsInstallCommandReturner) GetDockerComposeCommand(DistributionName string, Version ...string) string {
-	// Returns Docker-Compose Installation Command for the Linux Based OS
+	// Returns Docker-Compose Installation Command for the Linux Based OS, depending on the Distribution Name
 	return "RUN curl -L 'https://github.com/docker/compose/releases/download/v2.1.1/docker-compose-$(uname -s)-$(uname -m)' -o /usr/local/bin/docker-compose && " +
 		"RUN chmod +x /usr/local/bin/docker-compose && " +
 		"RUN curl https://get.docker.com/ > dockerinstall && chmod 777 dockerinstall && ./dockerinstall && " + "docker-compose --version"
 }
 
 func (this *LinuxDeploymentToolsInstallCommandReturner) GetPodmanCommand(DistributionName string, Version ...string) string {
-	// Returns Podman Installation Command for the Linux Based OS
+	// Returns Podman Installation Command for the Linux Based OS, depending on the Distribution Name
 	// Supports
 	return "sudo apt update && " + "sudo apt install -y podman &&" +
 		"sudo sh -c 'echo" +
@@ -136,7 +157,7 @@ func (this *LinuxDeploymentToolsInstallCommandReturner) GetPodmanCommand(Distrib
 }
 
 func (this *LinuxDeploymentToolsInstallCommandReturner) GetVirtualBoxCommand(DistributionName string, Version ...string) string {
-	// Returns VirtualBox Installation Command for the
+	// Returns VirtualBox Installation Command for the Linux-Based OS
 	return ""
 }
 

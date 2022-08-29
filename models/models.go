@@ -137,10 +137,10 @@ func (this *VirtualMachine) Delete() (*gorm.DB, error) {
 }
 
 type SSHPublicKey struct {
-	ID 				 int 
-	Key              string `json:"Key" xml:"Key" gorm:"type:varchar(10000);default:null;"`
-	Filename         string `json:"Filename" xml:"Filename" gorm:"type:varchar(100); not null;"`
-	VirtualMachineID int    `json:"VirtualMachineID" xml:"VirtualMachineID" gorm:"unique;primaryKey;"`
+	FilePath         string `json:"FilePath"`
+	Key              string `json:"Key" xml:"Key"`
+	Filename         string `json:"Filename" xml:"Filename"`
+	VirtualMachineID int    `json:"VirtualMachineID" xml:"VirtualMachineID"`
 }
 
 func NewSshPublicKey(KeyContent []byte, Filename string) *SSHPublicKey {
@@ -149,36 +149,14 @@ func NewSshPublicKey(KeyContent []byte, Filename string) *SSHPublicKey {
 		Filename: Filename,
 	}
 }
-
-func (this *SSHPublicKey) Create() (*gorm.DB, error) {
-	// Creates New Record of the SSHPublicKey Model at the Database
-	newSSHKey := Database.Model(&SSHPublicKey{}).Create(&this)
-	return newSSHKey, newSSHKey.Error
+func (this *SSHPublicKey) Scan(inter interface{}) error {
+	return json.Unmarshal(inter.([]byte), this)
 }
 
-func (this *SSHPublicKey) Update(NewSshKey []byte, Filename ...string) (*gorm.DB, error) {
-	// Updates SSH Keys Locally at the Database
-	Gorm := Database.Model(&SSHPublicKey{}).Unscoped().Where(
-		"virtual_machine_id = ?", this.VirtualMachineID).Update("Key", NewSshKey)
-	return Gorm, Gorm.Error
+func (this *SSHPublicKey) Value() ([]byte, error){
+	Serialized, Error := json.Marshal(this)
+	return Serialized, Error
 }
-
-func (this *SSHPublicKey) Delete() (*gorm.DB, error) {
-	// Deletes Public SSH Key Related to the Virtual Machine
-	Deleted := Database.Clauses(clause.OnConflict{Columns: []clause.Column{
-		{
-			Name:  "virtual_machine_id", // Checking if ForeignKey Constraint is not Throwing An Error
-			Table: "SSHPublicKey",
-		},
-		{
-			Name:  "virtual_machine",
-			Table: "SSHPublicKey",
-		},
-	}, DoUpdates: clause.AssignmentColumns([]string{})}).Model(&SSHPublicKey{}).Delete(&this)
-	Database.Model(&SSHPublicKey{}).Unscoped().Delete(&this)
-	return Deleted, Deleted.Error
-}
-
 
 type VirtualMachineConfiguration struct {
 
