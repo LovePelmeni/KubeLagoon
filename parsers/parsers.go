@@ -15,6 +15,7 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/network"
 	resource_config "github.com/LovePelmeni/Infrastructure/resource_config"
+	"github.com/LovePelmeni/Infrastructure/ssh_config"
 
 	storage_config "github.com/LovePelmeni/Infrastructure/storage_config"
 	"github.com/vmware/govmomi/object"
@@ -206,9 +207,11 @@ func (this *VirtualMachineCustomSpec) GetSshConfig(Client vim25.Client, VirtualM
 	case this.Ssh.ByRootCertificate == true:
 		newCertificateManager := ssh_config.NewVirtualMachineSshCertificateManager(Client)
 		PublicKey, PrivateKey, Error := newCertificateManager.GenerateSshKeys()
+		return 
 
 	case this.Ssh.ByRootCredentials == true:
 		newRootCredentialsManager := ssh_config.NewVirtualMachineSshRootCredentialsManager(Client)
 		RootCredentials := newRootCredentialsManager.GetSshRootCredentials(VirtualMachine)
+		return RootCredentials
 	}
 }

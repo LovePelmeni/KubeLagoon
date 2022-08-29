@@ -39,6 +39,18 @@ func init() {
 	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ltime|log.Ldate|log.Lshortfile)
 }
 
+type SshRootCredentials struct {
+	Username string `json:"Username"`
+	Password string `json:"Password"`
+}
+func NewSshRootCredentials(Username string, Password string) *SshRootCredentials {
+	// Returns New Instance of the SSH Root Credentials 
+	return &SshRootCredentials{
+		Username: Username, 
+		Password: Password, 
+	}
+}
+
 type PublicKey struct {
 	FilePath string `json:"FilePath" xml:"FilePath"`
 	FileName string `json:"FileName" xml:"FileName"`
@@ -188,7 +200,25 @@ type VirtualMachineSshRootCredentialsManager struct {
 	Client vim25.Client 
 	VirtualMachine object.VirtualMachine 
 }
- 
-func (this *VirtualMachineSshRootCredentialsManager) ParseVirtualMachineRootCredentials() {
+
+func NewVirtualMachineRootCredentialsManager(Client vim25.Client, VirtualMachine *object.VirtualMachine) *VirtualMachineSshRootCredentialsManager {
+	return &VirtualMachineSshRootCredentialsManager{
+		Client: Client, 
+		VirtualMachine: *VirtualMachine,
+	}
+}
+func (this *VirtualMachineSshRootCredentialsManager) GetSshRootCredentials() (*SshRootCredentials, error){
 	// Parses Root Credentials of the OS Host System of the Customer's Virtual Machine Server 
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
+	Manager := property.DefaultCollector(&this.Client)
+	defer CancelFunc()
+
+	// Receiving Virtual Machine Instance 
+
+	var VirtualMachine mo.VirtualMachine 
+	RetrieveError := Manager.RetrieveOne(TimeoutContext, this.VirtualMachine.Reference(),
+    []string{"name", "guest"}, &VirtualMachine)
+
+	if RetrieveError != nil {DebugLogger.Printf(
+	"Failed to Get VirtualMachine Instance"); return nil, RetrieveError}
 }

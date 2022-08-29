@@ -108,10 +108,10 @@ func NewVirtualMachine(
 
 	OwnerId string, // ID Of the Customer, who Owns this Virtual Machine
 	VirtualMachineName string, // Virtual Machine UniqueName
-	SshKey SSHPublicKey,
-	Configuration *VirtualMachineConfiguration,
+	SshKey *SSHPublicKey,
 	ItemPath string,
 	IPAddress string,
+	Configuration ...*VirtualMachineConfiguration,
 
 ) *VirtualMachine {
 
@@ -120,8 +120,8 @@ func NewVirtualMachine(
 		VirtualMachineName: VirtualMachineName,
 		ItemPath:           ItemPath,
 		IPAddress:          IPAddress,
-		Configuration:      *Configuration,
-		SshKey:             SshKey,
+		Configuration:      *Configuration[0],
+		SshKey:             *SshKey,
 	}
 }
 
@@ -216,6 +216,7 @@ func NewVirtualMachineConfiguration(SerializedConfiguration []byte) (*VirtualMac
 	DecodedConfigurationError := json.Unmarshal(SerializedConfiguration, &NewConfiguration)
 	return &NewConfiguration, DecodedConfigurationError
 }
+
 // Sql Methods for managing Encoding and Decoding of the SQL Model
 
 func (this *VirtualMachineConfiguration) Scan(source interface{}) error {

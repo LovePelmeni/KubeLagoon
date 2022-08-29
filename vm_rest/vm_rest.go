@@ -219,11 +219,14 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 				ErrorLogger.Printf(
 				"Failed to Generate SSH Keys for the Virtual Machine Server")}
 
+		// Creating New Virtual Machine ORM Object
 		NewVirtualMachine := models.NewVirtualMachine(
-		strconv.Itoa(CustomerId), VirtualMachineName, SshPublicKey, InitializedInstance.InventoryPath, IPAddress)
+		strconv.Itoa(CustomerId), VirtualMachineName, models.NewSshPublicKey(SshPublicKey.Content,
+	    SshPublicKey.FilePath, SshPublicKey.FileName), InitializedInstance.InventoryPath, IPAddress)
 
-		_, CreationError := NewVirtualMachine.Create()
+		Created, CreationError := NewVirtualMachine.Create()
 		if CreationError != nil {
+			Created.Rollback()
 			ErrorLogger.Printf("Failed to Create new ORM VM Object, Error on Creation: %s", CreationError)
 		}
 		RequestContext.JSON(http.StatusCreated, 
@@ -233,7 +236,7 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 		// In Worse Case returning Initialization Error...
 		ErrorLogger.Printf("Failed to Initialize New Virtual Server, Error: %s", InitError)
 		RequestContext.JSON(http.StatusBadGateway,
-			gin.H{"Error": "Failed to Initialize new Virtual Server"})
+		gin.H{"Error": "Failed to Initialize new Virtual Server"})
 	}
 }
 
