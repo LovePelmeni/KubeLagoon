@@ -96,8 +96,8 @@ func (this *Customer) Delete(UserId int) (*gorm.DB, error) {
 
 type VirtualMachine struct {
 	ID                 int
-	SshKey             SSHPublicKey                `json:"sshKey" xml:"sshKey" gorm:"column:ssh_key;type:text;"`
-	Configuration      VirtualMachineConfiguration `json:"Configuration" xml:"Configuration" gorm:"column:configuration;type:text;"`
+	SshKey             SSHPublicKey                `json:"sshKey" xml:"sshKey" gorm:"column:ssh_key;type:text;default:null;"`
+	Configuration      VirtualMachineConfiguration `json:"Configuration" xml:"Configuration" gorm:"column:configuration;type:text;default:null;"`
 	OwnerId            string                      `json:"OwnerId" xml:"OwnerId" gorm:"<-:create;type:varchar(100);not null;unique;"`
 	VirtualMachineName string                      `json:"VirtualMachineName" xml:"VirtualMachineName" gorm:"type:varchar(100);not null;"`
 	ItemPath           string                      `json:"ItemPath" xml:"ItemPath" gorm:"<-:create;type:varchar(100);not null;"`
@@ -109,7 +109,7 @@ func NewVirtualMachine(
 	OwnerId string, // ID Of the Customer, who Owns this Virtual Machine
 	VirtualMachineName string, // Virtual Machine UniqueName
 	SshKey SSHPublicKey,
-	Configuration VirtualMachineConfiguration,
+	Configuration *VirtualMachineConfiguration,
 	ItemPath string,
 	IPAddress string,
 
@@ -120,13 +120,14 @@ func NewVirtualMachine(
 		VirtualMachineName: VirtualMachineName,
 		ItemPath:           ItemPath,
 		IPAddress:          IPAddress,
-		Configuration:      Configuration,
+		Configuration:      *Configuration,
 		SshKey:             SshKey,
 	}
 }
 
 func (this *VirtualMachine) Create() (*gorm.DB, error) {
 	// Creates New Virtual Machine Object
+
 	Created := Database.Clauses(clause.OnConflict{Columns: []clause.Column{
 		{Table: "VirtualMachine", Name: "VirtualMachineName"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
@@ -137,6 +138,7 @@ func (this *VirtualMachine) Create() (*gorm.DB, error) {
 
 func (this *VirtualMachine) Delete() (*gorm.DB, error) {
 	// Deletes the Virtual Machine ORM Object....
+
 	Deleted := Database.Clauses(clause.OnConflict{DoNothing: true}).Delete(&this)
 	Database.Model(&VirtualMachine{}).Unscoped().Delete(&this)
 	return Deleted, Deleted.Error
@@ -167,6 +169,7 @@ func (this *SSHPublicKey) Value() ([]byte, error) {
 
 type VirtualMachineConfiguration struct {
 	// Virtual Machine Configuration
+
 	Metadata struct {
 		VirtualMachineId string `json:"VirtualMachineId" xml:"VirtualMachineId"`
 		VmOwnerId        string `json:"VmOwnerId" xml:"VmOwnerId"`
@@ -213,7 +216,6 @@ func NewVirtualMachineConfiguration(SerializedConfiguration []byte) (*VirtualMac
 	DecodedConfigurationError := json.Unmarshal(SerializedConfiguration, &NewConfiguration)
 	return &NewConfiguration, DecodedConfigurationError
 }
-
 // Sql Methods for managing Encoding and Decoding of the SQL Model
 
 func (this *VirtualMachineConfiguration) Scan(source interface{}) error {

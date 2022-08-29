@@ -62,25 +62,29 @@ func NewPrivateKey(Content []byte, FileName string) *PrivateKey {
 		Content: Content,
 	}
 }
+type VirtualMachineSshManager interface {
+	// Interface, represents base SSH Manager Interface for the Virtual Machine Server 
+}
 
-type VirtualMachineSshManager struct {
+type VirtualMachineSshCertificateManager struct {
+	VirtualMachineSshManager
 	Client         vim25.Client
 	VirtualMachine *object.VirtualMachine
 }
 
-func NewVirtualMachineSshManager(Client vim25.Client, VirtualMachine *object.VirtualMachine) *VirtualMachineSshManager {
-	return &VirtualMachineSshManager{
+func NewVirtualMachineSshManager(Client vim25.Client, VirtualMachine *object.VirtualMachine) *VirtualMachineSshCertificateManager {
+	return &VirtualMachineSshCertificateManager{
 		Client:         Client,
 		VirtualMachine: VirtualMachine,
 	}
 }
 
-func (this *VirtualMachineSshManager) GetDefaultPEMPath() string {
+func (this *VirtualMachineSshCertificateManager) GetDefaultPEMPath() string {
 	// Returns Default SSH Path on the VM, where the SSH Keys is going to be Uploaded To
 	return "/ssh-pem/"
 }
 
-func (this *VirtualMachineSshManager) GetVirtualMachineUrl() (*url.URL, error) {
+func (this *VirtualMachineSshCertificateManager) GetVirtualMachineUrl() (*url.URL, error) {
 	// Returns Full Virtual Machine Url
 	var MoVirtualMachine mo.VirtualMachine
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
@@ -105,7 +109,7 @@ func (this *VirtualMachineSshManager) GetVirtualMachineUrl() (*url.URL, error) {
 		Path: "/"}, nil
 }
 
-func (this *VirtualMachineSshManager) UploadSshKeys(Key PrivateKey) error {
+func (this *VirtualMachineSshCertificateManager) UploadSshKeys(Key PrivateKey) error {
 	// Uploaded SSH Pem Key to the Virtual Machine Server...
 
 	SshManager := ssh.NewManager(rest.NewClient(&this.Client))
@@ -145,7 +149,7 @@ func (this *VirtualMachineSshManager) UploadSshKeys(Key PrivateKey) error {
 	return nil
 }
 
-func (this *VirtualMachineSshManager) GenerateSshKeys() (*PublicKey, *PrivateKey, error) {
+func (this *VirtualMachineSshCertificateManager) GenerateSshKeys() (*PublicKey, *PrivateKey, error) {
 	// Returns Generated SSH Keys for the Virtual Machine Server
 
 	Manager := ssh.NewManager(rest.NewClient(&this.Client))
@@ -174,4 +178,17 @@ func (this *VirtualMachineSshManager) GenerateSshKeys() (*PublicKey, *PrivateKey
 		GenerationError = errors.New("Failed to Generate SSH Keys")
 	}
 	return NewPublicKey(PublicKey, "ssh_key.pub"), NewPrivateKey(PrivateKey, "ssh_key.pem"), GenerationError
+}
+
+
+type VirtualMachineSshRootCredentialsManager struct {
+	// SSH Manager Class, that performs Type of the SSH Connection 
+	// Via Root Credentials
+	VirtualMachineSshManager
+	Client vim25.Client 
+	VirtualMachine object.VirtualMachine 
+}
+ 
+func (this *VirtualMachineSshRootCredentialsManager) ParseVirtualMachineRootCredentials() {
+	// Parses Root Credentials of the OS Host System of the Customer's Virtual Machine Server 
 }

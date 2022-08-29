@@ -15,7 +15,7 @@ import (
 	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/models"
 	"github.com/vmware/govmomi"
-	
+
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
 )
@@ -132,31 +132,33 @@ func NonAuthorizationRequiredMiddleware() gin.HandlerFunc {
 	}
 }
 
-
 func InfrastructureHealthCircuitBreakerMiddleware() gin.HandlerFunc {
-	// Middleware, that checks for VM Server Accessibility, when the Request Associated within It 
-	// is being Requested, If the Datacenter is currently not available, it will respond with 
-	// not available Exception 
+	// Middleware, that checks for VM Server Accessibility, when the Request Associated within It
+	// is being Requested, If the Datacenter is currently not available, it will respond with
+	// not available Exception
 	return func(RequestContext *gin.Context) {
 
-	var (
-		APIIp    = os.Getenv("VMWARE_SOURCE_IP")
-		Username = os.Getenv("VMWARE_SOURCE_USERNAME")
-		Password = os.Getenv("VMWARE_SOURCE_PASSWORD")
+		var (
+			APIIp    = os.Getenv("VMWARE_SOURCE_IP")
+			Username = os.Getenv("VMWARE_SOURCE_USERNAME")
+			Password = os.Getenv("VMWARE_SOURCE_PASSWORD")
 
-		APIUrl = &url.URL{
-			Scheme: "https",
-			Path:   "/sdk/",
-			Host:   APIIp,
-			User:   url.UserPassword(Username, Password),
+			APIUrl = &url.URL{
+				Scheme: "https",
+				Path:   "/sdk/",
+				Host:   APIIp,
+				User:   url.UserPassword(Username, Password),
+			}
+		)
+		TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
+		defer CancelFunc()
+
+		_, ConnectionError := govmomi.NewClient(TimeoutContext, APIUrl, false)
+		if ConnectionError != nil {
+			RequestContext.AbortWithStatusJSON(http.StatusServiceUnavailable,
+				gin.H{"Error": "Service Is Currently Not Available, Try Later"})
+			return
 		}
-	)
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	defer CancelFunc()
-
-	_, ConnectionError := govmomi.NewClient(TimeoutContext, APIUrl, false)
-	if ConnectionError != nil {RequestContext.AbortWithStatusJSON(http.StatusServiceUnavailable, 
-	gin.H{"Error": "Service Is Currently Not Available, Try Later"}); return }
-	RequestContext.Next()
+		RequestContext.Next()
 	}
 }

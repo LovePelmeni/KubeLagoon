@@ -91,6 +91,11 @@ type VirtualMachineCustomSpec struct {
 		Bit              int64  `json:"Bit;omitempty"`
 	} `json:"HostSystem"`
 
+	Ssh struct {
+		ByRootCredentials bool `json:"ByRootCredentials" xml:"ByRootCredentials"`
+		ByRootCertificate bool `json:"ByRootCertificate" xml:"ByRootCertificate"`
+	}
+
 	Network struct {
 		IP       string `json:"IP,omitempty"`
 		Netmask  string `json:"Netmask,omitempty"`
@@ -192,4 +197,18 @@ func (this *VirtualMachineCustomSpec) GetNetworkConfig(Client vim25.Client) (*ty
 func (this *VirtualMachineCustomSpec) GetExtraToolsConfig(Client vim25.Client) ([]string, error) {
 	// Returns Installation Tools
 	return this.ExtraTools.Tools, nil
+}
+
+func (this *VirtualMachineCustomSpec) GetSshConfig(Client vim25.Client, VirtualMachine *object.VirtualMachine) {
+	// Returns SSH Support Configuration for the Virtual Machine, based on the Config
+	// That Customer Has Specified
+	switch {
+	case this.Ssh.ByRootCertificate == true:
+		newCertificateManager := ssh_config.NewVirtualMachineSshCertificateManager(Client)
+		PublicKey, PrivateKey, Error := newCertificateManager.GenerateSshKeys()
+
+	case this.Ssh.ByRootCredentials == true:
+		newRootCredentialsManager := ssh_config.NewVirtualMachineSshRootCredentialsManager(Client)
+		RootCredentials := newRootCredentialsManager.GetSshRootCredentials(VirtualMachine)
+	}
 }

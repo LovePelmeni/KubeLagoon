@@ -14,6 +14,7 @@ import (
 	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/deploy"
 	"github.com/LovePelmeni/Infrastructure/models"
+	"github.com/LovePelmeni/Infrastructure/ssh_config"
 
 	"github.com/LovePelmeni/Infrastructure/parsers"
 	"github.com/LovePelmeni/Infrastructure/resources"
@@ -196,19 +197,37 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 		IPAddress, IPError := InitializedInstance.WaitForIP(TimeoutContext)
 		if IPError != nil {
 			ErrorLogger.Printf(
-				"Failed to Parse the IP Address of the Virtual Machine, Timeout: Error: %s", IPError)
+			"Failed to Parse the IP Address of the Virtual Machine, Timeout: Error: %s", IPError)
 			RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to Initialize Virtual Machine"})
 			return
 		}
+		// Adding Virtual Machine SSH Support
+		SshKeyGenerator := ssh_config.NewVirtualMachineSshManager(*Client.Client, InitializedInstance)
+		SshPublicKey, SshPrivateKey, GenerateError  := SshKeyGenerator.GenerateSshKeys()
+
+			// If the Generation Fails, it would use Root User and Password to perform Connection instead
+		switch GenerateError {
+			case nil:
+				DebugLogger.Printf(
+				"Failed to Generate SSH Keys for the Virtual Machine Server")
+				// if generation Performed Well, Uploading SSH Keys to the Remote Virtual Machine Server 
+				// that has been Initialized Above 
+				UploadError := SshKeyGenerator.UploadSshKeys(*SshPrivateKey)
+				if UploadError != nil {ErrorLogger.Printf(
+				"Failed to Upload SSH Keys to the Virtual Machine Server")}
+			default:
+				ErrorLogger.Printf(
+				"Failed to Generate SSH Keys for the Virtual Machine Server")}
 
 		NewVirtualMachine := models.NewVirtualMachine(
-			strconv.Itoa(CustomerId), VirtualMachineName, InitializedInstance.InventoryPath, IPAddress)
+		strconv.Itoa(CustomerId), VirtualMachineName, SshPublicKey, InitializedInstance.InventoryPath, IPAddress)
 
 		_, CreationError := NewVirtualMachine.Create()
 		if CreationError != nil {
 			ErrorLogger.Printf("Failed to Create new ORM VM Object, Error on Creation: %s", CreationError)
 		}
-		RequestContext.JSON(http.StatusCreated, gin.H{"Status": "Initialized"})
+		RequestContext.JSON(http.StatusCreated, 
+		gin.H{"Status": "Initialized"})
 
 	default:
 		// In Worse Case returning Initialization Error...
