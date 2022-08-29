@@ -96,15 +96,15 @@ func NewVirtualMachineIPAddress(IPv4 string, Netmask string, Gateway string, Hos
 	}
 }
 
-type VirtualMachineIPManager struct{}
+type VirtualMachinePublicNetworkManager struct{}
 
 // Virtual Machine IP Manager Class
 
-func NewVirtualMachineIPManager() *VirtualMachineIPManager {
-	return &VirtualMachineIPManager{}
+func NewVirtualMachinePublicNetworkManager() *VirtualMachinePublicNetworkManager {
+	return &VirtualMachinePublicNetworkManager{}
 }
 
-func (this *VirtualMachineIPManager) SetupPublicNetwork(IPCredentials VirtualMachineIPAddress) (*types.CustomizationSpec, error) {
+func (this *VirtualMachinePublicNetworkManager) SetupPublicNetwork(IPCredentials VirtualMachineIPAddress) (*types.CustomizationSpec, error) {
 
 	IPCredentials = IPCredentials.ValidateCredentials()
 	// Setting up Customized IP Credentials for the Virtual Machine
@@ -129,6 +129,10 @@ func (this *VirtualMachineIPManager) SetupPublicNetwork(IPCredentials VirtualMac
 			HostName: &types.CustomizationFixedName{Name: IPCredentials.Hostname}, // Setting up Identity Hostname
 		}}
 	return CustomizedIPSettings, nil
+}
+
+func (this *VirtualMachinePublicNetworkManager) ConnectVirtualMachineToNetwork(Network *object.Network, VirtualMachine *object.VirtualMachine) {
+	// Connects Virtual Machine Server to the Network specified 
 }
 
 type VirtualMachinePrivateNetworkManager struct {
@@ -160,4 +164,30 @@ func (this *VirtualMachinePrivateNetworkManager) SetupPrivateNetwork(NetworkCred
 	"Failed to Initialize New Private Network"); return nil, errors.New("Failed to Initialize Private Network")}
 	return object.NewReference(&this.Client, 
 	NewPrivateNetwork.ManagedObjectView.Reference()).(*object.Network), nil
+}
+
+func (this *VirtualMachinePrivateNetworkManager) ConnectVirtualMachineToNetwork(Network *object.Network, VirtualMachine *object.VirtualMachine) (bool, error) {
+	// Connects Virtual Machine to the Private Network, 
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
+	defer CancelFunc()
+
+	// Obtaining Network Resource Key
+
+	PrivateNetworkDeviceConfig := types.VirtualDevice{
+	}
+
+	// Applying New Network Device, so Application can access Private Network 
+	ApplyError := VirtualMachine.AddDevice(TimeoutContext, &PrivateNetworkDeviceConfig)
+	switch ApplyError {
+		case nil:
+			DebugLogger.Printf(
+			"Private Network Access has been successfully added to VM: Name: %s",
+		    VirtualMachine.Name())
+			return true, nil
+		default:
+			ErrorLogger.Printf(
+			"Failed to Connect VM with Name: %s to the Private Network, Error: %s",
+			VirtualMachine.Name(), ApplyError) 
+			return false, ApplyError
+	}
 }

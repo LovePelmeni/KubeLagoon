@@ -1,6 +1,7 @@
 package models
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 
@@ -51,7 +52,7 @@ func init() {
 	}
 
 	Database = DatabaseInstance
-	Database.AutoMigrate(&SSHPublicKey{}, &Customer{}, &VirtualMachine{})
+	Database.AutoMigrate(&Customer{}, &VirtualMachine{})
 	LogFile, Error := os.OpenFile("Models.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
 	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
@@ -62,7 +63,7 @@ func init() {
 }
 
 type Customer struct {
-	ID 		 int 
+	ID       int
 	Username string `json:"Username" gorm:"<-:create;type:varchar(100); not null; unique;"`
 	Email    string `json:"Email" gorm:"<-:create;type:varchar(100); not null; unique;"`
 	Password string `json:"Password" gorm:"type:varchar(100); not null;"`
@@ -86,20 +87,21 @@ func (this *Customer) Create() (*gorm.DB, error) {
 	return CreatedCustomer, CreatedCustomer.Error
 }
 
-func (this *Customer) Delete() (*gorm.DB, error) {
+func (this *Customer) Delete(UserId int) (*gorm.DB, error) {
 	// Deletes Customer Profile
-	DeletedCustomer := Database.Model(&Customer{}).Delete(&this)
-	Database.Model(&Customer{}).Unscoped().Delete(&this)
+	DeletedCustomer := Database.Where("id = ?", UserId).Delete(&Customer{})
+	Database.Unscoped().Where("id = ?", UserId).Delete(&Customer{})
 	return DeletedCustomer, DeletedCustomer.Error
 }
 
 type VirtualMachine struct {
-	ID   			   int 
-	Configuration VirtualMachineConfiguration `json:"Configuration" xml:"Configuration" gorm:"column:configuration;type:plaintext;"`
-	OwnerId            string `json:"OwnerId" xml:"OwnerId" gorm:"<-:create;type:varchar(100);not null;unique;"`
-	VirtualMachineName string `json:"VirtualMachineName" xml:"VirtualMachineName" gorm:"type:varchar(100);not null;"`
-	ItemPath           string `json:"ItemPath" xml:"ItemPath" gorm:"<-:create;type:varchar(100);not null;"`
-	IPAddress          string `json:"IPAddress" xml:"IPAddress" gorm:"<-:create;type:varchar(100);not null;unique;"`
+	ID                 int
+	sshKey             SSHPublicKey                `json:"sshKey" xml:"sshKey" gorm:"column:ssh_key;type:text;"`
+	Configuration      VirtualMachineConfiguration `json:"Configuration" xml:"Configuration" gorm:"column:configuration;type:text;"`
+	OwnerId            string                      `json:"OwnerId" xml:"OwnerId" gorm:"<-:create;type:varchar(100);not null;unique;"`
+	VirtualMachineName string                      `json:"VirtualMachineName" xml:"VirtualMachineName" gorm:"type:varchar(100);not null;"`
+	ItemPath           string                      `json:"ItemPath" xml:"ItemPath" gorm:"<-:create;type:varchar(100);not null;"`
+	IPAddress          string                      `json:"IPAddress" xml:"IPAddress" gorm:"<-:create;type:varchar(100);not null;unique;"`
 }
 
 func NewVirtualMachine(
@@ -137,14 +139,15 @@ func (this *VirtualMachine) Delete() (*gorm.DB, error) {
 }
 
 type SSHPublicKey struct {
-	FilePath         string `json:"FilePath"`
+	FilePath         string `json:"FilePath" xml:"FilePath"`
 	Key              string `json:"Key" xml:"Key"`
 	Filename         string `json:"Filename" xml:"Filename"`
-	VirtualMachineID int    `json:"VirtualMachineID" xml:"VirtualMachineID"`
+	VirtualMachineId int    `json:"VirtualMachineId" xml:"VirtualMachineId"`
 }
 
-func NewSshPublicKey(KeyContent []byte, Filename string) *SSHPublicKey {
+func NewSshPublicKey(KeyContent []byte, FilePath string, Filename string) *SSHPublicKey {
 	return &SSHPublicKey{
+		FilePath: FilePath,
 		Key:      string(KeyContent),
 		Filename: Filename,
 	}
@@ -153,23 +156,23 @@ func (this *SSHPublicKey) Scan(inter interface{}) error {
 	return json.Unmarshal(inter.([]byte), this)
 }
 
-func (this *SSHPublicKey) Value() ([]byte, error){
+func (this *SSHPublicKey) Value() ([]byte, error) {
 	Serialized, Error := json.Marshal(this)
 	return Serialized, Error
 }
 
 type VirtualMachineConfiguration struct {
-
+	// Virtual Machine Configuration
 	Metadata struct {
 		VirtualMachineId string `json:"VirtualMachineId" xml:"VirtualMachineId"`
 		VmOwnerId        string `json:"VmOwnerId" xml:"VmOwnerId"`
-	} `json:"Metadata" xml:"Metadata" gorm:"column:metadata;type:longtext;"`
+	} `json:"Metadata" xml:"Metadata"`
 
 	HostSystem struct {
 		Type             string `json:"Type"` // OS Distribution Type Like: Linux, Windows etc....
 		DistributionName string `json:"DistributionName"`
 		Bit              int64  `json:"Bit;omitempty"`
-	} `json:"HostSystem" xml:"HostSystem" gorm:"column:host_system;type:plaintext;"`
+	} `json:"HostSystem" xml:"HostSystem"`
 
 	Network struct {
 		IP       string `json:"IP,omitempty"`
@@ -178,14 +181,14 @@ type VirtualMachineConfiguration struct {
 		Gateway  string `json:"Gateway,omitempty"`
 		Enablev6 bool   `json:"Enablev6,omitempty"`
 		Enablev4 bool   `json:"Enablev4,omitempty"`
-	} `json:"Network" xml:"Network" gorm:"column:network;type:plaintext;"`
+	} `json:"Network" xml:"Network"`
 
 	// Extra Tools, that is going to be Installed on the VM automatically
 	// Things Like Docker, Docker-Compose, VirtualBox or Podman etc....
 
 	ExtraTools struct {
 		Tools []string `json:"Tools" xml:"Tools"` // Names of the Tools
-	} `json:"ExtraTools;omitempty" xml:"ExtraTools" gorm:"column:extra_tools;type:plaintext;"`
+	} `json:"ExtraTools;omitempty" xml:"ExtraTools"`
 
 	// Hardware Resourcs for the VM Configuration
 	Resources struct {
@@ -193,27 +196,27 @@ type VirtualMachineConfiguration struct {
 		MemoryInMegabytes int64 `json:"MemoryInMegabytes" xml:"MemoryInMegabytes"`
 		MaxMemoryUsage    int64 `json:"MaxMemoryUsage,omitempty;" xml:"MaxMemoryUsage"`
 		MaxCpuUsage       int64 `json:"MaxCpuUsage,omitempty;" xml:"MaxCpuUsage"`
-	} `json:"Resources" xml:"Resources" gorm:"column:resources;type:plaintext;"`
+	} `json:"Resources" xml:"Resources"`
 
 	Disk struct {
 		CapacityInKB int `json:"CapacityInKB" xml:"CapacityInKB"`
-	} `json:"Disk" gorm:"column:disk;type:plaintext;"`
+	} `json:"Disk"`
 }
 
 func NewVirtualMachineConfiguration(SerializedConfiguration []byte) (*VirtualMachineConfiguration, error) {
-	// Returns New Serialized Virtual Machine Configuration  
-	var NewConfiguration VirtualMachineConfiguration 
+	// Returns New Serialized Virtual Machine Configuration
+	var NewConfiguration VirtualMachineConfiguration
 	DecodedConfigurationError := json.Unmarshal(SerializedConfiguration, &NewConfiguration)
 	return &NewConfiguration, DecodedConfigurationError
 }
 
-// Sql Methods for managing Encoding and Decoding of the SQL Model 
+// Sql Methods for managing Encoding and Decoding of the SQL Model
 
 func (this *VirtualMachineConfiguration) Scan(source interface{}) error {
 	return json.Unmarshal(source.([]byte), &this)
-} 
+}
 
-func (this *VirtualMachineConfiguration) Value() ([]byte, error) {
-	EncodedData, Error := json.Marshal(this)  
-	return EncodedData, Error
+func (this *VirtualMachineConfiguration) Value() (driver.Value, error) {
+	EncodedData, Error := json.Marshal(this)
+	return string(EncodedData), Error
 }

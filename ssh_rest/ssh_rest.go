@@ -94,7 +94,7 @@ func UpdateVirtualMachineSshKeysRestController(RequestContext *gin.Context) {
 	case nil:
 		var UpdatedStatus bool = true
 		UploadedError := SshManager.UploadSshKeys(*PrivateKey)
-		NewPublicKey := models.NewSshPublicKey(PublicKey.Content, PublicKey.FileName)
+		NewPublicKey := models.NewSshPublicKey(PublicKey.Content, PublicKey.FilePath, PublicKey.FileName)
 
 		Gorm := models.Database.Model(
 			&models.VirtualMachine{}).Where(

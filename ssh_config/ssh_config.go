@@ -40,6 +40,7 @@ func init() {
 }
 
 type PublicKey struct {
+	FilePath string `json:"FilePath" xml:"FilePath"`
 	FileName string `json:"FileName" xml:"FileName"`
 	Content  []byte `json:"Content" xml:"Content"`
 }

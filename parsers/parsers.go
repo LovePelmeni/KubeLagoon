@@ -184,7 +184,7 @@ func (this *VirtualMachineCustomSpec) GetDiskStorageConfig(Client vim25.Client) 
 func (this *VirtualMachineCustomSpec) GetNetworkConfig(Client vim25.Client) (*types.CustomizationSpec, error) {
 	// Returns Virtual Machine Network Configuration for the Virtual Machine
 	IPCredentials := network.NewVirtualMachineIPAddress(this.Network.IP, this.Network.Netmask, this.Network.Gateway, this.Network.Hostname)
-	NewNetworkManager := network.NewVirtualMachineIPManager()
+	NewNetworkManager := network.NewVirtualMachinePublicNetworkManager()
 	NetworkConfig, SetupError := NewNetworkManager.SetupPublicNetwork(*IPCredentials)
 	return NetworkConfig, SetupError
 }

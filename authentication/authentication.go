@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/LovePelmeni/Infrastructure/models"
@@ -16,7 +15,7 @@ var (
 	InfoLogger  *log.Logger
 	ErrorLogger *log.Logger
 )
-var secretKey = os.Getenv("JWT_SECRET_KEY")
+var secretKey = []byte(os.Getenv("JWT_SECRET_KEY"))
 
 func init() {
 	LogFile, LogError := os.OpenFile("Authentication.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
@@ -24,8 +23,8 @@ func init() {
 		panic(LogError)
 	}
 	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
-	InfoLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
+	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 }
 
 // Packege, that Is Responsible for handling Customer Authentication Policy
@@ -51,7 +50,7 @@ func CreateJwtToken(UserId int, Username string, Email string) (string, error) {
 	newTokenClaims["Username"] = Username
 	newTokenClaims["Email"] = Email
 	newTokenClaims["exp"] = time.Now().Add(10000 * time.Minute).Unix()
-	stringToken, Error := newToken.SignedString(string(secretKey))
+	stringToken, Error := newToken.SignedString(secretKey)
 	if Error != nil {
 		ErrorLogger.Printf("Failed to Stringify JWT Token. Error: %s", Error)
 		return "", Error
@@ -71,6 +70,8 @@ type DecodedJwtData struct {
 
 func CheckValidJwtToken(token string) error {
 
+	// Checks if the Customer's jwt auth Token is Valid.
+
 	DecodedData := &JwtToken{}
 	_, Error := jwt.ParseWithClaims(token, DecodedData,
 		func(token *jwt.Token) (interface{}, error) { return secretKey, nil })
@@ -87,7 +88,8 @@ func CheckValidJwtToken(token string) error {
 	return nil
 }
 
-func GetCustomerJwtCredentials(token string) (map[string]string, error) {
+func GetCustomerJwtCredentials(token string) (*JwtToken, error) {
+	// Returns Decoded Customer Credentials from the Jwt Auth Token
 
 	if len(token) == 0 {
 		return nil, errors.New("Invalid Jwt Token")
@@ -99,6 +101,5 @@ func GetCustomerJwtCredentials(token string) (map[string]string, error) {
 	if Error != nil {
 		return nil, Error
 	}
-	return map[string]string{"username": DecodedData.Username,
-		"email": DecodedData.Email, "user_id": strconv.Itoa(DecodedData.UserId)}, nil
+	return DecodedData, nil
 }

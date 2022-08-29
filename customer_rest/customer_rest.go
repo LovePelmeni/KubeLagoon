@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"errors"
 	"fmt"
 	"log"
 
@@ -12,6 +13,7 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/models"
+	
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
@@ -114,31 +116,37 @@ func CreateCustomerRestController(RequestContext *gin.Context) {
 
 		switch Error {
 		case gorm.ErrInvalidData:
+			Created.Rollback()
 			RequestContext.JSON(http.StatusBadRequest,
 				gin.H{"Error": "Invalid Credentials has been Passed, Make sure that Credentials has proper Length and Character Type"})
 			return
 
 		case gorm.ErrInvalidValue:
+			Created.Rollback()
 			RequestContext.JSON(http.StatusBadRequest,
 				gin.H{"Error": "Invalid Value has been Passed"})
 			return
 
 		case gorm.ErrModelValueRequired:
+			Created.Rollback()
 			RequestContext.JSON(http.StatusBadRequest,
 				gin.H{"Error": "You missed to Setup Required Fields"})
 			return
 
 		case gorm.ErrInvalidTransaction:
+			Created.Rollback()
 			RequestContext.JSON(http.StatusBadRequest,
 				gin.H{"Error": "Failed to Perform Transaction"})
 			return
 
 		case gorm.ErrPrimaryKeyRequired:
+			Created.Rollback()
 			RequestContext.JSON(http.StatusBadRequest,
 				gin.H{"Error": "Some Fields (`Username` or `Email`) you've specified are already being used"})
 			return
 
 		default:
+			Created.Rollback()
 			RequestContext.JSON(http.StatusBadRequest,
 				gin.H{"Error": fmt.Sprintf("Unknown Error `%s`", Error.Error())})
 			return
@@ -152,6 +160,7 @@ func CreateCustomerRestController(RequestContext *gin.Context) {
 				gin.H{"Error": "Failed to Generate Auth Token"})
 			return
 		}
+		Created.Commit()
 		RequestContext.SetCookie("jwt-token", NewJwtToken, int(time.Now().Add(10000*time.Minute).Unix()), "/", "", false, false)
 		RequestContext.JSON(http.StatusCreated, gin.H{"Operation": "Success"})
 	}
@@ -159,47 +168,71 @@ func CreateCustomerRestController(RequestContext *gin.Context) {
 
 func ResetPasswordRestController(RequestContext *gin.Context) {
 	// Rest Controller, Responsible for Resetting Password
+
 	NewPassword := RequestContext.PostForm("NewPassword")
 	CustomerId := RequestContext.PostForm("CustomerId")
 
 	NewPasswordHash, GenerateError := bcrypt.GenerateFromPassword([]byte(NewPassword), 14)
 	if GenerateError != nil {
-		RequestContext.JSON(http.StatusBadRequest, gin.H{"Error": "Failed to Apply new Password"})
+		RequestContext.JSON(http.StatusBadRequest,
+			gin.H{"Error": "Failed to Apply new Password"})
 	}
-	Updated := models.Database.Model(&models.Customer{}).Where("id = ?", CustomerId).Update("Password", NewPasswordHash)
-	Updated.Unscoped().Update("Password", NewPasswordHash)
+	Updated := models.Database.Model(&models.Customer{}).Where(
+		"id = ?", CustomerId).Update("Password", NewPasswordHash)
 
+	if Updated.Error != nil {
+		Updated.Rollback()
+		RequestContext.JSON(
+			http.StatusBadGateway, gin.H{"Error": "Oops, Failed to Apply New Password"})
+		return
+	}
+
+	Updated.Unscoped().Update("Password", NewPasswordHash)
 	RequestContext.JSON(http.StatusCreated, gin.H{"Status": "Applied"})
 
 }
 
 func DeleteCustomerRestController(RequestContext *gin.Context) {
 	// Rest Controller, Responsible for Deleting Customer Profiles
-	CustomerId := RequestContext.Query("CustomerId")
-	var Customer models.Customer
-	models.Database.Model(&models.Customer{}).Where("id = ?", CustomerId).Find(&Customer)
-	_, Error := Customer.Delete()
+
+	token := RequestContext.Request.Header.Get("Authorization")
+	Credentials, _ := authentication.GetCustomerJwtCredentials(token)
+
+	Deleted, Error := Customer.Delete(Credentials.UserId)
 
 	switch Error {
+
+	case nil:
+		Deleted.Commit()
+		RequestContext.JSON(http.StatusCreated, gin.H{"Operation": "Success"})
+
+	case errors.New("%!s(<nil>)"):
+		Deleted.Commit()
+		RequestContext.JSON(http.StatusCreated, gin.H{"Operation": "Success"})
+
 	case gorm.ErrRecordNotFound:
+		Deleted.Rollback()
 		RequestContext.JSON(http.StatusBadRequest,
 			gin.H{"Error": "Profile with this Credentials Does Not Exist"})
 
 	case gorm.ErrInvalidTransaction:
+		Deleted.Rollback()
 		ErrorLogger.Printf(
-			"Failed to Delete Customer Profile with ID: %s, Error: %s", CustomerId, Error)
+			"Failed to Delete Customer Profile with ID: %v, Error: %s", Credentials.UserId, Error)
 		RequestContext.JSON(http.StatusBadGateway,
 			gin.H{"Error": "Failed to Delete Profile"})
+
 	default:
-		ErrorLogger.Printf("Unknown Error on Customer Deletion, Error: %s", Error)
+		Deleted.Rollback()
+		ErrorLogger.Printf("Unknown Error, %s", Error)
 		RequestContext.JSON(http.StatusBadGateway,
-			gin.H{"Error": fmt.Sprintf("Unknown Error, %s", Error)})
+			gin.H{"Error": fmt.Sprint("Failed to Delete Profile, Please Contact Support")})
 	}
 }
 
 func GetCustomerProfileRestController(RequestContext *gin.Context) {
 	// Returns Customer's Profile, based on the Jwt token passed
-	Token := RequestContext.GetHeader("jwt-token")
+	Token := RequestContext.GetHeader("Authorization")
 	if len(Token) == 0 {
 		RequestContext.JSON(http.StatusForbidden, gin.H{"Error": "UnAuthorized"})
 		return
@@ -210,12 +243,14 @@ func GetCustomerProfileRestController(RequestContext *gin.Context) {
 		return
 	}
 
-	if Customer := models.Database.Model(&models.Customer{}).Where("id = ?", JwtCredentials["user_id"],
-		JwtCredentials["username"], JwtCredentials["email"]).Find(&Customer); Customer.Error != nil {
+	if Customer := models.Database.Model(&models.Customer{}).Where("id = ?", JwtCredentials.UserId,
+		JwtCredentials.Username, JwtCredentials.Email).Find(&Customer); Customer.Error != nil {
 		RequestContext.JSON(
 			http.StatusBadRequest, gin.H{"Error": "No Such Profile has been Found"})
+		return
 	} else {
 		RequestContext.JSON(http.StatusOK, gin.H{"Profile": Customer})
+		return
 	}
 }
 

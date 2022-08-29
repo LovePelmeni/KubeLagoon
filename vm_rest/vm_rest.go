@@ -8,8 +8,10 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"strconv"
 	"time"
 
+	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/deploy"
 	"github.com/LovePelmeni/Infrastructure/models"
 
@@ -19,6 +21,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/object"
+	"github.com/vmware/govmomi/vapi/rest"
 	_ "github.com/vmware/govmomi/vapi/rest"
 )
 
@@ -37,7 +40,7 @@ var (
 )
 
 var (
-	Client govmomi.Client
+	Client *govmomi.Client
 )
 
 var (
@@ -61,22 +64,22 @@ func init() {
 	InfoLogger = log.New(LogFile, "INFO:", log.Ldate|log.Ltime|log.Lshortfile)
 	ErrorLogger = log.New(LogFile, "ERROR:", log.Ldate|log.Ltime|log.Lshortfile)
 
-	// var RestClient *rest.Client
-	// TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
-	// defer CancelFunc()
+	var RestClient *rest.Client
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
+	defer CancelFunc()
 
-	// APIClient, ConnectionError := govmomi.NewClient(TimeoutContext, APIUrl, false)
-	// switch {
-	// case ConnectionError != nil:
-	// 	panic(ConnectionError)
+	APIClient, ConnectionError := govmomi.NewClient(TimeoutContext, APIUrl, false)
+	switch {
+	case ConnectionError != nil:
+		ErrorLogger.Printf("FAILED TO INITIALIZE CLIENT, DOES THE VMWARE HYPERVISOR ACTUALLY RUNNING?")
 
-	// case ConnectionError == nil:
-	// 	RestClient = rest.NewClient(APIClient.Client)
-	// 	if FailedToLogin := RestClient.Login(TimeoutContext, APIUrl.User); FailedToLogin != nil {
-	// 		panic(FailedToLogin)
-	// 	}
-	// }
-	// Client = *APIClient
+	case ConnectionError == nil:
+		RestClient = rest.NewClient(APIClient.Client)
+		if FailedToLogin := RestClient.Login(TimeoutContext, APIUrl.User); FailedToLogin != nil {
+			ErrorLogger.Printf("FAILED TO LOGIN TO THE VMWARE HYPERVISOR SERVER, ERROR: %s", FailedToLogin)
+		}
+	}
+	Client = APIClient
 }
 
 // Package which Contains Rest API Controllers, for Handling VM's Behaviour
@@ -127,8 +130,11 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 
 	// Receiving Extra Info, that is going to be Necessary to Initialize New VM Server
 
+	JwtCookie, _ := authentication.GetCustomerJwtCredentials(
+		RequestContext.Request.Header.Get("Authorization"))
+
 	VirtualMachineName := RequestContext.PostForm("VirtualMachineName")
-	CustomerId := RequestContext.PostForm("CustomerId")
+	CustomerId := JwtCookie.UserId
 
 	// Initilizing Resource Requirements Instance, that will be used to pick up Appropriate Hardware Instances of the Choosed Datacenter, based on this Requirements
 	DatacenterResourceRequirements, InvalidError := resources.NewDatacenterResourceRequirements(
@@ -196,7 +202,7 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 		}
 
 		NewVirtualMachine := models.NewVirtualMachine(
-			CustomerId, VirtualMachineName, InitializedInstance.InventoryPath, IPAddress)
+			strconv.Itoa(CustomerId), VirtualMachineName, InitializedInstance.InventoryPath, IPAddress)
 
 		_, CreationError := NewVirtualMachine.Create()
 		if CreationError != nil {
