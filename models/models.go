@@ -96,7 +96,7 @@ func (this *Customer) Delete(UserId int) (*gorm.DB, error) {
 
 type VirtualMachine struct {
 	ID                 int
-	sshKey             SSHPublicKey                `json:"sshKey" xml:"sshKey" gorm:"column:ssh_key;type:text;"`
+	SshKey             SSHPublicKey                `json:"sshKey" xml:"sshKey" gorm:"column:ssh_key;type:text;"`
 	Configuration      VirtualMachineConfiguration `json:"Configuration" xml:"Configuration" gorm:"column:configuration;type:text;"`
 	OwnerId            string                      `json:"OwnerId" xml:"OwnerId" gorm:"<-:create;type:varchar(100);not null;unique;"`
 	VirtualMachineName string                      `json:"VirtualMachineName" xml:"VirtualMachineName" gorm:"type:varchar(100);not null;"`
@@ -108,6 +108,8 @@ func NewVirtualMachine(
 
 	OwnerId string, // ID Of the Customer, who Owns this Virtual Machine
 	VirtualMachineName string, // Virtual Machine UniqueName
+	SshKey SSHPublicKey,
+	Configuration VirtualMachineConfiguration,
 	ItemPath string,
 	IPAddress string,
 
@@ -118,6 +120,8 @@ func NewVirtualMachine(
 		VirtualMachineName: VirtualMachineName,
 		ItemPath:           ItemPath,
 		IPAddress:          IPAddress,
+		Configuration:      Configuration,
+		SshKey:             SshKey,
 	}
 }
 
@@ -127,14 +131,14 @@ func (this *VirtualMachine) Create() (*gorm.DB, error) {
 		{Table: "VirtualMachine", Name: "VirtualMachineName"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
 			"VirtualMachineName": gorm.Expr("virtual_machine_name + _ + uuid_generate_v3()"),
-		})}).Model(&VirtualMachine{}).Create(&this)
+		})}).Create(&this)
 	return Created, Created.Error
 }
 
 func (this *VirtualMachine) Delete() (*gorm.DB, error) {
 	// Deletes the Virtual Machine ORM Object....
 	Deleted := Database.Clauses(clause.OnConflict{DoNothing: true}).Delete(&this)
-	Database.Model(&VirtualMachine{}).Unscoped().Model(&VirtualMachine{}).Delete(&this)
+	Database.Model(&VirtualMachine{}).Unscoped().Delete(&this)
 	return Deleted, Deleted.Error
 }
 
