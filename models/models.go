@@ -96,7 +96,8 @@ func (this *Customer) Delete(UserId int) (*gorm.DB, error) {
 
 type VirtualMachine struct {
 	ID                 int
-	SshKey             SSHPublicKey                `json:"sshKey" xml:"sshKey" gorm:"column:ssh_key;type:text;default:null;"`
+	State              string                      `json:"State" xml:"State" gorm:"type:varchar(10); not null;"`
+	SshInfo            SSHInfo                     `json:"sshKey" xml:"sshKey" gorm:"column:ssh_key;type:text;default:null;"`
 	Configuration      VirtualMachineConfiguration `json:"Configuration" xml:"Configuration" gorm:"column:configuration;type:text;default:null;"`
 	OwnerId            string                      `json:"OwnerId" xml:"OwnerId" gorm:"<-:create;type:varchar(100);not null;unique;"`
 	VirtualMachineName string                      `json:"VirtualMachineName" xml:"VirtualMachineName" gorm:"type:varchar(100);not null;"`
@@ -108,7 +109,7 @@ func NewVirtualMachine(
 
 	OwnerId string, // ID Of the Customer, who Owns this Virtual Machine
 	VirtualMachineName string, // Virtual Machine UniqueName
-	SshKey *SSHPublicKey,
+	SshInfo *SSHInfo, // SSH Info, defines what method and credentials to use, In Order to Connect to the VM Server
 	ItemPath string,
 	IPAddress string,
 	Configuration ...*VirtualMachineConfiguration,
@@ -121,7 +122,7 @@ func NewVirtualMachine(
 		ItemPath:           ItemPath,
 		IPAddress:          IPAddress,
 		Configuration:      *Configuration[0],
-		SshKey:             *SshKey,
+		SshInfo:            *SshInfo,
 	}
 }
 
@@ -142,29 +143,6 @@ func (this *VirtualMachine) Delete() (*gorm.DB, error) {
 	Deleted := Database.Clauses(clause.OnConflict{DoNothing: true}).Delete(&this)
 	Database.Model(&VirtualMachine{}).Unscoped().Delete(&this)
 	return Deleted, Deleted.Error
-}
-
-type SSHPublicKey struct {
-	FilePath         string `json:"FilePath" xml:"FilePath"`
-	Key              string `json:"Key" xml:"Key"`
-	Filename         string `json:"Filename" xml:"Filename"`
-	VirtualMachineId int    `json:"VirtualMachineId" xml:"VirtualMachineId"`
-}
-
-func NewSshPublicKey(KeyContent []byte, FilePath string, Filename string) *SSHPublicKey {
-	return &SSHPublicKey{
-		FilePath: FilePath,
-		Key:      string(KeyContent),
-		Filename: Filename,
-	}
-}
-func (this *SSHPublicKey) Scan(inter interface{}) error {
-	return json.Unmarshal(inter.([]byte), this)
-}
-
-func (this *SSHPublicKey) Value() ([]byte, error) {
-	Serialized, Error := json.Marshal(this)
-	return Serialized, Error
 }
 
 type VirtualMachineConfiguration struct {
@@ -226,4 +204,32 @@ func (this *VirtualMachineConfiguration) Scan(source interface{}) error {
 func (this *VirtualMachineConfiguration) Value() (driver.Value, error) {
 	EncodedData, Error := json.Marshal(this)
 	return string(EncodedData), Error
+}
+
+const TypeByRootCredentials = "ByRootCredentials"
+
+const TypeBySSLCertificate = "BySSLCertificate"
+
+type SSHInfo struct {
+	// Depending on the Type of the SSH Info, it can be via SSL Certificate or via Root Credentials
+	// So the Info Going to be Serialzied into json and put inside the `SshCredentialsInfo` Field
+	Type               string `json:"Type" xml:"Type"`
+	SshCredentialsInfo string `json:"SshCredentialsInfo" xml:"SshCredentialsInfo"`
+	VirtualMachineId   int    `json:"VirtualMachineId" xml:"VirtualMachineId"`
+}
+
+func NewSshPublicKey(Type string, SshInfo []byte, VirtualMachineId int) *SSHInfo {
+	return &SSHInfo{
+		Type:               Type,
+		SshCredentialsInfo: string(SshInfo),
+		VirtualMachineId:   VirtualMachineId,
+	}
+}
+func (this *SSHInfo) Scan(inter interface{}) error {
+	return json.Unmarshal(inter.([]byte), this)
+}
+
+func (this *SSHInfo) Value() ([]byte, error) {
+	Serialized, Error := json.Marshal(this)
+	return Serialized, Error
 }

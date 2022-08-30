@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"fmt"
-	"io"
 
 	"log"
 	"net/url"
@@ -16,11 +15,9 @@ import (
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
 
-	"github.com/vmware/govmomi/vapi/appliance/access/ssh"
-	"github.com/vmware/govmomi/vapi/rest"
-
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
+	"github.com/vmware/govmomi/vim25/types"
 )
 
 var (
@@ -43,11 +40,12 @@ type SshRootCredentials struct {
 	Username string `json:"Username"`
 	Password string `json:"Password"`
 }
+
 func NewSshRootCredentials(Username string, Password string) *SshRootCredentials {
-	// Returns New Instance of the SSH Root Credentials 
+	// Returns New Instance of the SSH Root Credentials
 	return &SshRootCredentials{
-		Username: Username, 
-		Password: Password, 
+		Username: Username,
+		Password: Password,
 	}
 }
 
@@ -74,8 +72,9 @@ func NewPrivateKey(Content []byte, FileName string) *PrivateKey {
 		Content: Content,
 	}
 }
+
 type VirtualMachineSshManager interface {
-	// Interface, represents base SSH Manager Interface for the Virtual Machine Server 
+	// Interface, represents base SSH Manager Interface for the Virtual Machine Server
 }
 
 type VirtualMachineSshCertificateManager struct {
@@ -84,7 +83,7 @@ type VirtualMachineSshCertificateManager struct {
 	VirtualMachine *object.VirtualMachine
 }
 
-func NewVirtualMachineSshManager(Client vim25.Client, VirtualMachine *object.VirtualMachine) *VirtualMachineSshCertificateManager {
+func NewVirtualMachineSshCertificateManager(Client vim25.Client, VirtualMachine *object.VirtualMachine) *VirtualMachineSshCertificateManager {
 	return &VirtualMachineSshCertificateManager{
 		Client:         Client,
 		VirtualMachine: VirtualMachine,
@@ -118,107 +117,115 @@ func (this *VirtualMachineSshCertificateManager) GetVirtualMachineUrl() (*url.UR
 			os.Getenv("VMWARE_SOURCE_PASSWORD")),
 
 		RawQuery: fmt.Sprintf("moid=%s", this.VirtualMachine.Name()),
-		Path: "/"}, nil
+		Path:     "/"}, nil
+}
+
+func (this *VirtualMachineSshCertificateManager) RemoveSshKeys(PublicKey PublicKey) error {
+	// Removes SSH Certificate by the File Path from the Virtual Machine Server
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
+	defer CancelFunc()
+
+	HostSystem, HostSystemError := this.VirtualMachine.HostSystem(TimeoutContext)
+	if HostSystemError != nil {
+		return HostSystemError
+	}
+
+	SshFileManager := object.NewHostCertificateManager(&this.Client, nil, HostSystem.Reference())
 }
 
 func (this *VirtualMachineSshCertificateManager) UploadSshKeys(Key PrivateKey) error {
 	// Uploaded SSH Pem Key to the Virtual Machine Server...
 
-	SshManager := ssh.NewManager(rest.NewClient(&this.Client))
-	VirtualMachineFullUrl, UrlError := this.GetVirtualMachineUrl()
-	if UrlError != nil {
-		ErrorLogger.Printf("Failed to Parse Virtual Machine Url")
-		return UrlError
-	}
-
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
 	defer CancelFunc()
 
-	PrivateUploadedError := SshManager.UploadFile(TimeoutContext, Key.FileName, VirtualMachineFullUrl, nil)
-	if PrivateUploadedError != nil {
-		ErrorLogger.Printf(
-			"Failed to Upload Private SSH Key to the Virtual Machine, Error: %s", PrivateUploadedError)
-		return PrivateUploadedError
+	// Initializing New SSH Certificate Manager
+	HostSystem, HostSystemError := this.VirtualMachine.HostSystem(TimeoutContext)
+	if HostSystemError != nil {
+		return errors.New("Failed to Get Host System Info")
 	}
+	SshManager := object.NewHostCertificateManager(&this.Client, nil, HostSystem.Reference())
 
-	Access := ssh.Access{Enabled: true}
+	// Uploading SSL Certificate to the Host Machine
+	InstallationError := SshManager.InstallServerCertificate(TimeoutContext, string(Key.Content))
+	switch InstallationError {
+	case nil:
+		DebugLogger.Printf("SSH Key has been Successfully Uploaded to the VM with Name: %s",
+			this.VirtualMachine.Name())
+		return nil
 
-	// Setting up PEM Paths....
-
-	PEMPathSetupError := SshManager.SetRootCAs(this.GetDefaultPEMPath())
-	if PEMPathSetupError != nil {
-		ErrorLogger.Printf("Failed to Setup Default Private Key Paths, Error: %s", PEMPathSetupError)
-		return PEMPathSetupError
+	default:
+		ErrorLogger.Printf("Failed to Upload SSH Key to the Remote VM's Host Machine")
+		return errors.New("Failed to Add SSH Support")
 	}
-
-	if State, Error := SshManager.Get(TimeoutContext); State != true && Error == nil {
-		// If Ssh CLI is not enabled, Enabling It....
-		SetAccessError := SshManager.Set(TimeoutContext, Access)
-		if SetAccessError != nil {
-			ErrorLogger.Printf("Failed to Enable SSH CLI, Error: %s", SetAccessError)
-		}
-	}
-	return nil
 }
 
-func (this *VirtualMachineSshCertificateManager) GenerateSshKeys() (*PublicKey, *PrivateKey, error) {
+func (this *VirtualMachineSshCertificateManager) GenerateSshKeys() (*PublicKey, error) {
+
 	// Returns Generated SSH Keys for the Virtual Machine Server
 
-	Manager := ssh.NewManager(rest.NewClient(&this.Client))
-	GeneratedCertificate := Manager.Certificate()
-	PrivateKey := GeneratedCertificate.Leaf.Raw
-	PublicKey := Manager.Certificate().Leaf.RawSubjectPublicKeyInfo
+	// Certificate will be Generated with the Specific Name and will be Stored on the Host System
+	// Of the Virtual Machine Server
 
-	var GenerationError error
-
-	// Writing Private Key to the Temporary Buffer
-	PrivateKeyWriter := io.MultiWriter()
-	PrivateKeyWriter.Write(PrivateKey)
-
-	// Writing Public Key to the Temporary Buffer
-	PublicKeyWriter := io.MultiWriter()
-	PublicKeyWriter.Write(PublicKey)
+	// SSL Certificate Distinguish Name Consists of the Following Pattern:
+	// `VirtualMachine-<VirtualMachine's Name>`
 
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
 	defer CancelFunc()
 
-	// Writing New SSH Key Files for Public and Private One 
-	NewPrivateKeyFileError := Manager.WriteFile(TimeoutContext, fmt.Sprintf("%s_ssh_key.pem", this.VirtualMachine.Name()), io.MultiReader(), 2048, nil, PrivateKeyWriter)
-	NewPublicKeyFileError := Manager.WriteFile(TimeoutContext, fmt.Sprintf("%s_ssh_key.pub", this.VirtualMachine.Name()), io.MultiReader(), 2048, nil, PublicKeyWriter)
-
-	if NewPrivateKeyFileError != nil || NewPublicKeyFileError != nil {
-		GenerationError = errors.New("Failed to Generate SSH Keys")
+	HostSystem, HostSystemError := this.VirtualMachine.HostSystem(TimeoutContext)
+	if HostSystemError != nil {
+		return nil, errors.New("Failed to Get OS Info")
 	}
-	return NewPublicKey(PublicKey, "ssh_key.pub"), NewPrivateKey(PrivateKey, "ssh_key.pem"), GenerationError
-}
+	Manager := object.NewHostCertificateManager(
+		&this.Client, nil, HostSystem.Reference())
 
+	SSLCertificateDistinguishName := fmt.Sprintf("VirtualMachine-%s", this.VirtualMachine.Name())
+	GeneratedCertificate, GenerationError := Manager.GenerateCertificateSigningRequestByDn(TimeoutContext, SSLCertificateDistinguishName)
+	return NewPublicKey([]byte(GeneratedCertificate), "ssh_key.pub"), GenerationError
+}
 
 type VirtualMachineSshRootCredentialsManager struct {
-	// SSH Manager Class, that performs Type of the SSH Connection 
+	// SSH Manager Class, that performs Type of the SSH Connection
 	// Via Root Credentials
 	VirtualMachineSshManager
-	Client vim25.Client 
-	VirtualMachine object.VirtualMachine 
+	Client         vim25.Client
+	VirtualMachine object.VirtualMachine
 }
 
-func NewVirtualMachineRootCredentialsManager(Client vim25.Client, VirtualMachine *object.VirtualMachine) *VirtualMachineSshRootCredentialsManager {
+func NewVirtualMachineSshRootCredentialsManager(Client vim25.Client, VirtualMachine *object.VirtualMachine) *VirtualMachineSshRootCredentialsManager {
 	return &VirtualMachineSshRootCredentialsManager{
-		Client: Client, 
+		Client:         Client,
 		VirtualMachine: *VirtualMachine,
 	}
 }
-func (this *VirtualMachineSshRootCredentialsManager) GetSshRootCredentials() (*SshRootCredentials, error){
-	// Parses Root Credentials of the OS Host System of the Customer's Virtual Machine Server 
+
+func (this *VirtualMachineSshRootCredentialsManager) SetSshRootCredentials(Username string, Password string) {
+	// Setting up Ssh Root Credentials for the Virtual Machine Server
+}
+func (this *VirtualMachineSshRootCredentialsManager) GetSshRootCredentials() (*types.NamePasswordAuthentication, error) {
+	// Parses Root Credentials of the OS Host System of the Customer's Virtual Machine Server
+	// The Returned object `types.GuestAuthentication` can be potentially used for making operations
+	// that requires this authentication
+
+	SshCredentials := types.NamePasswordAuthentication{
+		Username: "",
+		Password: "",
+	}
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	Manager := property.DefaultCollector(&this.Client)
 	defer CancelFunc()
 
-	// Receiving Virtual Machine Instance 
+	// Receiving Virtual Machine Instance
 
-	var VirtualMachine mo.VirtualMachine 
+	var VirtualMachine mo.VirtualMachine
 	RetrieveError := Manager.RetrieveOne(TimeoutContext, this.VirtualMachine.Reference(),
-    []string{"name", "guest"}, &VirtualMachine)
+		[]string{"name", "guest"}, &VirtualMachine)
 
-	if RetrieveError != nil {DebugLogger.Printf(
-	"Failed to Get VirtualMachine Instance"); return nil, RetrieveError}
+	if RetrieveError != nil {
+		DebugLogger.Printf(
+			"Failed to Get VirtualMachine Instance")
+		return nil, RetrieveError
+	}
+	return &SshCredentials, nil
 }

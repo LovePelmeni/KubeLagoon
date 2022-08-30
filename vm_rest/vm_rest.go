@@ -2,6 +2,7 @@ package vm_rest
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,7 +15,6 @@ import (
 	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/deploy"
 	"github.com/LovePelmeni/Infrastructure/models"
-	"github.com/LovePelmeni/Infrastructure/ssh_config"
 
 	"github.com/LovePelmeni/Infrastructure/parsers"
 	"github.com/LovePelmeni/Infrastructure/resources"
@@ -143,7 +143,8 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 
 	// On Parse Failure Returning Bad Request with Error Explanation
 	if InvalidError != nil {
-		RequestContext.JSON(http.StatusBadRequest, gin.H{"Error": "Invalid Configuration has been Passed."})
+		RequestContext.JSON(http.StatusBadRequest,
+			gin.H{"Error": "Invalid Configuration has been Passed."})
 		return
 	}
 
@@ -197,46 +198,33 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 		IPAddress, IPError := InitializedInstance.WaitForIP(TimeoutContext)
 		if IPError != nil {
 			ErrorLogger.Printf(
-			"Failed to Parse the IP Address of the Virtual Machine, Timeout: Error: %s", IPError)
+				"Failed to Parse the IP Address of the Virtual Machine, Timeout: Error: %s", IPError)
 			RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to Initialize Virtual Machine"})
 			return
 		}
-		// Adding Virtual Machine SSH Support
-		SshKeyGenerator := ssh_config.NewVirtualMachineSshManager(*Client.Client, InitializedInstance)
-		SshPublicKey, SshPrivateKey, GenerateError  := SshKeyGenerator.GenerateSshKeys()
-
-			// If the Generation Fails, it would use Root User and Password to perform Connection instead
-		switch GenerateError {
-			case nil:
-				DebugLogger.Printf(
-				"Failed to Generate SSH Keys for the Virtual Machine Server")
-				// if generation Performed Well, Uploading SSH Keys to the Remote Virtual Machine Server 
-				// that has been Initialized Above 
-				UploadError := SshKeyGenerator.UploadSshKeys(*SshPrivateKey)
-				if UploadError != nil {ErrorLogger.Printf(
-				"Failed to Upload SSH Keys to the Virtual Machine Server")}
-			default:
-				ErrorLogger.Printf(
-				"Failed to Generate SSH Keys for the Virtual Machine Server")}
-
-		// Creating New Virtual Machine ORM Object
-		NewVirtualMachine := models.NewVirtualMachine(
-		strconv.Itoa(CustomerId), VirtualMachineName, models.NewSshPublicKey(SshPublicKey.Content,
-	    SshPublicKey.FilePath, SshPublicKey.FileName), InitializedInstance.InventoryPath, IPAddress)
+		// Define Initial ORM Model Object for the Virtual Machine
+		NewVirtualMachine := models.VirtualMachine{
+			SshInfo:            models.SSHInfo{},
+			IPAddress:          IPAddress,
+			ItemPath:           InitializedInstance.InventoryPath,
+			Configuration:      models.VirtualMachineConfiguration{},
+			OwnerId:            strconv.Itoa(CustomerId),
+			VirtualMachineName: VirtualMachineName,
+		}
 
 		Created, CreationError := NewVirtualMachine.Create()
 		if CreationError != nil {
 			Created.Rollback()
 			ErrorLogger.Printf("Failed to Create new ORM VM Object, Error on Creation: %s", CreationError)
 		}
-		RequestContext.JSON(http.StatusCreated, 
-		gin.H{"Status": "Initialized"})
+		RequestContext.JSON(http.StatusCreated,
+			gin.H{"Status": "Initialized"})
 
 	default:
 		// In Worse Case returning Initialization Error...
 		ErrorLogger.Printf("Failed to Initialize New Virtual Server, Error: %s", InitError)
 		RequestContext.JSON(http.StatusBadGateway,
-		gin.H{"Error": "Failed to Initialize new Virtual Server"})
+			gin.H{"Error": "Failed to Initialize new Virtual Server"})
 	}
 }
 
@@ -248,8 +236,11 @@ func DeployVirtualMachineRestController(RequestContext *gin.Context) {
 	// Receiving Parsed Configuration of the Characteristics, that has been Provided by User
 	// Memory in Megabytes, Cpu Nums etc....
 
+	jwtCredentials, _ := authentication.GetCustomerJwtCredentials(
+		RequestContext.Request.Header.Get("Authorization"))
+
 	VmId := RequestContext.Query("VirtualMachineId")
-	VmOwnerId := RequestContext.Query("CustomerId")
+	VmOwnerId := jwtCredentials.UserId
 
 	// Parsing Custom Virtual Machine Configuration
 	Deployer := deploy.NewVirtualMachineManager(*Client.Client)
@@ -260,9 +251,11 @@ func DeployVirtualMachineRestController(RequestContext *gin.Context) {
 	}
 
 	// Receiving Virtual Machine from the Database and Converting into An API Instance...
-	VirtualMachine, FindError := Deployer.GetVirtualMachine(VmId, VmOwnerId)
+	VirtualMachine, FindError := Deployer.GetVirtualMachine(VmId, strconv.Itoa(VmOwnerId))
+
 	if FindError != nil {
-		RequestContext.JSON(http.StatusBadRequest, gin.H{"Error": "Virtual Server Does Not Exist"})
+		RequestContext.JSON(http.StatusBadRequest,
+			gin.H{"Error": "Virtual Server Does Not Exist"})
 		return
 	}
 
@@ -272,8 +265,25 @@ func DeployVirtualMachineRestController(RequestContext *gin.Context) {
 
 	switch ApplyError {
 	case nil:
+
+		// Updating Virtual Machine ORM Object with New Info
+
+		var VirtualMachine models.VirtualMachine
+		var VirtualMachineCustomConfiguration models.VirtualMachineConfiguration
+		var VirtualMachineSshConfiguration models.SSHInfo
+
+		VirtualMachineSshConfiguration = models.SSHInfo{Type: VmInfo.SshType, SshCredentialsInfo: VmInfo.SshInfo, VirtualMachineId: VirtualMachine.ID}
+		json.Unmarshal(VmCustomConfig.ToJson(), VirtualMachineCustomConfiguration)
+
+		models.Database.Model(&models.VirtualMachine{}).Where("id = ?").Find(&VirtualMachine)
+
+		VirtualMachine.SshInfo = VirtualMachineSshConfiguration
+		VirtualMachine.Configuration = VirtualMachineCustomConfiguration
+		VirtualMachine.State = "Ready" // Changing Availability Status To Ready
+
 		RequestContext.JSON(http.StatusOK, gin.H{"Status": "Applied",
-			"IPAddress": VmInfo.IPAddress, "SshPublicKey": VmInfo.SshPublicKey})
+			"IPAddress": VmInfo.IPAddress, "SshInfo": VmInfo.SshInfo})
+
 	default:
 		ErrorLogger.Printf("Failed to Apply Configuration to the Virtual Machine, Error: %s", ApplyError)
 		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": ApplyError})
@@ -283,11 +293,19 @@ func DeployVirtualMachineRestController(RequestContext *gin.Context) {
 
 func StartVirtualMachineRestController(RequestContext *gin.Context) {
 	// Rest Controller, that is Used to Start Virtual Machine Server
+
+	jwtCredentials, _ := authentication.GetCustomerJwtCredentials(RequestContext.Request.Header.Get("Authorization"))
 	VirtualMachineId := RequestContext.Query("VirtualMachineId")
-	CustomerId := RequestContext.Query("CustomerId")
+	CustomerId := jwtCredentials.UserId
+
+	// Updating the State of the Virtual Machine to `NotReady` in order to prevent other operations on this Virtual Machine
+
+	var VirtualMachine models.VirtualMachine
+	models.Database.Model(&models.VirtualMachine{}).Where(
+		"id = ?", VirtualMachineId).Find(&VirtualMachine)
 
 	VmManager := deploy.NewVirtualMachineManager(*Client.Client)
-	Vm, VmError := VmManager.GetVirtualMachine(VirtualMachineId, CustomerId)
+	Vm, VmError := VmManager.GetVirtualMachine(VirtualMachineId, strconv.Itoa(CustomerId))
 
 	if VmError != nil {
 		RequestContext.JSON(http.StatusBadRequest, gin.H{"Error": "VM Does not Exist."})
@@ -304,10 +322,12 @@ func StartVirtualMachineRestController(RequestContext *gin.Context) {
 
 func RebootVirtualMachineRestController(RequestContext *gin.Context) {
 	// Rest Controller, that is Used to Reboot Virtual Machine Server
+
+	jwtCredentials, _ := authentication.GetCustomerJwtCredentials(RequestContext.Request.Header.Get("Authorization"))
 	VirtualMachineId := RequestContext.Query("VirtualMachineId")
-	CustomerId := RequestContext.Query("CustomerId")
+	CustomerId := jwtCredentials.UserId
 	NewVmManager := deploy.NewVirtualMachineManager(*Client.Client)
-	Vm, VmError := NewVmManager.GetVirtualMachine(VirtualMachineId, CustomerId)
+	Vm, VmError := NewVmManager.GetVirtualMachine(VirtualMachineId, strconv.Itoa(CustomerId))
 
 	if VmError != nil {
 		RequestContext.JSON(
@@ -375,13 +395,18 @@ func RemoveVirtualMachineRestController(RequestContext *gin.Context) {
 			gin.H{"Error": fmt.Sprintf("Failed to Start the Server, %s", StartedError)})
 
 	case StartedError == nil && Started:
+
 		var VirtualMachine models.VirtualMachine
-		models.Database.Model(&models.VirtualMachine{}).Where("id = ?", VirtualMachineId).Find(&VirtualMachine)
-		_, Error := VirtualMachine.Delete()
+		models.Database.Model(&models.VirtualMachine{}).Where(
+
+			"id = ?", VirtualMachineId).Find(&VirtualMachine)
+		Deleted, Error := VirtualMachine.Delete()
 
 		if Error != nil {
-			DebugLogger.Printf(
-				"Failed to Delete Virtual Machine Object, Error: %s", Error)
+			Deleted.Rollback()
+			ErrorLogger.Printf(
+				"Failed to Delete Virtual Machine Object with ID: `%s`, Error: %s",
+				VirtualMachineId, Error)
 		}
 		RequestContext.JSON(http.StatusCreated, gin.H{"Operation": "Success"})
 	}
@@ -413,11 +438,13 @@ func RebootGuestOSRestController(RequestContext *gin.Context) {
 
 func StartGuestOSRestController(RequestContext *gin.Context) {
 	// Rest Controller, that allows to Start Operational System on the Virtual machine
+
+	jwtCredentials, _ := authentication.GetCustomerJwtCredentials(RequestContext.Request.Header.Get("Authorization"))
 	VirtualMachineId := RequestContext.Query("VirtualMachineId")
-	VmOwnerId := RequestContext.Query("VmOwnerId")
+	VmOwnerId := jwtCredentials.UserId
 
 	VmManager := deploy.NewVirtualMachineManager(*Client.Client)
-	VirtualMachine, FindError := VmManager.GetVirtualMachine(VirtualMachineId, VmOwnerId)
+	VirtualMachine, FindError := VmManager.GetVirtualMachine(VirtualMachineId, strconv.Itoa(VmOwnerId))
 	if FindError != nil {
 		RequestContext.AbortWithStatusJSON(http.StatusBadRequest,
 			gin.H{"Error": "Virtual Machine Server not found"})
@@ -435,11 +462,12 @@ func StartGuestOSRestController(RequestContext *gin.Context) {
 
 func ShutdownGuestOsRestController(RequestContext *gin.Context) {
 	// Rest Controller, that allows to Shutdown Operational System on the Virtual Machine
+	jwtCredentials, _ := authentication.GetCustomerJwtCredentials(RequestContext.Request.Header.Get("Authorization"))
 	VirtualMachineId := RequestContext.Query("VirtualMachineId")
-	VmOwnerId := RequestContext.Query("VmOwnerId")
+	VmOwnerId := jwtCredentials.UserId
 
 	VmManager := deploy.NewVirtualMachineManager(*Client.Client)
-	VirtualMachine, FindError := VmManager.GetVirtualMachine(VirtualMachineId, VmOwnerId)
+	VirtualMachine, FindError := VmManager.GetVirtualMachine(VirtualMachineId, strconv.Itoa(VmOwnerId))
 	if FindError != nil {
 		RequestContext.AbortWithStatusJSON(http.StatusBadRequest,
 			gin.H{"Error": "Virtual Machine Server not found"})

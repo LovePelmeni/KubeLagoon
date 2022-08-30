@@ -96,9 +96,10 @@ func (this *Server) Run() {
 
 	// Virtual Machines Rest API Endpoints
 	VirtualMachineGroup := Router.Group("/vm/").Use(
-	middlewares.JwtAuthenticationMiddleware(),
-	middlewares.IsVirtualMachineOwnerMiddleware(),
-    middlewares.InfrastructureHealthCircuitBreakerMiddleware())
+		middlewares.AuthorizationRequiredMiddleware(),
+		middlewares.IsVirtualMachineOwnerMiddleware(),
+		middlewares.InfrastructureHealthCircuitBreakerMiddleware(),
+		middlewares.IsReadyToPerformOperationMiddleware())
 	{
 		{
 			VirtualMachineGroup.POST("/initialize/", vm_rest.InitializeVirtualMachineRestController) // initialized new Virtual Machine (Emtpy)
@@ -116,30 +117,38 @@ func (this *Server) Run() {
 		VirtualMachineGroup.GET("/health/metrics/", healthcheck_rest.GetVirtualMachineHealthMetricRestController) // HealthCheck Metrics of the Virtual Machine
 	}
 
-	// Host System Rest Endpoints 
+	// Host System Rest Endpoints
 	HostSystemGroup := Router.Group("/host/").Use(
-	middlewares.IsVirtualMachineOwnerMiddleware(),
-    middlewares.InfrastructureHealthCircuitBreakerMiddleware())
+
+		middlewares.AuthorizationRequiredMiddleware(),
+		middlewares.IsVirtualMachineOwnerMiddleware(),
+		middlewares.InfrastructureHealthCircuitBreakerMiddleware(),
+		middlewares.IsReadyToPerformOperationMiddleware())
 	{
 		HostSystemGroup.POST("system/start/", vm_rest.StartGuestOSRestController)
 		HostSystemGroup.PUT("system/restart/", vm_rest.RebootGuestOSRestController)
 		HostSystemGroup.DELETE("system/shutdown/", vm_rest.ShutdownGuestOsRestController)
 	}
 
-	// SSH Rest Endpoints 
+	// SSH Rest Endpoints
+
 	SshSystemGroup := Router.Group("/ssh/").Use(
-	middlewares.IsVirtualMachineOwnerMiddleware(),
-	middlewares.InfrastructureHealthCircuitBreakerMiddleware())
+
+		middlewares.AuthorizationRequiredMiddleware(),
+		middlewares.IsVirtualMachineOwnerMiddleware(),
+		middlewares.InfrastructureHealthCircuitBreakerMiddleware(),
+		middlewares.IsReadyToPerformOperationMiddleware(),
+	)
 	{
 		SshSystemGroup.POST("/initialize/", ssh_rest.InitializeVirtualMachineSshKeysRestController)
 		SshSystemGroup.PUT("/recover/", ssh_rest.UpdateVirtualMachineSshKeysRestController)
 		SshSystemGroup.DELETE("/remove/", ssh_rest.RemoveVirtualMachineSshKeysRestController)
 	}
 
-	// Suggestions Rest Endpoints 
+	// Suggestions Rest Endpoints
 	SuggestionsGroup := Router.Group("/suggestions/").Use(
-	middlewares.AuthorizationRequiredMiddleware(),
-    middlewares.InfrastructureHealthCircuitBreakerMiddleware())
+		middlewares.AuthorizationRequiredMiddleware(),
+		middlewares.InfrastructureHealthCircuitBreakerMiddleware())
 	{
 		SuggestionsGroup.POST("/datacenter/", suggestion_rest.GetDatacentersSuggestions)
 	}
@@ -150,7 +159,6 @@ func (this *Server) Run() {
 	{
 		SupportGroup.POST("/feedback/", customer_rest.SupportRestController)
 	}
-
 
 	Server := &http.Server{
 		Addr:    fmt.Sprintf("%s:%s", this.ServerHost, this.ServerPort),
@@ -188,5 +196,3 @@ func main() {
 	httpServer := NewServer(APPLICATION_HOST, APPLICATION_PORT)
 	httpServer.Run()
 }
-
-

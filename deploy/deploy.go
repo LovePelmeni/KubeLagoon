@@ -2,6 +2,8 @@ package deploy
 
 import (
 	"context"
+	"encoding/json"
+
 	"errors"
 	"log"
 	"sync"
@@ -17,8 +19,10 @@ import (
 
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/property"
+
 	"github.com/vmware/govmomi/simulator/esx"
 	"github.com/vmware/govmomi/vim25"
+
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 
@@ -58,13 +62,6 @@ func NewDeployResourceKeys(NetworkKey string, StorageKey string) *ResourceKeys {
 		NetworkKey: NetworkKey,
 		StorageKey: StorageKey,
 	}
-}
-
-type VmInfo struct {
-	// Response Configuration after the Config has been Applied Successfully
-	IPAddress        string               `json:"IPAddress"`
-	SshPublicKey     ssh_config.PublicKey `json:"PublicKey"`
-	NetworkIPAddress string               `json:"NetworkIPAddress"`
 }
 
 type VirtualMachineResourceKeyManager struct {
@@ -322,7 +319,14 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 	return nil, exceptions.VMDeployFailure()
 }
 
-func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.VirtualMachine, Configuration parsers.VirtualMachineCustomSpec) (*VmInfo, error) {
+func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.VirtualMachine, Configuration parsers.VirtualMachineCustomSpec) (
+
+	*struct {
+		SshType   string `json:"SshType"`
+		IPAddress string `json:"IPAddress"`
+		SshInfo   string `json:"SshInfo"`
+	},
+	error) {
 
 	// Applies Custom Configuration: Num's of CPU's, Memory etc... onto the Initialized Virtual Machine
 
@@ -396,9 +400,7 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 		Timestamp: time.Now(),
 	}
 
-
-	// Applying Max CPU/Memory Usage to the Virtual Machine Server 
-
+	// Applying Max CPU/Memory Usage to the Virtual Machine Server
 
 	if Configuration.Resources.MaxCpuUsage != 0 {
 		vm.Summary.Runtime.MaxCpuUsage = int32(Configuration.Resources.MaxCpuUsage)
@@ -447,6 +449,8 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 	HostSystemCustomizationTask, HostSystemCustomizationError := object.NewReference(&this.VimClient, vm.Reference()).(*object.VirtualMachine).Customize(ConfigureTimeoutContext, HostSystemCustomizationConfig)
 	NetworkCustomizationTask, NetworkCustomizationError := object.NewReference(&this.VimClient, vm.Reference()).(*object.VirtualMachine).Customize(ConfigureTimeoutContext, *NetworkConfig)
 
+	// Checking If there is Any Errors, while Configuration was Applying
+
 	if ConfiguredError != nil {
 		// If Failing To Apply First Configuration, Destroying Virtual Machine
 		ErrorLogger.Printf("Failed to Configure Virtual Machine, Error has Occurred")
@@ -470,19 +474,20 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 		ErrorLogger.Printf("Failed to Configure Virtual Machine, Error: %s", WaitResponseError)
 		return nil, WaitResponseError
 	}
+
 	// Waiting for OS Customization Response
 	WaitCustomizationResponseError := HostSystemCustomizationTask.Wait(ConfigureTimeoutContext)
 	if WaitCustomizationResponseError != nil {
 		ErrorLogger.Printf("Failed to Configure OS Customization Specification for the VM Server, Error: %s", WaitCustomizationResponseError)
 		return nil, WaitCustomizationResponseError
 	}
+
 	// Waiting for the Network Customization Response
 	WaitNetworkCustomizationError := NetworkCustomizationTask.Wait(ConfigureTimeoutContext)
 	if WaitNetworkCustomizationError != nil {
 		ErrorLogger.Printf("Failed to Apply Network Configuration, Error: %s", WaitNetworkCustomizationError)
 		return nil, WaitNetworkCustomizationError
 	}
-	// Applying SSH Credentials to the Virtual Machine Server....
 
 	NewVirtualMachine := object.NewVirtualMachine(&this.VimClient, vm.Reference())
 
@@ -493,17 +498,37 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 
 	// Setting up SSH Credentials for the Virtual Machine
 
-	SSHManager := ssh_config.NewVirtualMachineSshManager(this.VimClient, VirtualMachine)
-	PublicKey, PrivateKey, SSHError := SSHManager.GenerateSshKeys()
-	if SSHError != nil {
-		ErrorLogger.Printf("Failed to Generate SSH Keys for the VM, Error: %s", SSHError)
-		return nil, SSHError
+	SshCredentials, ApplyError := Configuration.ApplySshConfig(this.VimClient, VirtualMachine)
+	if ApplyError != nil {
+		ErrorLogger.Printf("Failed to Apply SSH to the VM")
 	}
-	UploadSSHError := SSHManager.UploadSshKeys(*PrivateKey)
-	if UploadSSHError != nil {
-		ErrorLogger.Printf(
-			"Failed to Upload SSH Private Key to the VM OS, Error: %s", UploadSSHError)
-		return nil, UploadSSHError
+
+	// Defining which type of the SSH has been Applied to Virtual Machine,
+	// If the Customer has chosen the Type: "By Root Credentials", It would return `Username` and `Password`
+	// Or If Customer has chosen the Type: "By SSL Certificate" It would return the Generated SSL Certificate with Into About it
+	// By Root Credentials or By SSL Certificate
+
+	var SshType string
+	var SshInfo []byte
+
+	switch {
+
+	case SshCredentials.(*ssh_config.SshRootCredentials) != nil:
+		RootCredentials := SshCredentials.(*ssh_config.SshRootCredentials)
+		SshType = models.TypeByRootCredentials
+		SshInfo, _ = json.Marshal(struct {
+			Username string `json:"Username"`
+			Password string `json:"Password"`
+		}{Username: RootCredentials.Username, Password: RootCredentials.Password})
+
+	case SshCredentials.(*ssh_config.SshCertificateCredentials) != nil:
+		CertificateCredentials := SshCredentials.(*ssh_config.SshCertificateCredentials)
+		SshType = models.TypeBySSLCertificate
+		SshInfo, _ = json.Marshal(struct {
+			KeyContent []byte `json:"KeyContent"`
+			Filename   string `json:"Filename"`
+			FilePath   string `json:"FilePath"`
+		}{KeyContent: CertificateCredentials.KeyContent, Filename: CertificateCredentials.Filename, FilePath: CertificateCredentials.FilePath})
 	}
 
 	// Installing Initial Dependencies on the Virtual Machine
@@ -513,9 +538,14 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 	// Installed, InstallError := DepInstaller.InstallDependencies(VirtualMachine)
 	// if InstallError != nil {return nil, InstallError}
 
-	return &VmInfo{
-		IPAddress:    VmIPAddress,
-		SshPublicKey: *PublicKey,
+	return &struct {
+		SshType   string `json:"SshType"`
+		IPAddress string `json:"IPAddress"`
+		SshInfo   string `json:"SshInfo"`
+	}{
+		SshType:   SshType,
+		IPAddress: VmIPAddress,
+		SshInfo:   string(SshInfo),
 	}, nil
 }
 

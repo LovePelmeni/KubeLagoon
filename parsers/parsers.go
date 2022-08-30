@@ -132,6 +132,16 @@ func NewCustomConfig(Config string) (*VirtualMachineCustomSpec, error) {
 	return &config, DecodeError
 }
 
+func (this *VirtualMachineCustomSpec) ToJson() []byte {
+	EncodedConfiguration, _ := json.Marshal(this)
+	return EncodedConfiguration
+}
+
+func (this *VirtualMachineCustomSpec) ToStruct(SerializedConfiguration []byte) VirtualMachineCustomSpec {
+	json.Unmarshal(SerializedConfiguration, this)
+	return *this
+}
+
 func (this *VirtualMachineCustomSpec) GetHostSystemConfig(Client vim25.Client) (types.VirtualMachineGuestSummary, types.CustomizationSpec, error) {
 
 	// Converting JSON Host System Configuration, Provided By Customer, to the Configuration Instance
@@ -200,18 +210,20 @@ func (this *VirtualMachineCustomSpec) GetExtraToolsConfig(Client vim25.Client) (
 	return this.ExtraTools.Tools, nil
 }
 
-func (this *VirtualMachineCustomSpec) GetSshConfig(Client vim25.Client, VirtualMachine *object.VirtualMachine) {
+func (this *VirtualMachineCustomSpec) ApplySshConfig(Client vim25.Client, VirtualMachine *object.VirtualMachine) (interface{}, error) {
 	// Returns SSH Support Configuration for the Virtual Machine, based on the Config
 	// That Customer Has Specified
 	switch {
 	case this.Ssh.ByRootCertificate == true:
-		newCertificateManager := ssh_config.NewVirtualMachineSshCertificateManager(Client)
-		PublicKey, PrivateKey, Error := newCertificateManager.GenerateSshKeys()
-		return 
+		newCertificateManager := ssh_config.NewVirtualMachineSshCertificateManager(Client, VirtualMachine)
+		PublicKey, SslCertificateError := newCertificateManager.GenerateSshKeys()
+		return PublicKey, SslCertificateError
 
 	case this.Ssh.ByRootCredentials == true:
-		newRootCredentialsManager := ssh_config.NewVirtualMachineSshRootCredentialsManager(Client)
-		RootCredentials := newRootCredentialsManager.GetSshRootCredentials(VirtualMachine)
-		return RootCredentials
+		newRootCredentialsManager := ssh_config.NewVirtualMachineSshRootCredentialsManager(Client, VirtualMachine)
+		RootCredentials, SslRootError := newRootCredentialsManager.GetSshRootCredentials()
+		return RootCredentials, SslRootError
+	default:
+		return nil, errors.New("SSH Disabled")
 	}
 }

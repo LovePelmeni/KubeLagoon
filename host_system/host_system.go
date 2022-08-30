@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/vmware/govmomi/object"
+	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/types"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -58,7 +59,8 @@ func (this *VirtualMachineHostSystemManager) SelectLinuxHostSystemGuest(Distribu
 
 	for OsName, Identifier := range LinuxDistributions {
 		if HasPrefix := strings.HasPrefix(strings.ToLower(OsName),
-			strings.ToLower(DistributionName)) && strings.HasSuffix(OsName, strconv.Itoa(int(Bit[0]))); HasPrefix != false {
+			strings.ToLower(DistributionName)) && strings.HasSuffix(
+			OsName, strconv.Itoa(int(Bit[0]))); HasPrefix != false {
 			return &Identifier, nil
 		} else {
 			continue
@@ -144,4 +146,41 @@ func (this *VirtualMachineHostSystemManager) GetAvailableLinuxOsSystems() map[st
 
 func (this *VirtualMachineHostSystemManager) GetAvailableWindowsOsSystems() map[string]types.VirtualMachineGuestOsIdentifier {
 	return WindowsDistributions
+}
+
+type HostSystemNetworkManager struct {
+	// Class for Managing Host System Network
+	Client         vim25.Client
+	VirtualMachine *object.VirtualMachine
+}
+
+func NewHostSystemNetworkManager() *HostSystemNetworkManager {
+	return &HostSystemNetworkManager{}
+}
+
+type HostSystemFirewallManager struct {
+	// Class Instance for  Managing Host System Firewall
+	Client         vim25.Client
+	VirtualMachine *object.VirtualMachine
+}
+
+func NewHostSystemFirewallManager(Client vim25.Client, VirtualMachine *object.VirtualMachine) *HostSystemFirewallManager {
+	return &HostSystemFirewallManager{
+		Client:         Client,
+		VirtualMachine: VirtualMachine,
+	}
+}
+
+func (this *HostSystemFirewallManager) GetHostSystem() {
+	// Returns Instance of the Virtual Machine's Server Host System
+}
+func (this *HostSystemFirewallManager) AddNewRule() {
+	// Adds new Rule to the Firewall's Configuration
+}
+func (this *HostSystemFirewallManager) UpdateRule() {
+	// Updates Firewall Rule
+}
+
+func (this *HostSystemFirewallManager) GetRules() {
+	// returns Array of the Firewall System Rules
 }

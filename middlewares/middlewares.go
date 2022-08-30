@@ -33,23 +33,8 @@ func init() {
 	RedisClient = Client
 }
 
-func JwtAuthenticationMiddleware() gin.HandlerFunc {
-	return func(context *gin.Context) {
-		if len(context.GetHeader("Authorization")) == 0 {
-			context.AbortWithStatusJSON(
-				http.StatusForbidden, gin.H{"Error": "Unauthorized"})
-			return
-		}
 
-		if _, Error := authentication.GetCustomerJwtCredentials(
-			context.GetHeader("Authorization")); Error != nil {
-			context.AbortWithStatusJSON(
-				http.StatusForbidden, gin.H{"Error": "Unauthorized"})
-			return
-		}
-		context.Next()
-	}
-}
+// VIRTUAL MACHINE MIDDLEWARES
 
 func IsVirtualMachineOwnerMiddleware() gin.HandlerFunc {
 	return func(context *gin.Context) {
@@ -64,7 +49,40 @@ func IsVirtualMachineOwnerMiddleware() gin.HandlerFunc {
 		context.Next()
 	}
 }
+ 
+func IsReadyToPerformOperationMiddleware() gin.HandlerFunc {
+	// Middlewares is used to prevent following case scenario 
 
+	// Suppose: Virtual Machine is Currently busy, and is applying new Configuration 
+	// So we need to add some blocker in order to prevent any critical operations on that specific 
+	// machine, to prevent corruption,  
+	// Virtual Machine Model has 2 states: `Ready` and `NotReady`
+
+	// When `NotReady` State occurs, it means, that this Virtual Machine is already being used and performs another operation 
+	// So this Middleware is being used for detecting that State, before performing new Request to that Specific VM 
+	return func(Context *gin.Context) { 
+
+		var VirtualMachineId = Context.Query("VirtualMachineId")
+		var VirtualMachine models.VirtualMachine 
+
+		models.Database.Model(&models.VirtualMachine{}).Where(
+		"id = ?", VirtualMachineId).Find(&VirtualMachine)
+
+		switch {
+
+		case VirtualMachine.State == "NotReady":
+			Context.AbortWithStatusJSON(http.StatusServiceUnavailable, 
+			gin.H{"Error": "this Server is already Performing other Operation, please Wait"})
+
+		case VirtualMachine.State == "Ready":
+			Context.Next()
+
+		default:
+			Context.Next()
+
+		}
+	}
+}
 func RequestIdempotencyMiddleware() gin.HandlerFunc {
 	// Middleware checks for the Idempotency Of the HTTP Requests
 	// To Avoid Unpleasent Situations
@@ -92,6 +110,8 @@ func RequestIdempotencyMiddleware() gin.HandlerFunc {
 		}
 	}
 }
+
+// AUTHORIZATION MIDDLEWARES
 
 func AuthorizationRequiredMiddleware() gin.HandlerFunc {
 	// Middleware checks for customer is being Authorized
@@ -131,6 +151,11 @@ func NonAuthorizationRequiredMiddleware() gin.HandlerFunc {
 		context.Next()
 	}
 }
+
+// ---------------------------------------------
+
+
+
 
 func InfrastructureHealthCircuitBreakerMiddleware() gin.HandlerFunc {
 	// Middleware, that checks for VM Server Accessibility, when the Request Associated within It
