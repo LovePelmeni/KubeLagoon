@@ -25,6 +25,9 @@ var (
 	Database *gorm.DB
 )
 
+const StatusNotReady = "NotReady" // Defines the Status of the Virtual Machine Availability
+const StatusReady = "Ready"       // Defines the Status of Virtual Machine Availability
+
 var (
 	DATABASE_NAME     = os.Getenv("DATABASE_NAME")
 	DATABASE_HOST     = os.Getenv("DATABASE_HOST")
@@ -124,6 +127,12 @@ func NewVirtualMachine(
 		Configuration:      *Configuration[0],
 		SshInfo:            *SshInfo,
 	}
+}
+
+func (this *VirtualMachine) Save() (*gorm.DB, error) {
+	// Saved the Current Virtual Machine Object
+	Saved := Database.Save(this)
+	return Saved, Saved.Error
 }
 
 func (this *VirtualMachine) Create() (*gorm.DB, error) {

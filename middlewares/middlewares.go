@@ -49,6 +49,42 @@ func IsVirtualMachineOwnerMiddleware() gin.HandlerFunc {
 		context.Next()
 	}
 }
+
+func SetReadyOperationMiddleware() gin.HandlerFunc {
+	// Sets status `Ready` to the Virtual Machine 
+	// being called only on HTTP Response
+	return func (Context *gin.Context) {
+
+		VirtualMachineId := Context.Query("VirtualMachineId")
+		var VirtualMachine models.VirtualMachine 
+
+		models.Database.Model(&models.VirtualMachine{}).Where(
+		"id = ?", VirtualMachineId).Find(&VirtualMachine)
+
+		VirtualMachine.State = models.StatusNotReady 
+		VirtualMachine.Save()
+		Context.Next()
+	}
+}
+
+func SetNotReadyOperationMiddleware() gin.HandlerFunc {
+	// Sets status `NotReady` to the Virtual Machine 
+	// being called only on HTTP Request   
+	return func (Context *gin.Context) {
+
+		VirtualMachineId := Context.Query("VirtualMachineId")
+		var VirtualMachine models.VirtualMachine 
+
+		models.Database.Model(&models.VirtualMachine{}).Where(
+		"id = ?", VirtualMachineId).Find(&VirtualMachine)
+
+		if Context.Request.Response.StatusCode != 0 || len(Context.Request.Response.Status) != 0 {
+			VirtualMachine.State = models.StatusReady 
+			VirtualMachine.Save()
+		}
+		Context.Next()
+	}
+}
  
 func IsReadyToPerformOperationMiddleware() gin.HandlerFunc {
 	// Middlewares is used to prevent following case scenario 

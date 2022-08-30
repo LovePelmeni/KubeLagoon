@@ -36,6 +36,10 @@ func init() {
 	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ltime|log.Ldate|log.Lshortfile)
 }
 
+type SshCredentialsInterface interface {
+	// Interface, represents base class, that represents SSH Credentials
+}
+
 type SshRootCredentials struct {
 	Username string `json:"Username"`
 	Password string `json:"Password"`
@@ -49,27 +53,16 @@ func NewSshRootCredentials(Username string, Password string) *SshRootCredentials
 	}
 }
 
-type PublicKey struct {
+type SshCertificateCredentials struct {
 	FilePath string `json:"FilePath" xml:"FilePath"`
 	FileName string `json:"FileName" xml:"FileName"`
 	Content  []byte `json:"Content" xml:"Content"`
 }
 
-func NewPublicKey(Content []byte, FileName string) *PublicKey {
-	return &PublicKey{
+func NewSshCertificateCredentials(Content []byte, FileName string) *SshCertificateCredentials {
+	return &SshCertificateCredentials{
 		FileName: FileName,
 		Content:  Content,
-	}
-}
-
-type PrivateKey struct {
-	FileName string `json:"FileName" xml:"FileName"`
-	Content  []byte `json:"Content" xml:"Content"`
-}
-
-func NewPrivateKey(Content []byte, FileName string) *PrivateKey {
-	return &PrivateKey{
-		Content: Content,
 	}
 }
 
@@ -120,20 +113,7 @@ func (this *VirtualMachineSshCertificateManager) GetVirtualMachineUrl() (*url.UR
 		Path:     "/"}, nil
 }
 
-func (this *VirtualMachineSshCertificateManager) RemoveSshKeys(PublicKey PublicKey) error {
-	// Removes SSH Certificate by the File Path from the Virtual Machine Server
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
-	defer CancelFunc()
-
-	HostSystem, HostSystemError := this.VirtualMachine.HostSystem(TimeoutContext)
-	if HostSystemError != nil {
-		return HostSystemError
-	}
-
-	SshFileManager := object.NewHostCertificateManager(&this.Client, nil, HostSystem.Reference())
-}
-
-func (this *VirtualMachineSshCertificateManager) UploadSshKeys(Key PrivateKey) error {
+func (this *VirtualMachineSshCertificateManager) UploadSshKeys(Key SshCertificateCredentials) error {
 	// Uploaded SSH Pem Key to the Virtual Machine Server...
 
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
@@ -144,7 +124,8 @@ func (this *VirtualMachineSshCertificateManager) UploadSshKeys(Key PrivateKey) e
 	if HostSystemError != nil {
 		return errors.New("Failed to Get Host System Info")
 	}
-	SshManager := object.NewHostCertificateManager(&this.Client, nil, HostSystem.Reference())
+	SshManager := object.NewHostCertificateManager(&this.Client,
+		*types.NewReference(this.Client.ServiceContent.RootFolder), HostSystem.Reference())
 
 	// Uploading SSL Certificate to the Host Machine
 	InstallationError := SshManager.InstallServerCertificate(TimeoutContext, string(Key.Content))
@@ -160,7 +141,7 @@ func (this *VirtualMachineSshCertificateManager) UploadSshKeys(Key PrivateKey) e
 	}
 }
 
-func (this *VirtualMachineSshCertificateManager) GenerateSshKeys() (*PublicKey, error) {
+func (this *VirtualMachineSshCertificateManager) GenerateSshKeys() (*SshCertificateCredentials, error) {
 
 	// Returns Generated SSH Keys for the Virtual Machine Server
 
@@ -178,11 +159,11 @@ func (this *VirtualMachineSshCertificateManager) GenerateSshKeys() (*PublicKey, 
 		return nil, errors.New("Failed to Get OS Info")
 	}
 	Manager := object.NewHostCertificateManager(
-		&this.Client, nil, HostSystem.Reference())
+		&this.Client, *types.NewReference(this.Client.ServiceContent.RootFolder), HostSystem.Reference())
 
 	SSLCertificateDistinguishName := fmt.Sprintf("VirtualMachine-%s", this.VirtualMachine.Name())
 	GeneratedCertificate, GenerationError := Manager.GenerateCertificateSigningRequestByDn(TimeoutContext, SSLCertificateDistinguishName)
-	return NewPublicKey([]byte(GeneratedCertificate), "ssh_key.pub"), GenerationError
+	return NewSshCertificateCredentials([]byte(GeneratedCertificate), "ssh_key.pub"), GenerationError
 }
 
 type VirtualMachineSshRootCredentialsManager struct {
@@ -200,9 +181,6 @@ func NewVirtualMachineSshRootCredentialsManager(Client vim25.Client, VirtualMach
 	}
 }
 
-func (this *VirtualMachineSshRootCredentialsManager) SetSshRootCredentials(Username string, Password string) {
-	// Setting up Ssh Root Credentials for the Virtual Machine Server
-}
 func (this *VirtualMachineSshRootCredentialsManager) GetSshRootCredentials() (*types.NamePasswordAuthentication, error) {
 	// Parses Root Credentials of the OS Host System of the Customer's Virtual Machine Server
 	// The Returned object `types.GuestAuthentication` can be potentially used for making operations

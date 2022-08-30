@@ -3,11 +3,16 @@ package ssh_rest
 import (
 	"log"
 	"net/http"
-	"os"
 
+	"os"
+	"strconv"
+
+	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/deploy"
+
 	"github.com/LovePelmeni/Infrastructure/models"
 	"github.com/LovePelmeni/Infrastructure/ssh_config"
+
 	"github.com/gin-gonic/gin"
 	"github.com/vmware/govmomi/vim25"
 	"gorm.io/gorm"
@@ -29,34 +34,36 @@ func init() {
 	}
 }
 
-func GetCustomerVirtualMachineSSHKeysRestController(RequestContext *gin.Context) {
+func GetCustomerVirtualMachineSSHCredentialsRestController(RequestContext *gin.Context) {
+	// Rest Controller, that is responsible for giving SSH Info of Customer's Virtual Machines
 
 	var Query []struct {
 		gorm.Model
 		VirtualMachine models.VirtualMachine // Vm Server
-		SSHPublicKey   models.SSHPublicKey   // SSHPublicKey to Access this Server
+		SSHInfo        models.SSHInfo        // SSHPublicKey to Access this Server
 	} // Represents query of the Joins Pattern
 
-	CustomerId := RequestContext.Query("CustomerId")
-	QuerySet := models.Database.Model(&models.VirtualMachine{}).Where("id = ?", CustomerId).Joins(
-		"JOIN ssh_public_key ON virtual_machine.id = ssh_public_key.virtual_machine_id").Find(&Query)
+	jwtCredentials, _ := authentication.GetCustomerJwtCredentials(
+		RequestContext.Request.Header.Get("Authorization"))
+	CustomerId := jwtCredentials.UserId
 
-	if QuerySet.Error != nil {
-		ErrorLogger.Printf(
-			"Failed to Obtain the QuerySet of Customer SSH Public Keys, Error: %s", QuerySet.Error)
-		RequestContext.JSON(
-			http.StatusBadRequest, gin.H{"Error": "Failed to Get Vm SSH Keys"})
-		return
+	var Queryset []models.VirtualMachine
+	models.Database.Model(
+		&models.VirtualMachine{}).Where("id = ?", CustomerId).Find(&Query)
+
+	for _, ModelObj := range Queryset {
+		StructedData := struct {
+			gorm.Model
+			VirtualMachine models.VirtualMachine // Vm Server
+			SSHInfo        models.SSHInfo        // SSHPublicKey to Access this Server
+		}{
+			VirtualMachine: ModelObj,
+			SSHInfo:        ModelObj.SshInfo,
+		}
+		Query = append(Query, StructedData)
 	}
-	RequestContext.JSON(http.StatusOK, gin.H{"QuerySet": Query})
-}
-
-func InitializeVirtualMachineSshKeysRestController(RequestContext *gin.Context) {
-	// Rest Controller, that Initializes SSH Support for the Customer's Virtual Machine Server
-}
-
-func RemoveVirtualMachineSshKeysRestController(RequestContext *gin.Context) {
-	// Rest Controller, that Removes SSH Key Pair from the Virtual Machine Server
+	RequestContext.JSON(http.StatusOK,
+		gin.H{"QuerySet": Query})
 }
 
 func RecoverSSHKeyRestController(RequestContext *gin.Context) {
@@ -65,15 +72,17 @@ func RecoverSSHKeyRestController(RequestContext *gin.Context) {
 
 func UpdateVirtualMachineSshKeysRestController(RequestContext *gin.Context) {
 	// Rest Controller, that Allows to Update SSH Key Pairs with new Ones
+
+	jwtCredentials, _ := authentication.GetCustomerJwtCredentials(
+		RequestContext.Request.Header.Get("Authentication"))
+
 	VirtualMachineId := RequestContext.Query("VirtualMachineId")
-	VmOwnerId := RequestContext.Query("Customerid")
+	VmOwnerId := jwtCredentials.UserId
 
-	var SshKeys models.SSHPublicKey
-	models.Database.Model(&models.SSHPublicKey{}).Where(
-		"virtual_machine_id = ?", VirtualMachineId).Find(&SshKeys)
-
+	var VirtualMachineModel models.VirtualMachine
+	models.Database.Model(&models.VirtualMachine{}).Where("id = ?", VirtualMachineId).Find(&VirtualMachineModel)
 	VmManager := deploy.NewVirtualMachineManager(vim25.Client{})
-	VirtualMachine, FindError := VmManager.GetVirtualMachine(VirtualMachineId, VmOwnerId)
+	VirtualMachine, FindError := VmManager.GetVirtualMachine(VirtualMachineId, strconv.Itoa(VmOwnerId))
 
 	if FindError != nil {
 		RequestContext.JSON(http.StatusBadRequest,
@@ -81,8 +90,8 @@ func UpdateVirtualMachineSshKeysRestController(RequestContext *gin.Context) {
 		return
 	}
 
-	SshManager := ssh_config.NewVirtualMachineSshManager(vim25.Client{}, VirtualMachine)
-	PublicKey, PrivateKey, GenerateError := SshManager.GenerateSshKeys()
+	SshManager := ssh_config.NewVirtualMachineSshCertificateManager(vim25.Client{}, VirtualMachine)
+	PublicKey, GenerateError := SshManager.GenerateSshKeys()
 
 	if GenerateError != nil {
 		RequestContext.JSON(http.StatusBadGateway,
@@ -92,24 +101,14 @@ func UpdateVirtualMachineSshKeysRestController(RequestContext *gin.Context) {
 
 	switch GenerateError {
 	case nil:
-		var UpdatedStatus bool = true
-		UploadedError := SshManager.UploadSshKeys(*PrivateKey)
-		NewPublicKey := models.NewSshPublicKey(PublicKey.Content, PublicKey.FilePath, PublicKey.FileName)
 
 		Gorm := models.Database.Model(
 			&models.VirtualMachine{}).Where(
-			"id = ? AND owner_id = ?").Unscoped().Update("ssh_public_key", NewPublicKey)
+			"id = ? AND owner_id = ?").Unscoped().Update("ssh_public_key", PublicKey)
 
 		if Gorm.Error != nil {
 			Gorm.Rollback()
-			UpdatedStatus = false
 			ErrorLogger.Printf("Failed to Update SSH keys for the VM wit ID: %s", VirtualMachineId)
-		}
-		if UploadedError != nil {
-			Gorm.Rollback()
-			UpdatedStatus = false
-			RequestContext.JSON(
-				http.StatusCreated, gin.H{"NewPublicKey": PublicKey, "Status": UpdatedStatus})
 		}
 	default:
 		RequestContext.JSON(http.StatusBadGateway,

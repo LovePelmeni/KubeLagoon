@@ -140,9 +140,7 @@ func (this *Server) Run() {
 		middlewares.IsReadyToPerformOperationMiddleware(),
 	)
 	{
-		SshSystemGroup.POST("/initialize/", ssh_rest.InitializeVirtualMachineSshKeysRestController)
 		SshSystemGroup.PUT("/recover/", ssh_rest.UpdateVirtualMachineSshKeysRestController)
-		SshSystemGroup.DELETE("/remove/", ssh_rest.RemoveVirtualMachineSshKeysRestController)
 	}
 
 	// Suggestions Rest Endpoints
