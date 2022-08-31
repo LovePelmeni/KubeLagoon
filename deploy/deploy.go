@@ -528,7 +528,7 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 			KeyContent []byte `json:"KeyContent"`
 			Filename   string `json:"Filename"`
 			FilePath   string `json:"FilePath"`
-		}{KeyContent: CertificateCredentials.KeyContent, Filename: CertificateCredentials.Filename, FilePath: CertificateCredentials.FilePath})
+		}{KeyContent: CertificateCredentials.Content, Filename: CertificateCredentials.FileName, FilePath: CertificateCredentials.FilePath})
 	}
 
 	// Installing Initial Dependencies on the Virtual Machine

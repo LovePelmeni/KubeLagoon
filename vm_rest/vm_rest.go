@@ -91,7 +91,10 @@ func GetCustomerVirtualMachine(RequestContext *gin.Context) {
 	// Returns Extended Info about Virtual Machine Server Owned by the Customer
 
 	var VirtualMachine models.VirtualMachine
-	CustomerId := RequestContext.Query("CustomerId")
+	jwtCredentials, _ := authentication.GetCustomerJwtCredentials(
+		RequestContext.Request.Header.Get("jwt-token"))
+
+	CustomerId := jwtCredentials.UserId
 	VirtualMachineId := RequestContext.Query("VirtualMachineId")
 	Gorm := models.Database.Model(&VirtualMachine).Where(
 		"owner_id = ? AND id = ?", CustomerId, VirtualMachineId).Find(&VirtualMachine)
@@ -109,8 +112,12 @@ func GetCustomerVirtualMachine(RequestContext *gin.Context) {
 
 func GetCustomerVirtualMachines(RequestContext *gin.Context) {
 	// Returns List of the VM's that Customer Owns
+
 	var VirtualMachines []models.VirtualMachine
-	CustomerId := RequestContext.Query("CustomerId")
+	jwtCredentials, _ := authentication.GetCustomerJwtCredentials(
+		RequestContext.Request.Header.Get("jwt-token"))
+
+	CustomerId := jwtCredentials.UserId
 	Gorm := models.Database.Model(&Customer).Where("id = ?", CustomerId).Preload("Vms").Find(&VirtualMachines)
 	switch Gorm.Error {
 	case nil:
@@ -273,7 +280,7 @@ func DeployVirtualMachineRestController(RequestContext *gin.Context) {
 		var VirtualMachineSshConfiguration models.SSHInfo
 
 		VirtualMachineSshConfiguration = models.SSHInfo{Type: VmInfo.SshType, SshCredentialsInfo: VmInfo.SshInfo, VirtualMachineId: VirtualMachine.ID}
-		json.Unmarshal(VmCustomConfig.ToJson(), VirtualMachineCustomConfiguration)
+		json.Unmarshal(VmCustomConfig.ToJson(), &VirtualMachineCustomConfiguration)
 
 		models.Database.Model(&models.VirtualMachine{}).Where("id = ?").Find(&VirtualMachine)
 
@@ -375,11 +382,14 @@ func ShutdownVirtualMachineRestController(RequestContext *gin.Context) {
 func RemoveVirtualMachineRestController(RequestContext *gin.Context) {
 	// Rest Controller, that is Used for Destroying Virtual machines...
 
-	VirtualMachineId := RequestContext.Query("VirtualMachineId")
-	CustomerId := RequestContext.Query("CustomerId")
-	NewVmManager := deploy.NewVirtualMachineManager(*Client.Client)
+	jwtCredentials, _ := authentication.GetCustomerJwtCredentials(
+		RequestContext.Request.Header.Get("jwt-token"))
 
-	Vm, FindError := NewVmManager.GetVirtualMachine(VirtualMachineId, CustomerId)
+	VirtualMachineId := RequestContext.Query("VirtualMachineId")
+	CustomerId := jwtCredentials.UserId
+
+	NewVmManager := deploy.NewVirtualMachineManager(*Client.Client)
+	Vm, FindError := NewVmManager.GetVirtualMachine(VirtualMachineId, strconv.Itoa(CustomerId))
 
 	if FindError != nil {
 		RequestContext.AbortWithStatusJSON(
@@ -414,11 +424,12 @@ func RemoveVirtualMachineRestController(RequestContext *gin.Context) {
 
 func RebootGuestOSRestController(RequestContext *gin.Context) {
 	// Rest Controller, that allows to Reboot Operational System of the Virtual Machine
+	jwtCredentials, _ := authentication.GetCustomerJwtCredentials(RequestContext.Request.Header.Get("jwt-token"))
 	VirtualMachineId := RequestContext.Query("VirtualMachineId")
-	VmOwnerId := RequestContext.Query("VmOwnerId")
+	VmOwnerId := jwtCredentials.UserId
 
 	VmManager := deploy.NewVirtualMachineManager(*Client.Client)
-	VirtualMachine, FindError := VmManager.GetVirtualMachine(VirtualMachineId, VmOwnerId)
+	VirtualMachine, FindError := VmManager.GetVirtualMachine(VirtualMachineId, strconv.Itoa(VmOwnerId))
 	if FindError != nil {
 		RequestContext.AbortWithStatusJSON(http.StatusBadRequest,
 			gin.H{"Error": "Virtual Machine Server not found"})

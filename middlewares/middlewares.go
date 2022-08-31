@@ -33,7 +33,6 @@ func init() {
 	RedisClient = Client
 }
 
-
 // VIRTUAL MACHINE MIDDLEWARES
 
 func IsVirtualMachineOwnerMiddleware() gin.HandlerFunc {
@@ -51,64 +50,64 @@ func IsVirtualMachineOwnerMiddleware() gin.HandlerFunc {
 }
 
 func SetReadyOperationMiddleware() gin.HandlerFunc {
-	// Sets status `Ready` to the Virtual Machine 
+	// Sets status `Ready` to the Virtual Machine
 	// being called only on HTTP Response
-	return func (Context *gin.Context) {
+	return func(Context *gin.Context) {
 
 		VirtualMachineId := Context.Query("VirtualMachineId")
-		var VirtualMachine models.VirtualMachine 
+		var VirtualMachine models.VirtualMachine
 
 		models.Database.Model(&models.VirtualMachine{}).Where(
-		"id = ?", VirtualMachineId).Find(&VirtualMachine)
+			"id = ?", VirtualMachineId).Find(&VirtualMachine)
 
-		VirtualMachine.State = models.StatusNotReady 
+		VirtualMachine.State = models.StatusNotReady
 		VirtualMachine.Save()
 		Context.Next()
 	}
 }
 
 func SetNotReadyOperationMiddleware() gin.HandlerFunc {
-	// Sets status `NotReady` to the Virtual Machine 
-	// being called only on HTTP Request   
-	return func (Context *gin.Context) {
+	// Sets status `NotReady` to the Virtual Machine
+	// being called only on HTTP Request
+	return func(Context *gin.Context) {
 
 		VirtualMachineId := Context.Query("VirtualMachineId")
-		var VirtualMachine models.VirtualMachine 
+		var VirtualMachine models.VirtualMachine
 
 		models.Database.Model(&models.VirtualMachine{}).Where(
-		"id = ?", VirtualMachineId).Find(&VirtualMachine)
+			"id = ?", VirtualMachineId).Find(&VirtualMachine)
 
 		if Context.Request.Response.StatusCode != 0 || len(Context.Request.Response.Status) != 0 {
-			VirtualMachine.State = models.StatusReady 
+			VirtualMachine.State = models.StatusReady
 			VirtualMachine.Save()
 		}
 		Context.Next()
 	}
 }
- 
-func IsReadyToPerformOperationMiddleware() gin.HandlerFunc {
-	// Middlewares is used to prevent following case scenario 
 
-	// Suppose: Virtual Machine is Currently busy, and is applying new Configuration 
-	// So we need to add some blocker in order to prevent any critical operations on that specific 
-	// machine, to prevent corruption,  
+func IsReadyToPerformOperationMiddleware() gin.HandlerFunc {
+	// Middlewares is used to prevent following case scenario
+
+	// Suppose: Virtual Machine is Currently busy, and is applying new Configuration
+	// So we need to add some blocker in order to prevent any critical operations on that specific
+	// machine, to prevent corruption,
 	// Virtual Machine Model has 2 states: `Ready` and `NotReady`
 
-	// When `NotReady` State occurs, it means, that this Virtual Machine is already being used and performs another operation 
-	// So this Middleware is being used for detecting that State, before performing new Request to that Specific VM 
-	return func(Context *gin.Context) { 
+	// When `NotReady` State occurs, it means, that this Virtual Machine is already being used and performs another operation
+	// So this Middleware is being used for detecting that State, before performing new Request to that Specific VM
+	return func(Context *gin.Context) {
 
 		var VirtualMachineId = Context.Query("VirtualMachineId")
-		var VirtualMachine models.VirtualMachine 
+		var VirtualMachine models.VirtualMachine
 
 		models.Database.Model(&models.VirtualMachine{}).Where(
-		"id = ?", VirtualMachineId).Find(&VirtualMachine)
+			"id = ?", VirtualMachineId).Find(&VirtualMachine)
 
 		switch {
 
 		case VirtualMachine.State == "NotReady":
-			Context.AbortWithStatusJSON(http.StatusServiceUnavailable, 
-			gin.H{"Error": "this Server is already Performing other Operation, please Wait"})
+			Context.AbortWithStatusJSON(http.StatusServiceUnavailable,
+				gin.H{"Error": "this Server is already Performing other Operation, please Wait"})
 
 		case VirtualMachine.State == "Ready":
 			Context.Next()
@@ -190,9 +189,6 @@ func NonAuthorizationRequiredMiddleware() gin.HandlerFunc {
 
 // ---------------------------------------------
 
-
-
-
 func InfrastructureHealthCircuitBreakerMiddleware() gin.HandlerFunc {
 	// Middleware, that checks for VM Server Accessibility, when the Request Associated within It
 	// is being Requested, If the Datacenter is currently not available, it will respond with
@@ -211,13 +207,14 @@ func InfrastructureHealthCircuitBreakerMiddleware() gin.HandlerFunc {
 				User:   url.UserPassword(Username, Password),
 			}
 		)
+		// Checking if the Infrastructure is able to perform the Http Request, related to the VM
 		TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 		defer CancelFunc()
 
 		_, ConnectionError := govmomi.NewClient(TimeoutContext, APIUrl, false)
 		if ConnectionError != nil {
 			RequestContext.AbortWithStatusJSON(http.StatusServiceUnavailable,
-				gin.H{"Error": "Service Is Currently Not Available, Try Later"})
+				gin.H{"Error": "Service Is Currently Not Available, Try a bit Later"})
 			return
 		}
 		RequestContext.Next()

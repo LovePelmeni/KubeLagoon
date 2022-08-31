@@ -2,16 +2,22 @@ package healthcheck_rest
 
 import (
 	"context"
+	"log"
+
 	"net/http"
 	"net/url"
+
 	"os"
 	"time"
 
 	"github.com/LovePelmeni/Infrastructure/deploy"
 	"github.com/LovePelmeni/Infrastructure/healthcheck"
+
 	"github.com/gin-gonic/gin"
 	"github.com/vmware/govmomi"
+
 	"github.com/vmware/govmomi/property"
+	"github.com/vmware/govmomi/vapi/rest"
 	"github.com/vmware/govmomi/vim25/mo"
 )
 
@@ -29,11 +35,42 @@ var (
 )
 
 var (
-	Client govmomi.Client
+	Client *govmomi.Client
+)
+
+var (
+	DebugLogger *log.Logger
+	InfoLogger  *log.Logger
+	ErrorLogger *log.Logger
 )
 
 func init() {
 	// Initializing Govmomi Client for the VM Server
+	LogFile, Error := os.OpenFile("RestVm.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if Error != nil {
+		panic(Error)
+	}
+
+	DebugLogger = log.New(LogFile, "DEBUG:", log.Ldate|log.Ltime|log.Lshortfile)
+	InfoLogger = log.New(LogFile, "INFO:", log.Ldate|log.Ltime|log.Lshortfile)
+	ErrorLogger = log.New(LogFile, "ERROR:", log.Ldate|log.Ltime|log.Lshortfile)
+
+	var RestClient *rest.Client
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
+	defer CancelFunc()
+
+	APIClient, ConnectionError := govmomi.NewClient(TimeoutContext, APIUrl, false)
+	switch {
+	case ConnectionError != nil:
+		ErrorLogger.Printf("FAILED TO INITIALIZE CLIENT, DOES THE VMWARE HYPERVISOR ACTUALLY RUNNING?")
+
+	case ConnectionError == nil:
+		RestClient = rest.NewClient(APIClient.Client)
+		if FailedToLogin := RestClient.Login(TimeoutContext, APIUrl.User); FailedToLogin != nil {
+			ErrorLogger.Printf("FAILED TO LOGIN TO THE VMWARE HYPERVISOR SERVER, ERROR: %s", FailedToLogin)
+		}
+	}
+	Client = APIClient
 }
 
 // package consists of Rest API Controllers, that Provides Info about the Virtual Machine Server Health Metrics
