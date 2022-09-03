@@ -191,3 +191,4 @@ func (this *VirtualMachinePrivateNetworkManager) ConnectVirtualMachineToNetwork(
 			return false, ApplyError
 	}
 }
+

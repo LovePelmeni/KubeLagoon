@@ -157,30 +157,3 @@ type HostSystemNetworkManager struct {
 func NewHostSystemNetworkManager() *HostSystemNetworkManager {
 	return &HostSystemNetworkManager{}
 }
-
-type HostSystemFirewallManager struct {
-	// Class Instance for  Managing Host System Firewall
-	Client         vim25.Client
-	VirtualMachine *object.VirtualMachine
-}
-
-func NewHostSystemFirewallManager(Client vim25.Client, VirtualMachine *object.VirtualMachine) *HostSystemFirewallManager {
-	return &HostSystemFirewallManager{
-		Client:         Client,
-		VirtualMachine: VirtualMachine,
-	}
-}
-
-func (this *HostSystemFirewallManager) GetHostSystem() {
-	// Returns Instance of the Virtual Machine's Server Host System
-}
-func (this *HostSystemFirewallManager) AddNewRule() {
-	// Adds new Rule to the Firewall's Configuration
-}
-func (this *HostSystemFirewallManager) UpdateRule() {
-	// Updates Firewall Rule
-}
-
-func (this *HostSystemFirewallManager) GetRules() {
-	// returns Array of the Firewall System Rules
-}

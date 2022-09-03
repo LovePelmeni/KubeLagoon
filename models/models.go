@@ -97,12 +97,39 @@ func (this *Customer) Delete(UserId int) (*gorm.DB, error) {
 	return DeletedCustomer, DeletedCustomer.Error
 }
 
+// NOTE: Going to support SSL soon
+
+type LoadBalancer struct {
+	ID               int
+	IPAddress        string `json:"IPAddress" gorm:"type:varchar(100); not null; unique;"`
+	VirtualMachineId int    `json:"VirtualMachineId" gorm:"type:integer"`
+}
+
+func NewLoadBalancer(IPAddress string, VirtualMachineId int) *LoadBalancer {
+	// Returns New Database instance of the Load Balancer
+	return &LoadBalancer{
+		IPAddress:        IPAddress,
+		VirtualMachineId: VirtualMachineId,
+	}
+}
+
+func (this *LoadBalancer) Create() (*gorm.DB, error) {
+	// Creates new Instance of the Load Balancers
+	Created := Database.Create(&this)
+	return Created, Created.Error
+}
+
+func (this *LoadBalancer) Delete() (*gorm.DB, error) {
+	Deleted := Database.Delete(&this)
+	return Deleted, Deleted.Error
+}
+
 type VirtualMachine struct {
 	ID                 int
 	State              string                      `json:"State" xml:"State" gorm:"type:varchar(10); not null;"`
 	SshInfo            SSHInfo                     `json:"sshKey" xml:"sshKey" gorm:"column:ssh_key;type:text;default:null;"`
 	Configuration      VirtualMachineConfiguration `json:"Configuration" xml:"Configuration" gorm:"column:configuration;type:text;default:null;"`
-	OwnerId            string                      `json:"OwnerId" xml:"OwnerId" gorm:"<-:create;type:varchar(100);not null;unique;"`
+	OwnerId            int                         `json:"OwnerId" xml:"OwnerId" gorm:"<-:create;type:varchar(100);not null;unique;"`
 	VirtualMachineName string                      `json:"VirtualMachineName" xml:"VirtualMachineName" gorm:"type:varchar(100);not null;"`
 	ItemPath           string                      `json:"ItemPath" xml:"ItemPath" gorm:"<-:create;type:varchar(100);not null;"`
 	IPAddress          string                      `json:"IPAddress" xml:"IPAddress" gorm:"<-:create;type:varchar(100);not null;unique;"`
@@ -110,7 +137,7 @@ type VirtualMachine struct {
 
 func NewVirtualMachine(
 
-	OwnerId string, // ID Of the Customer, who Owns this Virtual Machine
+	OwnerId int, // ID Of the Customer, who Owns this Virtual Machine
 	VirtualMachineName string, // Virtual Machine UniqueName
 	SshInfo *SSHInfo, // SSH Info, defines what method and credentials to use, In Order to Connect to the VM Server
 	ItemPath string,
@@ -191,6 +218,10 @@ type VirtualMachineConfiguration struct {
 		MaxMemoryUsage    int64 `json:"MaxMemoryUsage,omitempty;" xml:"MaxMemoryUsage"`
 		MaxCpuUsage       int64 `json:"MaxCpuUsage,omitempty;" xml:"MaxCpuUsage"`
 	} `json:"Resources" xml:"Resources"`
+
+	Ssh struct {
+		Type string `json:"Type" xml:"Type"`
+	} `json:"Ssh" xml:"Ssh"`
 
 	Disk struct {
 		CapacityInKB int `json:"CapacityInKB" xml:"CapacityInKB"`

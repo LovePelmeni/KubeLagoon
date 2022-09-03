@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"log"
 	"net/http"
+
 	"net/url"
 	"os"
+
 	"reflect"
 	"strconv"
 	"time"
@@ -21,6 +24,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/vmware/govmomi"
+
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vapi/rest"
 	_ "github.com/vmware/govmomi/vapi/rest"
@@ -215,7 +219,7 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 			IPAddress:          IPAddress,
 			ItemPath:           InitializedInstance.InventoryPath,
 			Configuration:      models.VirtualMachineConfiguration{},
-			OwnerId:            strconv.Itoa(CustomerId),
+			OwnerId:            CustomerId,
 			VirtualMachineName: VirtualMachineName,
 		}
 

@@ -17,6 +17,7 @@ import (
 	"github.com/LovePelmeni/Infrastructure/ssh_rest"
 
 	customer_rest "github.com/LovePelmeni/Infrastructure/customer_rest"
+	load_balancer_rest "github.com/LovePelmeni/Infrastructure/load_balancer_rest"
 	suggestion_rest "github.com/LovePelmeni/Infrastructure/suggestion_rest"
 	vm_rest "github.com/LovePelmeni/Infrastructure/vm_rest"
 	"github.com/gin-contrib/cors"
@@ -92,6 +93,18 @@ func (this *Server) Run() {
 		CustomerGroup.PUT("/reset/password/", customer_rest.ResetPasswordRestController, middlewares.AuthorizationRequiredMiddleware())
 		CustomerGroup.DELETE("/delete/", customer_rest.DeleteCustomerRestController, middlewares.AuthorizationRequiredMiddleware())
 		CustomerGroup.GET("/get/profile/", customer_rest.GetCustomerProfileRestController, middlewares.AuthorizationRequiredMiddleware())
+	}
+
+	// Load Balancers Rest API Endpoints
+
+	LoadBalancerGroup := Router.Group("/load/balancer/").Use(
+		middlewares.AuthorizationRequiredMiddleware(),
+		middlewares.InfrastructureHealthCircuitBreakerMiddleware(),
+	)
+	{
+		LoadBalancerGroup.POST("/create/", load_balancer_rest.CreateLoadBalancerRestController)
+		LoadBalancerGroup.PUT("/recreate/", load_balancer_rest.RecreateLoadBalancerRestController)
+		LoadBalancerGroup.DELETE("/delete/", load_balancer_rest.DeleteLoadBalancerRestController)
 	}
 
 	// Virtual Machines Rest API Endpoints

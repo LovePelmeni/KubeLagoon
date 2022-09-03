@@ -15,7 +15,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/vmware/govmomi/vim25"
-	"gorm.io/gorm"
 )
 
 var (
@@ -32,42 +31,6 @@ func init() {
 	if Error != nil {
 		panic(Error)
 	}
-}
-
-func GetCustomerVirtualMachineSSHCredentialsRestController(RequestContext *gin.Context) {
-	// Rest Controller, that is responsible for giving SSH Info of Customer's Virtual Machines
-
-	var Query []struct {
-		gorm.Model
-		VirtualMachine models.VirtualMachine // Vm Server
-		SSHInfo        models.SSHInfo        // SSHPublicKey to Access this Server
-	} // Represents query of the Joins Pattern
-
-	jwtCredentials, _ := authentication.GetCustomerJwtCredentials(
-		RequestContext.Request.Header.Get("Authorization"))
-	CustomerId := jwtCredentials.UserId
-
-	var Queryset []models.VirtualMachine
-	models.Database.Model(
-		&models.VirtualMachine{}).Where("id = ?", CustomerId).Find(&Query)
-
-	for _, ModelObj := range Queryset {
-		StructedData := struct {
-			gorm.Model
-			VirtualMachine models.VirtualMachine // Vm Server
-			SSHInfo        models.SSHInfo        // SSHPublicKey to Access this Server
-		}{
-			VirtualMachine: ModelObj,
-			SSHInfo:        ModelObj.SshInfo,
-		}
-		Query = append(Query, StructedData)
-	}
-	RequestContext.JSON(http.StatusOK,
-		gin.H{"QuerySet": Query})
-}
-
-func RecoverSSHKeyRestController(RequestContext *gin.Context) {
-	// Recovering SSH Keys, by picking them out from the Temp Buffer
 }
 
 func UpdateVirtualMachineSshKeysRestController(RequestContext *gin.Context) {
