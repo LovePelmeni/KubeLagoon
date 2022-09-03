@@ -7,7 +7,9 @@ import (
 
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25"
+
 	"github.com/vmware/govmomi/vim25/types"
+
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
@@ -34,16 +36,18 @@ var WindowsDistributions = map[string]types.VirtualMachineGuestOsIdentifier{
 type HostSystemCredentials struct {
 	Bit         int64              `json:"Bit"`
 	SystemName  string             `json:"SystemName"`
+	Version     string             `json:"Version"`
 	HostSystem  *object.HostSystem `json:"HostSystem"`
 	VmIPAddress string             `json:"IPAddress"`
 	Hostname    string             `json:"Hostname"`
 }
 
-func NewHostSystemCredentials(SystemName string, Bit int64) *HostSystemCredentials {
+func NewHostSystemCredentials(SystemName string, Version string, Bit ...int64) *HostSystemCredentials {
 
 	return &HostSystemCredentials{
 		SystemName: strings.ToLower(SystemName),
-		Bit:        Bit,
+		Version:    Version,
+		Bit:        Bit[0],
 	}
 }
 
@@ -53,23 +57,19 @@ func NewVirtualMachineHostSystemManager() *VirtualMachineHostSystemManager {
 	return &VirtualMachineHostSystemManager{}
 }
 
-func (this *VirtualMachineHostSystemManager) SelectLinuxHostSystemGuest(DistributionName string, Bit ...int64) (*types.VirtualMachineGuestOsIdentifier, error) {
+func (this *VirtualMachineHostSystemManager) SelectLinuxHostSystemGuest(DistributionName string, Version string, Bit ...int64) (*types.VirtualMachineGuestOsIdentifier, error) {
 	// Picking up const for the Operational System User, depending on the Linux Distribution
 	// Currently Supported: Ubuntu64, Debian6, Debian7, Debian8, Debian9, Fedora, Asianux, CentOS, Freebsd
 
-	for OsName, Identifier := range LinuxDistributions {
-		if HasPrefix := strings.HasPrefix(strings.ToLower(OsName),
-			strings.ToLower(DistributionName)) && strings.HasSuffix(
-			OsName, strconv.Itoa(int(Bit[0]))); HasPrefix != false {
-			return &Identifier, nil
-		} else {
-			continue
-		}
+	if Contains := slices.Contains(maps.Keys(LinuxDistributions),
+		DistributionName+Version+"_"+strconv.Itoa(int(Bit[0]))); Contains != false {
+		OperationalSystemGuest := LinuxDistributions[DistributionName+Version+"_"+strconv.Itoa(int(Bit[0]))]
+		return &OperationalSystemGuest, nil
 	}
 	return nil, errors.New("Unsupported Operational System has been Specified")
 }
 
-func (this *VirtualMachineHostSystemManager) SelectWindowsSystemGuest(SystemName string, Bit ...int) (*types.VirtualMachineGuestOsIdentifier, error) {
+func (this *VirtualMachineHostSystemManager) SelectWindowsSystemGuest(SystemName string, Version string, Bit ...int) (*types.VirtualMachineGuestOsIdentifier, error) {
 	// Returning Windows Guest Interface, depending on the Distribution version of the Operational System
 
 	for OsName, Identifier := range WindowsDistributions {
@@ -83,11 +83,11 @@ func (this *VirtualMachineHostSystemManager) SelectWindowsSystemGuest(SystemName
 	return nil, errors.New("Unsupported Operational System has been Specified")
 }
 
-func (this *VirtualMachineHostSystemManager) GetDefaultCustomizationOptions(SystemName string, Bit int) (types.BaseCustomizationOptions, error) {
+func (this *VirtualMachineHostSystemManager) GetDefaultCustomizationOptions(SystemName string, Version string, Bit int) (types.BaseCustomizationOptions, error) {
 	// Returns Customization Options, based on the Operational System passed
 
 	// Returning Linux Customization Options, if the Operational System for the VM is Linux Distribution
-	if Contains := slices.Contains(maps.Keys(LinuxDistributions), strings.ToLower(SystemName)+"_"+strconv.Itoa(Bit)); Contains {
+	if Contains := slices.Contains(maps.Keys(LinuxDistributions), strings.ToLower(SystemName+Version)+"_"+strconv.Itoa(Bit)); Contains {
 		return &types.CustomizationLinuxOptions{}, nil
 	}
 	// Returning Windows Customization Options, if the Operational System for the VM is Windows Distribution
@@ -106,7 +106,7 @@ func (this *VirtualMachineHostSystemManager) GetDefaultCustomizationOptions(Syst
 func (this *VirtualMachineHostSystemManager) SetupHostSystem(HostSystemCredentials HostSystemCredentials) (*types.VirtualMachineGuestSummary, *types.CustomizationSpec, error) {
 
 	// Returns Host Operational System based on the OS Name and Bit passed from the Customer Configuration
-	DefaultCustomizationOptions, OptionsError := this.GetDefaultCustomizationOptions(HostSystemCredentials.SystemName, int(HostSystemCredentials.Bit))
+	DefaultCustomizationOptions, OptionsError := this.GetDefaultCustomizationOptions(HostSystemCredentials.SystemName, HostSystemCredentials.Version, int(HostSystemCredentials.Bit))
 	if OptionsError != nil {
 		return nil, nil, OptionsError
 	}
@@ -116,8 +116,8 @@ func (this *VirtualMachineHostSystemManager) SetupHostSystem(HostSystemCredentia
 
 	// Selecting Appropriate Os System Guest, Based on the Virtual Machine Host System Setup Choice
 	var OSGuest *types.VirtualMachineGuestOsIdentifier
-	LinuxOSGuest, SelectError := this.SelectLinuxHostSystemGuest(HostSystemCredentials.SystemName, HostSystemCredentials.Bit)
-	WinOsGuest, SelectError := this.SelectWindowsSystemGuest(HostSystemCredentials.SystemName, int(HostSystemCredentials.Bit))
+	LinuxOSGuest, SelectError := this.SelectLinuxHostSystemGuest(HostSystemCredentials.SystemName, HostSystemCredentials.Version, int64(HostSystemCredentials.Bit))
+	WinOsGuest, SelectError := this.SelectWindowsSystemGuest(HostSystemCredentials.SystemName, HostSystemCredentials.Version, int(HostSystemCredentials.Bit))
 
 	if LinuxOSGuest != nil {
 		OSGuest = LinuxOSGuest
