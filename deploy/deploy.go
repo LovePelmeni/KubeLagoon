@@ -372,14 +372,24 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 		return nil, errors.New("VM Server not found")
 	}
 
-	rspec := types.DefaultResourceConfigSpec()
+	ResourceSpecification := types.ResourceConfigSpec{
+		CpuAllocation: types.ResourceAllocationInfo{
+			Limit:         &Configuration.Resources.MaxCpuUsage,
+			OverheadLimit: types.NewInt64(Configuration.Resources.MaxCpuUsage + int64(5)), // if Max CPU is 0.5 (half of One Processor), if memory overhead occurs, it would add 0.5 to existing limit
+		},
+		MemoryAllocation: types.ResourceAllocationInfo{
+			Limit:         &Configuration.Resources.MaxMemoryUsage,
+			OverheadLimit: types.NewInt64(Configuration.Resources.MaxMemoryUsage + int64(50)), // adds 50 Mb
+		},
+	}
+
 	vm.Guest = &types.GuestInfo{GuestId: HostSystemConfig.GuestId}
 	vm.Config = &types.VirtualMachineConfigInfo{
 		ExtraConfig:        []types.BaseOptionValue{&types.OptionValue{Key: "govcsim", Value: "TRUE"}},
-		MemoryAllocation:   &rspec.MemoryAllocation,
-		CpuAllocation:      &rspec.CpuAllocation,
+		MemoryAllocation:   &ResourceSpecification.MemoryAllocation,
+		CpuAllocation:      &ResourceSpecification.CpuAllocation,
 		LatencySensitivity: &types.LatencySensitivity{Level: types.LatencySensitivitySensitivityLevelNormal},
-		BootOptions:        &types.VirtualMachineBootOptions{},
+		BootOptions:        &types.VirtualMachineBootOptions{BootRetryEnabled: types.NewBool(true)},
 		CreateDate:         types.NewTime(time.Now()),
 		InitialOverhead: &types.VirtualMachineConfigInfoOverheadInfo{
 			InitialMemoryReservation: 100, // In Megabytes
