@@ -1,6 +1,7 @@
 package loadbalancer
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"strings"
@@ -12,8 +13,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 )
 
@@ -65,59 +65,132 @@ func NewInternalLoadBalancerParams(VirtualMachineIPAddress string, ExternalLoadB
 	}
 }
 
-type LoadBalancerConfigurationSelector struct {
+type LoadBalancerContainerBuilder struct {
+	// Serves the Load Balancers Containers
+	Client *client.Client
+}
+
+func NewLoadBalancerContainerBuilder(Client *client.Client) *LoadBalancerContainerBuilder {
+	return &LoadBalancerContainerBuilder{
+		Client: Client,
+	}
+}
+func (this *LoadBalancerContainerBuilder) CreateContainer() {
+	// Creates New Container out of the Given Load Balancer Image
+}
+func (this *LoadBalancerContainerBuilder) DeleteContainer() {
+	// Deletes the Existing Load Balancer Container
+}
+func (this *LoadBalancerContainerBuilder) RecreateContainer() {
+	// Recreates New Load Balancer Container, based on the Image
+}
+
+type LoadBalancerImageBuilder struct {
 	// Server Returns Configuration + Dockerfile for the Web Server, Selected By the Customer
+	Client *client.Client
 }
 
-func NewLoadBalancerSelector() *LoadBalancerConfigurationSelector {
-	return &LoadBalancerConfigurationSelector{}
+func NewLoadBalancerBuilder() *LoadBalancerImageBuilder {
+	return &LoadBalancerImageBuilder{}
 }
 
-func (this *LoadBalancerConfigurationSelector) GetLoadBalancerFile(Configuration InternalLoadBalancerConfiguration) string {
+func (this *LoadBalancerImageBuilder) BuildLoadBalancerImage(Configuration InternalLoadBalancerConfiguration) (types.ImageBuildResponse, error) {
 	// Returns Configuration File of the Load Balancer, based on the Configuraion, passed by the Customer
 	if strings.ToLower(Configuration.LoadBalancerName) == "nginx" {
 		// Returning the NGINX Configuration File
-		return this.GetNginxLoadBalancerDockerFile(Configuration)
+		return this.BuildNginxLoadBalancerImage(Configuration)
 	}
 	if strings.ToLower(Configuration.LoadBalancerName) == "apache" {
 		// Returning the APACHE Configuraion File
-		return this.GetApacheLoadBalancerDockerFile(Configuration)
+		return this.BuildApacheLoadBalancerImage(Configuration)
 	}
 }
-func (this *LoadBalancerConfigurationSelector) GetNginxLoadBalancerDockerFile(LoadBalancerConfiguration InternalLoadBalancerConfiguration) string {
-	//
-	newDockerFile := client.DefaultDockerHost
+
+func (this *LoadBalancerImageBuilder) BuildNginxLoadBalancerImage(LoadBalancerConfiguration InternalLoadBalancerConfiguration) (types.ImageBuildResponse, error) {
+	//	Returns the Custom NGINX Load Balancer Image, based on the Configuration, that customer has passed
+
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
+	defer CancelFunc()
+
+	Dockerfile := fmt.Sprintf(`
+		FROM nginx 
+		VOLUMES /etc/nginx/nginx.conf/ ./nginx.conf 
+		EXPOSE %s
+	`, LoadBalancerConfiguration.InternalLoadBalancerPort)
+
 	NginxLoadBalancerConfiguration := fmt.Sprintf(`
-	events {
-		worker_connections 1024; 
-	}
-	http {
-		upstream application_upstream {
-			server %s:%s; // the address server application http server is running on; 
+		events {
+			worker_connections 1024; 
 		}
-		server {
-			listen 80;
-			location / {
-				proxy_pass http://application_upstream; 
-				proxy_http_version                 1.1; 
-				proxy_set_header Host       $http_host;
-				proxy_set_header Upgrade $http_upgrade;
-				add_header "Access-Control-Allow-Origin" $http_origin; 
-				add_header "Access-Control-Allow-Methods" "GET,POST,DELETE,PUT,OPTIONS";
-				add_header "Access-Control-Allow-Credentials" "true";
+		http {
+			upstream application_upstream {
+				server %s:%s; // the address server application http server is running on; 
+			}
+			server {
+				listen 80;
+				location / {
+					proxy_pass http://application_upstream; 
+					proxy_http_version                 1.1; 
+					proxy_set_header Host       $http_host;
+					proxy_set_header Upgrade $http_upgrade;
+					add_header "Access-Control-Allow-Origin" $http_origin; 
+					add_header "Access-Control-Allow-Methods" "GET,POST,DELETE,PUT,OPTIONS";
+					add_header "Access-Control-Allow-Credentials" "true";
+				}
 			}
 		}
-	}
-`)
-}
-func (this *LoadBalancerConfigurationSelector) GetApacheLoadBalancerDockerFile(Configuration InternalLoadBalancerConfiguration) string {
-	// Returns the Dockerfile for the APACHE Load Balancer, with the Configuration, passed by the Customer
+	`)
+	LoadBalancerImageTag := fmt.Sprintf("nginx-load-balancer-%s-%s",
+		LoadBalancerConfiguration.HostMachineIPAddress, LoadBalancerConfiguration.ProxyHost)
 
+	NewDockerImage, BuildError := this.Client.ImageBuild(TimeoutContext,
+		&bufio.Reader{}, types.ImageBuildOptions{
+			Tags:        []string{LoadBalancerImageTag},
+			Dockerfile:  Dockerfile,
+			Remove:      true,
+			ForceRemove: true,
+		})
+	return NewDockerImage, BuildError
+}
+
+func (this *LoadBalancerImageBuilder) BuildApacheLoadBalancerImage(Configuration InternalLoadBalancerConfiguration) (types.ImageBuildResponse, error) {
+	// Returns the Dockerfile Image for the APACHE Load Balancer, with the Configuration, passed by the Customer
+
+	Dockerfile := fmt.Sprintf(`
+		FROM ubuntu 
+		RUN apt update 
+		RUN apt install –y apache2 
+		RUN apt install –y apache2-utils 
+		RUN apt clean 
+		EXPOSE %s
+		CMD [“apache2ctl”, “-D”, “FOREGROUND”]
+	`, Configuration.InternalLoadBalancerPort)
+
+	ApacheConfigurationFile := fmt.Sprintf(`
+
+	`)
+
+	LoadBalancerTimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
+	defer CancelFunc()
+
+	Tag := fmt.Sprintf("apache-load-balancer-%s-%s",
+		Configuration.HostMachineIPAddress, Configuration.ProxyHost)
+
+	LoadBalancerImage, BuildError := this.Client.ImageBuild(
+		LoadBalancerTimeoutContext, &bufio.Reader{}, types.ImageBuildOptions{
+			Dockerfile:  Dockerfile,
+			Tags:        []string{Tag},
+			Remove:      true,
+			ForceRemove: true,
+		})
+	return LoadBalancerImage, BuildError
 }
 
 // Server Entities
 
-type InternalLoadBalancerManager struct{}
+type InternalLoadBalancerManager struct {
+	Client client.Client
+}
 
 func NewInternalLoadBalancer(Host string, Port string) *InternalLoadBalancerManager {
 	return &InternalLoadBalancerManager{}
@@ -152,35 +225,39 @@ func (this *InternalLoadBalancerManager) CreateLoadBalancer(Configuration Intern
 
 	// Getting Load Balancer Dockerfile, based on the Configuration, passed by the Customer
 
-	LbSelector := NewLoadBalancerSelector()
-	WebServerDockerFile := LbSelector.GetLoadBalancerFile(Configuration)
+	LbImageBuilder := NewLoadBalancerImageBuilder(DockerClient)
+	LbContainerBuilder := NewLoadBalancerContainerBuilder(&DockerClient)
 
-	LbTimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*30)
-	defer CancelFunc()
+	WebServerDockerFile, BuildError := LbImageBuilder.BuildLoadBalancerImage(Configuration)
 
-	LoadBalancerContainer, CreationError := DockerClient.ContainerCreate(
-		LbTimeoutContext,
-		&container.Config{},
-		&container.HostConfig{AutoRemove: true},
-		&network.NetworkingConfig{},
-	)
+	if BuildError != nil {
+		return nil, BuildError
+	}
 
-	return &LoadBalancerInfo, ResponseBodyParseError
+	LoadBalancerContainer, CreationError := LbContainerBuilder.CreateContainer()
+
+	if CreationError != nil {
+		return nil, CreationError
+	}
+
+	LoadBalancerInfo := LoadBalancerInfo{
+		Host: Configuration.InternalLoadBalancerHost,
+		Port: Configuration.InternalLoadBalancerPort,
+
+		ProxyHost: Configuration.ProxyHost,
+		ProxyPort: Configuration.ProxyPort,
+	}
+	return &LoadBalancerInfo
 }
 
 func (this *InternalLoadBalancerManager) RecreateLoadBalancer(Configuration InternalLoadBalancerConfiguration) (*LoadBalancerInfo, error) {
 	// Recreates Existing Load Balancer, if one goes down
 	// Uses the `Create` Method to perform the Operation of the Creating new Load Balancer
 
-	NewLoadBalancer, CreationError := this.CreateLoadBalancer(LoadBalancerParams)
+	NewLoadBalancer, CreationError := this.CreateLoadBalancer(Configuration)
 	if CreationError != nil {
 		ErrorLogger.Printf("Failed to Recreate Internal Load Balancer, Error: - %s", CreationError)
 		return nil, CreationError
 	}
 	return NewLoadBalancer, nil
-}
-
-func (this *InternalLoadBalancerManager) GetHealthInfo(LoadBalancerIPAddress string) (*LoadBalancerHealthInfo, error) {
-	// Returns Health Info about the Load Balancer
-	return &LoadBalancerHealthInfo{}, nil
 }
