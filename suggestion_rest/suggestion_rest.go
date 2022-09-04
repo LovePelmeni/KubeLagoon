@@ -4,9 +4,11 @@ import (
 	"context"
 	_ "context"
 	"encoding/json"
+
 	"log"
 	"net/http"
 	"net/url"
+	
 	"os"
 	"time"
 	_ "time"
@@ -114,7 +116,7 @@ func GetAvailableOsSystemsRestController(RequestContext *gin.Context) {
 		"Windows": WindowsHostSystems})
 }
 
-func GetAvailableInstallationTools(RequestContext *gin.Context) {
+func GetAvailableInstallationToolsRestController(RequestContext *gin.Context) {
 	// Return Array of the Tools, that can be pre-installed on the Virtual Machine Server
 	Tools := []struct {
 		ToolName string `json:"ToolName"`
@@ -129,4 +131,13 @@ func GetAvailableInstallationTools(RequestContext *gin.Context) {
 		RequestContext.JSON(http.StatusOK, gin.H{"Error": Error})
 	}
 	RequestContext.JSON(http.StatusOK, gin.H{"Tools": SerializedTools})
+}
+
+func GetAvailableLoadBalancersRestController(Request *gin.Context) {
+	// Returns array of the Available Load Balancers 
+	LoadBalancers := []struct{LoadBalancerName string `json:"LoadBalancerName" xml:"LoadBalancerName"`}{
+		{LoadBalancerName: "nginx"},
+		{LoadBalancerName: "apache"},
+	}
+	Request.JSON(http.StatusOK, gin.H{"QuerySet": LoadBalancers})
 }

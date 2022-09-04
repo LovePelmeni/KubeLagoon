@@ -14,7 +14,13 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+
+	"github.com/docker/go-connections/nat"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 var (
@@ -75,8 +81,22 @@ func NewLoadBalancerContainerBuilder(Client *client.Client) *LoadBalancerContain
 		Client: Client,
 	}
 }
-func (this *LoadBalancerContainerBuilder) CreateContainer() {
+func (this *LoadBalancerContainerBuilder) CreateContainer(ContainerName string, ImageName string, Configuration InternalLoadBalancerConfiguration) {
 	// Creates New Container out of the Given Load Balancer Image
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
+	defer CancelFunc()
+	this.Client.ContainerCreate(TimeoutContext,
+		&container.Config{
+			WorkingDir:   "/",
+			Image:        ImageName,
+			Tty:          false,
+			ExposedPorts: nat.PortSet{nat.Port(Configuration.InternalLoadBalancerPort): struct{}{}},
+		},
+		&container.HostConfig{
+			AutoRemove: true,
+		},
+		&network.NetworkingConfig{}, &v1.Platform{}, ContainerName)
+
 }
 func (this *LoadBalancerContainerBuilder) DeleteContainer() {
 	// Deletes the Existing Load Balancer Container
@@ -143,8 +163,12 @@ func (this *LoadBalancerImageBuilder) BuildNginxLoadBalancerImage(LoadBalancerCo
 	LoadBalancerImageTag := fmt.Sprintf("nginx-load-balancer-%s-%s",
 		LoadBalancerConfiguration.HostMachineIPAddress, LoadBalancerConfiguration.ProxyHost)
 
+	WrittenContent := bufio.Writer{}
+	WrittenContent.WriteString(NginxLoadBalancerConfiguration)
+
 	NewDockerImage, BuildError := this.Client.ImageBuild(TimeoutContext,
-		&bufio.Reader{}, types.ImageBuildOptions{
+		bufio.NewReader(WrittenContent), types.ImageBuildOptions{
+
 			Tags:        []string{LoadBalancerImageTag},
 			Dockerfile:  Dockerfile,
 			Remove:      true,

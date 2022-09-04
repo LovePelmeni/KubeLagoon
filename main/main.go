@@ -161,7 +161,10 @@ func (this *Server) Run() {
 		middlewares.AuthorizationRequiredMiddleware(),
 		middlewares.InfrastructureHealthCircuitBreakerMiddleware())
 	{
-		SuggestionsGroup.POST("/datacenter/", suggestion_rest.GetDatacentersSuggestions)
+		SuggestionsGroup.POST("/datacenter/", suggestion_rest.GetDatacentersSuggestions) // do not change to Safe Methods such as GET, OPTIONS, etc...
+		SuggestionsGroup.GET("/os/", suggestion_rest.GetAvailableOsSystemsRestController)
+		SuggestionsGroup.GET("/load/balancer/", suggestion_rest.GetAvailableLoadBalancersRestController)
+		SuggestionsGroup.GET("/pre/installed/tool/", suggestion_rest.GetAvailableInstallationToolsRestController)
 	}
 
 	// Support Rest API Endpoints
