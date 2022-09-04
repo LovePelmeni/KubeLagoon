@@ -184,16 +184,35 @@ func (this *VirtualMachine) Delete() (*gorm.DB, error) {
 type VirtualMachineConfiguration struct {
 	// Virtual Machine Configuration
 
+	// Metadata about the Virtual Machine
+
 	Metadata struct {
 		VirtualMachineId string `json:"VirtualMachineId" xml:"VirtualMachineId"`
 		VmOwnerId        string `json:"VmOwnerId" xml:"VmOwnerId"`
 	} `json:"Metadata" xml:"Metadata"`
+
+	// Load Balancer Configuration
+
+	LoadBalancer struct {
+		LoadBalancerName     string `json:"LoadBalancerName" xml:"LoadBalancerName"`
+		HostMachineIPAddress string `json:"HostMachineIPAddress" xml:"HostMachineIPAddress"`
+
+		LoadBalancerHost string `json:"LoadBalancerHost,omitempty;"`
+		LoadBalancerPort string `json:"LoadBalancerPort"`
+
+		ProxyHost string `json:"ProxyHost" xml:"ProxyHost"`
+		ProxyPort string `json:"ProxyPort" xml:"ProxyPort"`
+	} `json:"LoadBalancer" xml:"LoadBalancer"`
+
+	// Host System Configuration
 
 	HostSystem struct {
 		Type             string `json:"Type"` // OS Distribution Type Like: Linux, Windows etc....
 		DistributionName string `json:"DistributionName"`
 		Bit              int64  `json:"Bit;omitempty"`
 	} `json:"HostSystem" xml:"HostSystem"`
+
+	// Internal Network Configuration
 
 	Network struct {
 		IP       string `json:"IP,omitempty"`
@@ -212,6 +231,7 @@ type VirtualMachineConfiguration struct {
 	} `json:"ExtraTools;omitempty" xml:"ExtraTools"`
 
 	// Hardware Resourcs for the VM Configuration
+
 	Resources struct {
 		CpuNum            int32 `json:"CpuNum" xml:"CpuNum"`
 		MemoryInMegabytes int64 `json:"MemoryInMegabytes" xml:"MemoryInMegabytes"`
