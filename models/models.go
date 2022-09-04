@@ -248,7 +248,7 @@ func (this *VirtualMachineConfiguration) Value() (driver.Value, error) {
 
 const TypeByRootCredentials = "ByRootCredentials"
 
-const TypeBySSLCertificate = "BySSLCertificate"
+const TypeByRootCertificate = "ByRootCertificate"
 
 type SSHInfo struct {
 	// Depending on the Type of the SSH Info, it can be via SSL Certificate or via Root Credentials

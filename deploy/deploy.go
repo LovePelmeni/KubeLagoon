@@ -6,7 +6,6 @@ import (
 
 	"errors"
 	"log"
-	"sync"
 
 	"os"
 	"time"
@@ -159,7 +158,6 @@ func (this *VirtualMachineResourceKeyManager) GetResourceKeys(
 }
 
 type VirtualMachineManager struct {
-	Reconfig sync.RWMutex
 	// Class, that Is Taking care of the Virtual Machine Deployment Process
 	// It is responsible for Deploying/ Starting / Stopping / Updating Virtual Machines
 	// Owned by Customers
@@ -533,7 +531,7 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 
 	case SshCredentials.(*ssh_config.SshCertificateCredentials) != nil:
 		CertificateCredentials := SshCredentials.(*ssh_config.SshCertificateCredentials)
-		SshType = models.TypeBySSLCertificate
+		SshType = models.TypeByRootCertificate
 		SshInfo, _ = json.Marshal(struct {
 			KeyContent []byte `json:"KeyContent"`
 			Filename   string `json:"Filename"`

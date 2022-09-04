@@ -90,11 +90,11 @@ type VirtualMachineCustomSpec struct {
 		Type             string `json:"Type"` // OS Distribution Type Like: Linux, Windows etc....
 		DistributionName string `json:"DistributionName"`
 		Bit              int64  `json:"Bit;omitempty"`
+		Version          string `json:"Version"`
 	} `json:"HostSystem"`
 
 	Ssh struct {
-		ByRootCredentials bool `json:"ByRootCredentials" xml:"ByRootCredentials"`
-		ByRootCertificate bool `json:"ByRootCertificate" xml:"ByRootCertificate"`
+		Type string `json:"Type"`
 	}
 
 	Network struct {
@@ -147,7 +147,7 @@ func (this *VirtualMachineCustomSpec) GetHostSystemConfig(Client vim25.Client) (
 	// Converting JSON Host System Configuration, Provided By Customer, to the Configuration Instance
 
 	HostSystemManager := host_system.NewVirtualMachineHostSystemManager()
-	HostSystemCredentials := host_system.NewHostSystemCredentials(this.HostSystem.DistributionName, this.HostSystem.Bit)
+	HostSystemCredentials := host_system.NewHostSystemCredentials(this.HostSystem.DistributionName, this.HostSystem.Version, this.HostSystem.Bit)
 
 	HostSystemConfiguration, HostSystemCustomizationConfig, SetupError := HostSystemManager.SetupHostSystem(*HostSystemCredentials)
 	return *HostSystemConfiguration, *HostSystemCustomizationConfig, SetupError
@@ -214,12 +214,12 @@ func (this *VirtualMachineCustomSpec) ApplySshConfig(Client vim25.Client, Virtua
 	// Returns SSH Support Configuration for the Virtual Machine, based on the Config
 	// That Customer Has Specified
 	switch {
-	case this.Ssh.ByRootCertificate == true:
+	case this.Ssh.Type == models.TypeByRootCredentials:
 		newCertificateManager := ssh_config.NewVirtualMachineSshCertificateManager(Client, VirtualMachine)
 		PublicKey, SslCertificateError := newCertificateManager.GenerateSshKeys()
 		return PublicKey, SslCertificateError
 
-	case this.Ssh.ByRootCredentials == true:
+	case this.Ssh.Type == models.TypeByRootCertificate:
 		newRootCredentialsManager := ssh_config.NewVirtualMachineSshRootCredentialsManager(Client, VirtualMachine)
 		RootCredentials, SslRootError := newRootCredentialsManager.GetSshRootCredentials()
 		return RootCredentials, SslRootError
