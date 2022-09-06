@@ -8,7 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	
+
 	"os"
 	"time"
 	_ "time"
@@ -134,8 +134,10 @@ func GetAvailableInstallationToolsRestController(RequestContext *gin.Context) {
 }
 
 func GetAvailableLoadBalancersRestController(Request *gin.Context) {
-	// Returns array of the Available Load Balancers 
-	LoadBalancers := []struct{LoadBalancerName string `json:"LoadBalancerName" xml:"LoadBalancerName"`}{
+	// Returns array of the Available Load Balancers
+	LoadBalancers := []struct {
+		LoadBalancerName string `json:"LoadBalancerName" xml:"LoadBalancerName"`
+	}{
 		{LoadBalancerName: "nginx"},
 		{LoadBalancerName: "apache"},
 	}

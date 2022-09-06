@@ -99,27 +99,28 @@ func (this *Customer) Delete(UserId int) (*gorm.DB, error) {
 
 // NOTE: Going to support SSL soon
 
-type LoadBalancer struct {
+type LoadBalancerService struct {
+	// Traefik Service, that is used to proxy requests to the Virtual Machine
 	ID               int
 	IPAddress        string `json:"IPAddress" gorm:"type:varchar(100); not null; unique;"`
 	VirtualMachineId int    `json:"VirtualMachineId" gorm:"type:integer"`
 }
 
-func NewLoadBalancer(IPAddress string, VirtualMachineId int) *LoadBalancer {
+func NewLoadBalancer(IPAddress string, VirtualMachineId int) *LoadBalancerService {
 	// Returns New Database instance of the Load Balancer
-	return &LoadBalancer{
+	return &LoadBalancerService{
 		IPAddress:        IPAddress,
 		VirtualMachineId: VirtualMachineId,
 	}
 }
 
-func (this *LoadBalancer) Create() (*gorm.DB, error) {
+func (this *LoadBalancerService) Create() (*gorm.DB, error) {
 	// Creates new Instance of the Load Balancers
 	Created := Database.Create(&this)
 	return Created, Created.Error
 }
 
-func (this *LoadBalancer) Delete() (*gorm.DB, error) {
+func (this *LoadBalancerService) Delete() (*gorm.DB, error) {
 	Deleted := Database.Delete(&this)
 	return Deleted, Deleted.Error
 }

@@ -4,20 +4,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-
-func GetLoadBalancer(Request *gin.Context) {
-	// Returns Load Balancer's Info 
-	
+func ExposeProxyServiceRestController(Request *gin.Context) {
+	// Exposes new Proxy Service on the Traefik Server on the remote host machine, that will be hanlding
+	// Requests to the Specific Virtual Machine (s)
 }
-func RecreateLoadBalancerRestController(Request *gin.Context) {
-	// Rest Controller recreates Load Balancer Instance, without Touching existed Database Model
-}
-
-func CreateLoadBalancerRestController(Request *gin.Context) {
-	// Rest Controller, that Creates New Load Balancer Instance, including the Model
+func DestroyProxyServiceRestController(Request *gin.Context) {
+	// Destroys the Existing Proxy Service
 }
 
+func AddProxyRouteRestController(Request *gin.Context) {
+	// Rest Controller, that adds new Route Record to the Host Load Balancer
+	// So the Virtual Machine can be accessed
+}
 
-func DeleteLoadBalancerRestController(Request *gin.Context) {
-	// Rest Controller, that Deletes Load Balancer Instance, including the Model
+func RemoveProxyRouteRestController(Request *gin.Context) {
+	// Rest Controller, that removes existing Route Record from the Load Balancer
+	// So no one will be able to access it from outside
 }

@@ -86,6 +86,10 @@ type VirtualMachineCustomSpec struct {
 		VmOwnerId        string `json:"VmOwnerId" xml:"VmOwnerId"`
 	} `json:"Metadata" xml:"Metadata"`
 
+	LoadBalancer struct {
+		Ssl string `json:"Ssl" xml:"Ssl"`
+	} `json:"LoadBalancer" xml:"LoadBalancer"`
+
 	HostSystem struct {
 		Type             string `json:"Type"` // OS Distribution Type Like: Linux, Windows etc....
 		DistributionName string `json:"DistributionName"`

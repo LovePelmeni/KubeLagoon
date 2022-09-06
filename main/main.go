@@ -97,14 +97,13 @@ func (this *Server) Run() {
 
 	// Load Balancers Rest API Endpoints
 
-	LoadBalancerGroup := Router.Group("/load/balancer/").Use(
+	LoadBalancerGroup := Router.Group("/route/").Use(
 		middlewares.AuthorizationRequiredMiddleware(),
 		middlewares.InfrastructureHealthCircuitBreakerMiddleware(),
 	)
 	{
-		LoadBalancerGroup.POST("/create/", load_balancer_rest.CreateLoadBalancerRestController)
-		LoadBalancerGroup.PUT("/recreate/", load_balancer_rest.RecreateLoadBalancerRestController)
-		LoadBalancerGroup.DELETE("/delete/", load_balancer_rest.DeleteLoadBalancerRestController)
+		LoadBalancerGroup.POST("/create/", load_balancer_rest.AddWebserverVirtualMachineRouteRestController)
+		LoadBalancerGroup.DELETE("/delete/", load_balancer_rest.RemoveWebServerVirtualMachineRouteRestController)
 	}
 
 	// Virtual Machines Rest API Endpoints
