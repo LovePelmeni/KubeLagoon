@@ -4,31 +4,39 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"log"
+
 	"net/url"
 	"os"
 	"strings"
 
 	"github.com/LovePelmeni/Infrastructure/models"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
 
 var (
-	DebugLogger *log.Logger
-	InfoLogger  *log.Logger
-	ErrorLogger *log.Logger
+	Logger *zap.Logger
 )
 
+func InitializeProductionLogger() {
+
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(config)
+	file, _ := os.OpenFile("Main.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logWriter := zapcore.AddSync(file)
+
+	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	Logger = zap.New(Core)
+}
+
 func init() {
-	LogFile, Error := os.OpenFile("Installer.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if Error != nil {
-		panic(Error)
-	}
-	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Lshortfile|log.Ltime)
-	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Lshortfile|log.Ltime)
-	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Lshortfile|log.Ltime)
+	InitializeProductionLogger()
 }
 
 type OSDeploymentToolsInstallCommandReturnerInterface interface {
@@ -170,8 +178,8 @@ func (this *Dependency) UploadToVm(DependencyCommands []string, SshConnection ss
 	// Uploads package to the Virtual Machine, Returns Output of the Command
 	NewSshSession, SshError := SshConnection.NewSession()
 	if SshError != nil {
-		ErrorLogger.Printf(
-			"Failed to Start new SSH Session to Remote Virtual Machine, Error: %s", SshError)
+		Logger.Error(
+			"Failed to Start new SSH Session to Remote Virtual Machine", zap.Error(SshError))
 		return "ERROR"
 	}
 	defer NewSshSession.Close()
@@ -189,9 +197,9 @@ func (this *Dependency) UploadToVm(DependencyCommands []string, SshConnection ss
 		}
 
 		if CommandError != nil {
-			ErrorLogger.Printf(
-				"Failed to Execute SSH Command, Error: %s",
-				CommandError)
+			Logger.Error(
+				"Failed to Execute SSH Command",
+				zap.Error(CommandError))
 			return "ERROR"
 		}
 	}

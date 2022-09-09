@@ -3,10 +3,10 @@ package rest
 import (
 	"errors"
 	"fmt"
-	"log"
 
 	"net/http"
 	"os"
+	"strconv"
 
 	"reflect"
 	"time"
@@ -14,10 +14,12 @@ import (
 	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/models"
 
-	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 var (
@@ -25,21 +27,23 @@ var (
 )
 
 var (
-	DebugLogger *log.Logger
-	InfoLogger  *log.Logger
-	ErrorLogger *log.Logger
+	Logger *zap.Logger
 )
 
+func InitializeProductionLogger() {
+
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(config)
+	file, _ := os.OpenFile("Main.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logWriter := zapcore.AddSync(file)
+
+	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	Logger = zap.New(Core)
+}
+
 func init() {
-
-	LogFile, Error := os.OpenFile("RestCustomer.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if Error != nil {
-		panic(Error)
-	}
-
-	DebugLogger = log.New(LogFile, "DEBUG:", log.Ldate|log.Ltime|log.Lshortfile)
-	InfoLogger = log.New(LogFile, "INFO:", log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLogger = log.New(LogFile, "ERROR:", log.Ldate|log.Ltime|log.Lshortfile)
+	InitializeProductionLogger()
 }
 
 // Authorization Rest API Endpoints
@@ -69,7 +73,7 @@ func LoginRestController(RequestContext *gin.Context) {
 	// Generating New Jwt Authentication Token
 	NewJwtToken, JwtError := authentication.CreateJwtToken(int(Customer.ID), Customer.Username, Customer.Email)
 	if JwtError != nil {
-		ErrorLogger.Printf("Failed to Initialize New Jwt Token, Error: %s", JwtError)
+		Logger.Error("Failed to Initialize New Jwt Token", zap.Error(JwtError))
 		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Login Error"})
 		return
 	}
@@ -224,14 +228,15 @@ func DeleteCustomerRestController(RequestContext *gin.Context) {
 
 	case gorm.ErrInvalidTransaction:
 		Deleted.Rollback()
-		ErrorLogger.Printf(
-			"Failed to Delete Customer Profile with ID: %v, Error: %s", Credentials.UserId, Error)
+		Logger.Error(
+			"Failed to Delete Customer Profile", zap.String("User ID",
+				strconv.Itoa(Credentials.UserId)), zap.Error(Error))
 		RequestContext.JSON(http.StatusBadGateway,
 			gin.H{"Error": "Failed to Delete Profile"})
 
 	default:
 		Deleted.Rollback()
-		ErrorLogger.Printf("Unknown Error, %s", Error)
+		Logger.Error("Unknown Error", zap.Error(Error))
 		RequestContext.JSON(http.StatusBadGateway,
 			gin.H{"Error": fmt.Sprint("Failed to Delete Profile, Please Contact Support")})
 	}

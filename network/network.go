@@ -24,9 +24,7 @@ import (
 )
 
 var (
-	DebugLogger *zap.Logger
-	InfoLogger  *zap.Logger
-	ErrorLogger *zap.Logger
+	Logger *zap.Logger
 )
 
 func InitializeProductionLogger() {
@@ -37,13 +35,8 @@ func InitializeProductionLogger() {
 	file, _ := os.OpenFile("Network.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	logWriter := zapcore.AddSync(file)
 
-	DebugCore := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
-	InfoCore := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.InfoLevel))
-	ErrorCore := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zap.ErrorLevel))
-
-	DebugLogger = zap.New(DebugCore)
-	InfoLogger = zap.New(InfoCore)
-	ErrorLogger = zap.New(ErrorCore)
+	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	Logger = zap.New(Core)
 }
 
 func init() {
@@ -173,7 +166,7 @@ func (this *VirtualMachinePrivateNetworkManager) SetupPrivateNetwork(NetworkCred
 	NewPrivateNetwork, PrivateNetworkInitializationError := Manager.CreateContainerView(
 		TimeoutContext, this.Client.ServiceContent.RootFolder.Reference(), []string{"Network"}, false)
 	if PrivateNetworkInitializationError != nil {
-		ErrorLogger.Error(
+		Logger.Error(
 			"Failed to Initialize New Private Network")
 		return nil, errors.New("Failed to Initialize Private Network")
 	}
@@ -201,14 +194,14 @@ func (this *VirtualMachinePrivateNetworkManager) ConnectVirtualMachineToNetwork(
 	ApplyError := VirtualMachine.AddDevice(TimeoutContext, &PrivateNetworkDeviceConfig)
 	switch ApplyError {
 	case nil:
-		DebugLogger.Error(
+		Logger.Error(
 			"Private Network Access has been successfully added to VM: Name: %s",
-			VirtualMachine.Name())
+			zap.String("Virtual Machine Name", VirtualMachine.Name()))
 		return true, nil
 	default:
-		ErrorLogger.Debug(
+		Logger.Debug(
 			"Failed to Connect VM with Name: %s to the Private Network, Error: %s",
-			VirtualMachine.Name(), ApplyError)
+			zap.String("Virtual Machine Name", VirtualMachine.Name()), zap.Error(ApplyError))
 		return false, ApplyError
 	}
 }

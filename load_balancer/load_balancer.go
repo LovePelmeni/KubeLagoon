@@ -2,14 +2,12 @@ package loadbalancer
 
 import (
 	"fmt"
-
-	"log"
-
 	"net/http"
-
 	"os"
 
 	"github.com/docker/docker/client"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var (
@@ -17,19 +15,23 @@ var (
 )
 
 var (
-	DebugLogger *log.Logger
-	InfoLogger  *log.Logger
-	ErrorLogger *log.Logger
+	Logger *zap.Logger
 )
 
+func InitializeProductionLogger() {
+
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(config)
+	file, _ := os.OpenFile("Main.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logWriter := zapcore.AddSync(file)
+
+	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	Logger = zap.New(Core)
+}
+
 func init() {
-	LogFile, Error := os.OpenFile("LoadBalancer.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if Error != nil {
-		panic(Error)
-	}
-	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
-	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+	InitializeProductionLogger()
 }
 
 type LoadBalancerService struct {
@@ -155,4 +157,3 @@ func (this *InternalLoadBalancerManager) AddNewDomainRoute(HostMachineIP string,
 func (this *InternalLoadBalancerManager) RemoveDomainRoute(RouteParams RouteParams) {
 	// Parsing Configuration of the Existing Load Balancer
 }
-

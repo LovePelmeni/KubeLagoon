@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"log"
 	"net/http"
 
 	"net/url"
@@ -18,6 +17,9 @@ import (
 	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/deploy"
 	"github.com/LovePelmeni/Infrastructure/models"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/LovePelmeni/Infrastructure/parsers"
 	"github.com/LovePelmeni/Infrastructure/resources"
@@ -53,21 +55,22 @@ var (
 )
 
 var (
-	DebugLogger *log.Logger
-	InfoLogger  *log.Logger
-	ErrorLogger *log.Logger
+	Logger *zap.Logger
 )
 
+func InitializeProductionLogger() {
+
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(config)
+	file, _ := os.OpenFile("VmRestLog.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logWriter := zapcore.AddSync(file)
+
+	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	Logger = zap.New(Core)
+}
+
 func init() {
-
-	LogFile, Error := os.OpenFile("RestVm.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if Error != nil {
-		panic(Error)
-	}
-
-	DebugLogger = log.New(LogFile, "DEBUG:", log.Ldate|log.Ltime|log.Lshortfile)
-	InfoLogger = log.New(LogFile, "INFO:", log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLogger = log.New(LogFile, "ERROR:", log.Ldate|log.Ltime|log.Lshortfile)
 
 	var RestClient *rest.Client
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
@@ -76,12 +79,12 @@ func init() {
 	APIClient, ConnectionError := govmomi.NewClient(TimeoutContext, APIUrl, false)
 	switch {
 	case ConnectionError != nil:
-		ErrorLogger.Printf("FAILED TO INITIALIZE CLIENT, DOES THE VMWARE HYPERVISOR ACTUALLY RUNNING?")
+		Logger.Error("FAILED TO INITIALIZE CLIENT, DOES THE VMWARE HYPERVISOR ACTUALLY RUNNING?")
 
 	case ConnectionError == nil:
 		RestClient = rest.NewClient(APIClient.Client)
 		if FailedToLogin := RestClient.Login(TimeoutContext, APIUrl.User); FailedToLogin != nil {
-			ErrorLogger.Printf("FAILED TO LOGIN TO THE VMWARE HYPERVISOR SERVER, ERROR: %s", FailedToLogin)
+			Logger.Error("FAILED TO LOGIN TO THE VMWARE HYPERVISOR SERVER", zap.Error(FailedToLogin))
 		}
 	}
 	Client = APIClient
@@ -108,7 +111,7 @@ func GetCustomerVirtualMachine(RequestContext *gin.Context) {
 		RequestContext.JSON(http.StatusOK,
 			gin.H{"VirtualMachine": VirtualMachine})
 	default:
-		ErrorLogger.Printf("Failed to Receive Virtual Machine, Error: %s", Gorm.Error.Error())
+		Logger.Error("Failed to Receive Virtual Machine, Error: %s", zap.Error(Gorm.Error))
 		RequestContext.JSON(http.StatusBadRequest,
 			gin.H{"Error": "Virtual Machine Does Not Exist"})
 	}
@@ -128,7 +131,7 @@ func GetCustomerVirtualMachines(RequestContext *gin.Context) {
 		RequestContext.JSON(http.StatusOK,
 			gin.H{"QuerySet": VirtualMachines})
 	default:
-		ErrorLogger.Printf("Failed to Receive All Customer Virtual Machines, Error: %s", Gorm.Error)
+		Logger.Error("Failed to Receive All Customer Virtual Machines", zap.Error(Gorm.Error))
 		RequestContext.JSON(http.StatusBadRequest,
 			gin.H{"Error": fmt.Sprintf("%s", Gorm.Error)})
 	}
@@ -208,8 +211,8 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 
 		IPAddress, IPError := InitializedInstance.WaitForIP(TimeoutContext)
 		if IPError != nil {
-			ErrorLogger.Printf(
-				"Failed to Parse the IP Address of the Virtual Machine, Timeout: Error: %s", IPError)
+			Logger.Error(
+				"Failed to Parse the IP Address of the Virtual Machine, Timeout: Error: %s", zap.Error(IPError))
 			RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to Initialize Virtual Machine"})
 			return
 		}
@@ -226,14 +229,14 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 		Created, CreationError := NewVirtualMachine.Create()
 		if CreationError != nil {
 			Created.Rollback()
-			ErrorLogger.Printf("Failed to Create new ORM VM Object, Error on Creation: %s", CreationError)
+			Logger.Error("Failed to Create new ORM VM Object, Error on Creation: %s", zap.Error(CreationError))
 		}
 		RequestContext.JSON(http.StatusCreated,
 			gin.H{"Status": "Initialized"})
 
 	default:
 		// In Worse Case returning Initialization Error...
-		ErrorLogger.Printf("Failed to Initialize New Virtual Server, Error: %s", InitError)
+		Logger.Error("Failed to Initialize New Virtual Server, Error: %s", zap.Error(InitError))
 		RequestContext.JSON(http.StatusBadGateway,
 			gin.H{"Error": "Failed to Initialize new Virtual Server"})
 	}
@@ -296,7 +299,7 @@ func DeployVirtualMachineRestController(RequestContext *gin.Context) {
 			"IPAddress": VmInfo.IPAddress, "SshInfo": VmInfo.SshInfo})
 
 	default:
-		ErrorLogger.Printf("Failed to Apply Configuration to the Virtual Machine, Error: %s", ApplyError)
+		Logger.Error("Failed to Apply Configuration to the Virtual Machine, Error: %s", zap.Error(ApplyError))
 		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": ApplyError})
 	}
 
@@ -418,9 +421,9 @@ func RemoveVirtualMachineRestController(RequestContext *gin.Context) {
 
 		if Error != nil {
 			Deleted.Rollback()
-			ErrorLogger.Printf(
+			Logger.Error(
 				"Failed to Delete Virtual Machine Object with ID: `%s`, Error: %s",
-				VirtualMachineId, Error)
+				zap.String("Virtual Machine ID", VirtualMachineId), zap.Error(Error))
 		}
 		RequestContext.JSON(http.StatusCreated, gin.H{"Operation": "Success"})
 	}
@@ -444,7 +447,7 @@ func RebootGuestOSRestController(RequestContext *gin.Context) {
 
 	RebootedError := VirtualMachine.RebootGuest(TimeoutContext)
 	if RebootedError != nil {
-		ErrorLogger.Printf("Failed to Reboot OS on Virtual Machine Server, Error: %s", RebootedError)
+		Logger.Error("Failed to Reboot OS on Virtual Machine Server, Error: %s", zap.Error(RebootedError))
 		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to Reboot Operational System"})
 		return
 	}
@@ -468,7 +471,7 @@ func StartGuestOSRestController(RequestContext *gin.Context) {
 	// Starting Virtual Machine...
 	RebootedError := VmManager.StartVirtualMachine(VirtualMachine)
 	if RebootedError != nil {
-		ErrorLogger.Printf("Failed to Reboot OS on Virtual Machine Server, Error: %s", RebootedError)
+		Logger.Error("Failed to Reboot OS on Virtual Machine Server, Error: %s", zap.Error(RebootedError))
 		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to Reboot Operational System"})
 		return
 	}
@@ -493,7 +496,7 @@ func ShutdownGuestOsRestController(RequestContext *gin.Context) {
 
 	RebootedError := VirtualMachine.ShutdownGuest(TimeoutContext)
 	if RebootedError != nil {
-		ErrorLogger.Printf("Failed to Shutdown OS on Virtual Machine Server, Error: %s", RebootedError)
+		Logger.Error("Failed to Shutdown OS on Virtual Machine Server, Error: %s", zap.Error(RebootedError))
 		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to shutdown Operational System"})
 		return
 	}

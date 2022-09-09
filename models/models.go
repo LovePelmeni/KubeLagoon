@@ -57,13 +57,15 @@ func init() {
 	switch ConnectionError {
 
 	case gorm.ErrInvalidDB:
-		panic("Please Setup Credentials for your PostgreSQL Database: Host, Port, User, Password, DbName")
+		panic("Please Setup Correct Credentials for your PostgreSQL Database: Host, Port, User, Password, DbName")
 
 	case gorm.ErrUnsupportedDriver:
 		panic("Invalid Database Driver")
 
 	case gorm.ErrNotImplemented:
-		panic(ConnectionError)
+		panic("Please Setup Credentials for the Database, " +
+		"so it knows where to connect, go to `env` " +
+		"directory and fill up `project.env` file with new Database Credentials")
 	}
 
 	Database = DatabaseInstance

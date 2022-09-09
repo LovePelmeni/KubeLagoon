@@ -5,8 +5,6 @@ import (
 	"errors"
 
 	"fmt"
-
-	"log"
 	"net/url"
 
 	"os"
@@ -15,25 +13,32 @@ import (
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
 
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 )
 
 var (
-	DebugLogger *log.Logger
-	InfoLogger  *log.Logger
-	ErrorLogger *log.Logger
+	Logger *zap.Logger
 )
 
+func InitializeProductionLogger() {
+
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(config)
+	file, _ := os.OpenFile("Main.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logWriter := zapcore.AddSync(file)
+
+	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	Logger = zap.New(Core)
+}
+
 func init() {
-	LogFile, Error := os.OpenFile("Ssh.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if Error != nil {
-		panic(Error)
-	}
-	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ltime|log.Ldate|log.Lshortfile)
-	InfoLogger = log.New(LogFile, "INFO: ", log.Ltime|log.Ldate|log.Lshortfile)
-	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ltime|log.Ldate|log.Lshortfile)
+	InitializeProductionLogger()
 }
 
 type SshCredentialsInterface interface {
@@ -99,8 +104,8 @@ func (this *VirtualMachineSshCertificateManager) GetVirtualMachineUrl() (*url.UR
 		this.VirtualMachine.Reference(), []string{"*"}, &MoVirtualMachine)
 
 	if MoVirtualMachineError != nil {
-		ErrorLogger.Printf(
-			"Failed to Obtain Vm `MO` Version, Error: %s", MoVirtualMachineError)
+		Logger.Error(
+			"Failed to Obtain Vm `MO` Version", zap.Error(MoVirtualMachineError))
 	}
 
 	return &url.URL{
@@ -131,12 +136,12 @@ func (this *VirtualMachineSshCertificateManager) UploadSshKeys(Key SshCertificat
 	InstallationError := SshManager.InstallServerCertificate(TimeoutContext, string(Key.Content))
 	switch InstallationError {
 	case nil:
-		DebugLogger.Printf("SSH Key has been Successfully Uploaded to the VM with Name: %s",
-			this.VirtualMachine.Name())
+		Logger.Debug("SSH Key has been Successfully Uploaded to the VM with Name: %s",
+			zap.String("Virtual Machine Name", this.VirtualMachine.Name()))
 		return nil
 
 	default:
-		ErrorLogger.Printf("Failed to Upload SSH Key to the Remote VM's Host Machine")
+		Logger.Error("Failed to Upload SSH Key to the Remote VM's Host Machine")
 		return errors.New("Failed to Add SSH Support")
 	}
 }
@@ -201,7 +206,7 @@ func (this *VirtualMachineSshRootCredentialsManager) GetSshRootCredentials() (*t
 		[]string{"name", "guest"}, &VirtualMachine)
 
 	if RetrieveError != nil {
-		DebugLogger.Printf(
+		Logger.Debug(
 			"Failed to Get VirtualMachine Instance")
 		return nil, RetrieveError
 	}

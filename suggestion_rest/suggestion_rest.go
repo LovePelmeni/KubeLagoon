@@ -5,7 +5,6 @@ import (
 	_ "context"
 	"encoding/json"
 
-	"log"
 	"net/http"
 	"net/url"
 
@@ -15,6 +14,9 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/host_system"
 	"github.com/LovePelmeni/Infrastructure/resources"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/gin-gonic/gin"
 	"github.com/vmware/govmomi"
@@ -43,22 +45,24 @@ var (
 )
 
 var (
-	DebugLogger *log.Logger
-	InfoLogger  *log.Logger
-	ErrorLogger *log.Logger
+	Logger *zap.Logger
 )
+
+func InitializeProductionLogger() {
+
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(config)
+	file, _ := os.OpenFile("SuggestionsRestLog.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logWriter := zapcore.AddSync(file)
+
+	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	Logger = zap.New(Core)
+}
 
 func init() {
 
-	LogFile, Error := os.OpenFile("RestResources.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if Error != nil {
-		panic(Error)
-	}
-
-	DebugLogger = log.New(LogFile, "DEBUG:", log.Ldate|log.Ltime|log.Lshortfile)
-	InfoLogger = log.New(LogFile, "INFO:", log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLogger = log.New(LogFile, "ERROR:", log.Ldate|log.Ltime|log.Lshortfile)
-
+	InitializeProductionLogger()
 	var RestClient *rest.Client
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
 	defer CancelFunc()
@@ -66,12 +70,12 @@ func init() {
 	APIClient, ConnectionError := govmomi.NewClient(TimeoutContext, APIUrl, false)
 	switch {
 	case ConnectionError != nil:
-		ErrorLogger.Printf("FAILED TO INITIALIZE CLIENT, DOES THE VMWARE HYPERVISOR ACTUALLY RUNNING?")
+		Logger.Error("FAILED TO INITIALIZE CLIENT, DOES THE VMWARE HYPERVISOR ACTUALLY RUNNING?")
 
 	case ConnectionError == nil:
 		RestClient = rest.NewClient(APIClient.Client)
 		if FailedToLogin := RestClient.Login(TimeoutContext, APIUrl.User); FailedToLogin != nil {
-			ErrorLogger.Printf("FAILED TO LOGIN TO THE VMWARE HYPERVISOR SERVER, ERROR: %s", FailedToLogin)
+			Logger.Error("FAILED TO LOGIN TO THE VMWARE HYPERVISOR SERVER, ERROR: %s", zap.Error(FailedToLogin))
 		}
 	}
 	Client = APIClient
@@ -88,7 +92,7 @@ func GetDatacentersSuggestions(RequestContext *gin.Context) {
 
 	// If Failed to Find Any Available Datacenters, due to the Error, Returning Bad Request with Error Explanation
 	if Error != nil {
-		ErrorLogger.Printf("Failed to Parse Query Of Available Datacenters, Error: %s", Error)
+		Logger.Error("Failed to Parse Query Of Available Datacenters", zap.Error(Error))
 		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": Error})
 	}
 
