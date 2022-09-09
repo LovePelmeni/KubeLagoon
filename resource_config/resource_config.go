@@ -1,26 +1,31 @@
 package resource_config
 
 import (
-	"log"
 	"os"
 
 	"github.com/vmware/govmomi/vim25/types"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var (
-	DebugLogger *log.Logger
-	ErrorLogger *log.Logger
-	InfoLogger  *log.Logger
+	Logger *zap.Logger
 )
 
+func InitializeProductionLogger() {
+
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(config)
+	file, _ := os.OpenFile("Main.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logWriter := zapcore.AddSync(file)
+
+	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	Logger = zap.New(Core)
+}
+
 func init() {
-	LogFile, Error := os.OpenFile("ResourceConfig.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
-	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
-	if Error != nil {
-		panic(Error)
-	}
+	InitializeProductionLogger()
 }
 
 type VirtualMachineResources struct {

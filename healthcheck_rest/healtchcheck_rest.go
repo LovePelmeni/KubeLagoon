@@ -2,7 +2,6 @@ package healthcheck_rest
 
 import (
 	"context"
-	"log"
 
 	"net/http"
 	"net/url"
@@ -12,6 +11,8 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/deploy"
 	"github.com/LovePelmeni/Infrastructure/healthcheck"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/gin-gonic/gin"
 	"github.com/vmware/govmomi"
@@ -39,21 +40,23 @@ var (
 )
 
 var (
-	DebugLogger *log.Logger
-	InfoLogger  *log.Logger
-	ErrorLogger *log.Logger
+	Logger *zap.Logger
 )
+
+func InitializeProductionLogger() {
+
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(config)
+	file, _ := os.OpenFile("HealthCheckLog.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logWriter := zapcore.AddSync(file)
+
+	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	Logger = zap.New(Core)
+}
 
 func init() {
 	// Initializing Govmomi Client for the VM Server
-	LogFile, Error := os.OpenFile("RestVm.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if Error != nil {
-		panic(Error)
-	}
-
-	DebugLogger = log.New(LogFile, "DEBUG:", log.Ldate|log.Ltime|log.Lshortfile)
-	InfoLogger = log.New(LogFile, "INFO:", log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLogger = log.New(LogFile, "ERROR:", log.Ldate|log.Ltime|log.Lshortfile)
 
 	var RestClient *rest.Client
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*10)
@@ -62,12 +65,12 @@ func init() {
 	APIClient, ConnectionError := govmomi.NewClient(TimeoutContext, APIUrl, false)
 	switch {
 	case ConnectionError != nil:
-		ErrorLogger.Printf("FAILED TO INITIALIZE CLIENT, DOES THE VMWARE HYPERVISOR ACTUALLY RUNNING?")
+		Logger.Error("FAILED TO INITIALIZE CLIENT, DOES THE VMWARE HYPERVISOR ACTUALLY RUNNING?")
 
 	case ConnectionError == nil:
 		RestClient = rest.NewClient(APIClient.Client)
 		if FailedToLogin := RestClient.Login(TimeoutContext, APIUrl.User); FailedToLogin != nil {
-			ErrorLogger.Printf("FAILED TO LOGIN TO THE VMWARE HYPERVISOR SERVER, ERROR: %s", FailedToLogin)
+			Logger.Error("FAILED TO LOGIN TO THE VMWARE HYPERVISOR SERVER", zap.Error(FailedToLogin))
 		}
 	}
 	Client = APIClient
@@ -114,4 +117,3 @@ func GetVirtualMachineHealthMetricRestController(RequestContext *gin.Context) {
 	}
 	RequestContext.JSON(http.StatusOK, gin.H{"Metrics": HealthCheckMetrics})
 }
-

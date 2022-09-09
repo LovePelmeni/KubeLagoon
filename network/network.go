@@ -3,7 +3,6 @@ package network
 import (
 	"context"
 	"errors"
-	"log"
 	"os"
 	"time"
 
@@ -17,24 +16,38 @@ import (
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/types"
 
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
 
 var (
-	DebugLogger *log.Logger
-	InfoLogger  *log.Logger
-	ErrorLogger *log.Logger
+	DebugLogger *zap.Logger
+	InfoLogger  *zap.Logger
+	ErrorLogger *zap.Logger
 )
 
+func InitializeProductionLogger() {
+
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(config)
+	file, _ := os.OpenFile("Network.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logWriter := zapcore.AddSync(file)
+
+	DebugCore := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	InfoCore := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.InfoLevel))
+	ErrorCore := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zap.ErrorLevel))
+
+	DebugLogger = zap.New(DebugCore)
+	InfoLogger = zap.New(InfoCore)
+	ErrorLogger = zap.New(ErrorCore)
+}
+
 func init() {
-	LogFile, Error := os.OpenFile("IP.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
-	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
-	if Error != nil {
-		panic(Error)
-	}
+	InitializeProductionLogger()
 }
 
 type VirtualMachineIPAddress struct {
@@ -132,69 +145,70 @@ func (this *VirtualMachinePublicNetworkManager) SetupPublicNetwork(IPCredentials
 }
 
 func (this *VirtualMachinePublicNetworkManager) ConnectVirtualMachineToNetwork(Network *object.Network, VirtualMachine *object.VirtualMachine) {
-	// Connects Virtual Machine Server to the Network specified 
+	// Connects Virtual Machine Server to the Network specified
 }
 
 type VirtualMachinePrivateNetworkManager struct {
 	// Manager For Initializing Private Network (Analogy to the VPC In the Cloud Providers)
-	Client vim25.Client 
+	Client vim25.Client
 }
 
 func NewVirtualMachinePrivateNetworkManager(Client vim25.Client) *VirtualMachinePrivateNetworkManager {
 	return &VirtualMachinePrivateNetworkManager{
-		Client: Client, 
+		Client: Client,
 	}
 }
 
-func (this *VirtualMachinePrivateNetworkManager) SetupPrivateNetwork(NetworkCredentials VirtualMachineIPAddress) (*object.Network, error){
+func (this *VirtualMachinePrivateNetworkManager) SetupPrivateNetwork(NetworkCredentials VirtualMachineIPAddress) (*object.Network, error) {
 	// Returns Private Network Configuration based on the Setup that has been Required By Customer
-	
-	
-	// Initializing Timeout Context for the Container Creation Operation 
+
+	// Initializing Timeout Context for the Container Creation Operation
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
 	defer CancelFunc()
 
-	// Initializing Instance Manager 
+	// Initializing Instance Manager
 	Manager := view.NewManager(&this.Client)
 
-	// Initializing New Container for the Private Network 
+	// Initializing New Container for the Private Network
 	NewPrivateNetwork, PrivateNetworkInitializationError := Manager.CreateContainerView(
-	TimeoutContext, this.Client.ServiceContent.RootFolder.Reference(), []string{"Network"}, false)
-	if PrivateNetworkInitializationError != nil {ErrorLogger.Printf(
-	"Failed to Initialize New Private Network"); return nil, errors.New("Failed to Initialize Private Network")}
-	return object.NewReference(&this.Client, 
-	NewPrivateNetwork.ManagedObjectView.Reference()).(*object.Network), nil
+		TimeoutContext, this.Client.ServiceContent.RootFolder.Reference(), []string{"Network"}, false)
+	if PrivateNetworkInitializationError != nil {
+		ErrorLogger.Error(
+			"Failed to Initialize New Private Network")
+		return nil, errors.New("Failed to Initialize Private Network")
+	}
+	return object.NewReference(&this.Client,
+		NewPrivateNetwork.ManagedObjectView.Reference()).(*object.Network), nil
 }
 
 func (this *VirtualMachinePrivateNetworkManager) ConnectVirtualMachineToNetwork(Network *object.Network, VirtualMachine *object.VirtualMachine) (bool, error) {
-	// Connects Virtual Machine to the Private Network, 
+	// Connects Virtual Machine to the Private Network,
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
 	defer CancelFunc()
 
 	// Obtaining Network Resource Key
 
 	PrivateNetworkDeviceConfig := types.VirtualDevice{
-		Backing: &types.VirtualDeviceBackingInfo{}, 
+		Backing: &types.VirtualDeviceBackingInfo{},
 		Connectable: &types.VirtualDeviceConnectInfo{
-			Connected: *types.NewBool(true), 
-			StartConnected: *types.NewBool(true),
+			Connected:         *types.NewBool(true),
+			StartConnected:    *types.NewBool(true),
 			AllowGuestControl: *types.NewBool(true),
 		},
 	}
 
-	// Applying New Network Device, so Application can access Private Network 
+	// Applying New Network Device, so Application can access Private Network
 	ApplyError := VirtualMachine.AddDevice(TimeoutContext, &PrivateNetworkDeviceConfig)
 	switch ApplyError {
-		case nil:
-			DebugLogger.Printf(
+	case nil:
+		DebugLogger.Error(
 			"Private Network Access has been successfully added to VM: Name: %s",
-		    VirtualMachine.Name())
-			return true, nil
-		default:
-			ErrorLogger.Printf(
+			VirtualMachine.Name())
+		return true, nil
+	default:
+		ErrorLogger.Debug(
 			"Failed to Connect VM with Name: %s to the Private Network, Error: %s",
-			VirtualMachine.Name(), ApplyError) 
-			return false, ApplyError
+			VirtualMachine.Name(), ApplyError)
+		return false, ApplyError
 	}
 }
-

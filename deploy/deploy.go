@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"errors"
-	"log"
 
 	"os"
 	"time"
@@ -13,6 +12,9 @@ import (
 	"github.com/LovePelmeni/Infrastructure/exceptions"
 	"github.com/LovePelmeni/Infrastructure/parsers"
 	"github.com/LovePelmeni/Infrastructure/ssh_config"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/LovePelmeni/Infrastructure/models"
 
@@ -28,24 +30,30 @@ import (
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vapi/library"
 	"github.com/vmware/govmomi/vapi/rest"
-
 	"github.com/vmware/govmomi/vapi/vcenter"
 )
 
 var (
-	DebugLogger *log.Logger
-	InfoLogger  *log.Logger
-	ErrorLogger *log.Logger
+	Logger *zap.Logger
 )
 
-func init() {
-	LogFile, Error := os.OpenFile("Deploy.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
-	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+func InitializeProductionLogger() {
+
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(config)
+	file, Error := os.OpenFile("Main.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if Error != nil {
 		panic(Error)
 	}
+
+	logWriter := zapcore.AddSync(file)
+	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	Logger = zap.New(Core)
+}
+
+func init() {
+	InitializeProductionLogger()
 }
 
 type ResourceKeys struct {
@@ -189,7 +197,8 @@ func (this *VirtualMachineManager) GetVirtualMachine(VmId string, CustomerId str
 		CustomerId, VmId).Find(&VirtualMachineObj)
 
 	if VirtualMachineGormRefError != nil {
-		ErrorLogger.Printf("Failed to Find Virtual Machine in Database with ID: %s and Owner ID: %s", VmId, CustomerId)
+		Logger.Error("Failed to Find Virtual Machine",
+			zap.String("Virtual Machine ID", VmId), zap.String("Customer ID", CustomerId))
 		return nil, exceptions.ItemDoesNotExist()
 	}
 
@@ -200,7 +209,8 @@ func (this *VirtualMachineManager) GetVirtualMachine(VmId string, CustomerId str
 
 	switch {
 	case FindError != nil:
-		ErrorLogger.Printf("Failed to Find Virtual Machine with ID: %s of Customer: %s", VmId, CustomerId)
+		Logger.Error("Failed to Find Virtual Machine",
+			zap.String("Virtual Machine ID", VmId), zap.String("Customer ID", CustomerId))
 		return nil, exceptions.ItemDoesNotExist()
 
 	case FindError == nil:
@@ -229,7 +239,7 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 
 	// If Failed to Get Clusters Resource Pool, returning Exception
 	if ResourcePoolError != nil {
-		ErrorLogger.Printf("Failed to Get Cluster Resource Pool, Error: %s", ResourcePoolError)
+		Logger.Debug("Failed to Get Cluster Resource Pool", zap.NamedError("FindError", ResourcePoolError))
 		return *new(*object.VirtualMachine), errors.New("Failed to Get Cluster Resource Pool")
 	}
 
@@ -280,7 +290,7 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 		Item, ItemError := ResourceAllocationManager.GetLibraryItem(TimeoutContext)
 
 		if ItemError != nil {
-			DebugLogger.Printf("ItemError: %s", ItemError)
+			Logger.Debug("ItemError: %s", zap.NamedError("ItemError", ItemError))
 			return nil, exceptions.ItemDoesNotExist()
 		}
 
@@ -288,30 +298,31 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 
 		switch {
 		case DeployError != nil:
-			ErrorLogger.Printf("Failed to Deploy Virtual Machine From Library, Error: %s", DeployError)
+			Logger.Error("Failed to Deploy Virtual Machine From Library",
+				zap.NamedError("DeployError", DeployError))
 			return nil, exceptions.DeployFromLibraryFailure()
 
 		case DeployError == nil:
-			DebugLogger.Printf("Virtual Machine Has been Deployed Successfully from Library, Obtaining Reference Resource")
+			Logger.Debug("Virtual Machine Has been Deployed Successfully from Library, Obtaining Reference Resource")
 
 			newFinder := find.NewFinder(&VimClient)
 			VmRef, FindError := newFinder.ObjectReference(DeployTimeoutContext, *VirtualMachineInstanceReference)
 
 			if FindError != nil {
-				ErrorLogger.Printf("VM Does Not Exist or Could Not Be Found After Deploy, Error: %s", FindError)
+				Logger.Error("VM Does Not Exist or Could Not Be Found After Deploy", zap.NamedError("FindError", FindError))
 				return nil, exceptions.DeployFromLibraryFailure()
 			} else {
-				DebugLogger.Printf("New Virtual Machine has been Initialized Successfully.")
+				Logger.Debug("New Virtual Machine has been Initialized Successfully.")
 				return VmRef.(*object.VirtualMachine), nil
 			}
 		}
 
 	case ResourceKeysError != nil:
-		DebugLogger.Printf("No Resources Is Available. to Deploy New Virtual Machine")
+		Logger.Error("No Resources Is Available. to Deploy New Virtual Machine")
 		return nil, exceptions.NoResourceAvailable()
 
 	default:
-		DebugLogger.Printf("Unknown Deploy Errors: [%s]", ResourceKeysError)
+		Logger.Error("Unknown Deploy Error", zap.Error(ResourceKeysError))
 		return nil, exceptions.VMDeployFailure()
 	}
 	return nil, exceptions.VMDeployFailure()
@@ -358,8 +369,8 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 	// Getting Extra Tools Configuration, that is going to be Installed on the VM
 	_, ExtraToolsError := Configuration.GetExtraToolsConfig(this.VimClient)
 	if ExtraToolsError != nil {
-		ErrorLogger.Printf("Failed to Obtain Extra Tools that Should be Installed on the VM, Error: %s",
-			ExtraToolsError)
+		Logger.Error("Failed to Obtain Extra Tools that Should be Installed on the VM",
+			zap.Error(ExtraToolsError))
 	}
 
 	// Retrieving Mo Entity of the Virtual Machine
@@ -423,13 +434,13 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 	Devices, DeviceError := VirtualMachine.Device(TimeoutContext)
 
 	if DeviceError != nil {
-		ErrorLogger.Printf(DeviceError.Error())
+		Logger.Error("Failed to Receive Available Devices for Virtual Machine", zap.Error(DeviceError))
 		return nil, errors.New("Failed to Receive Available Devices for the Virtual Machine")
 	}
 	DiskController, ControllerError := Devices.FindDiskController("scsi")
 
 	if ControllerError != nil {
-		ErrorLogger.Printf(ControllerError.Error())
+		Logger.Error("Failed to Receive Disk Controller for the Virtual Machine, To Allocate Storage", zap.Error(ControllerError))
 		return nil, errors.New("Failed to Receive DiskController for the Virtual Machine")
 	}
 
@@ -461,39 +472,39 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 
 	if ConfiguredError != nil {
 		// If Failing To Apply First Configuration, Destroying Virtual Machine
-		ErrorLogger.Printf("Failed to Configure Virtual Machine, Error has Occurred")
+		Logger.Error("Failed to Configure Virtual Machine, Error has Occurred", zap.Error(ConfiguredError))
 		_, Error := this.DestroyVirtualMachine(VirtualMachine)
 		return nil, Error
 	}
 
 	if HostSystemCustomizationError != nil {
-		ErrorLogger.Printf("Failed to Apply Customization Specification to the VM Server with OS Specifications, Error: %s", HostSystemCustomizationError)
+		Logger.Error("Failed to Apply Customization Specification to the VM Server with OS Specifications", zap.Error(HostSystemCustomizationError))
 		return nil, HostSystemCustomizationError
 	}
 
 	if NetworkCustomizationError != nil {
-		ErrorLogger.Printf("Failed to Setup Customized Network")
+		Logger.Error("Failed to Setup Customized Network", zap.Error(NetworkCustomizationError))
 		return nil, NetworkCustomizationError
 	}
 
 	// Waiting for Hardware and Resource Configuration to Apply
 	WaitResponseError := ConfigureTask.Wait(ConfigureTimeoutContext)
 	if WaitResponseError != nil {
-		ErrorLogger.Printf("Failed to Configure Virtual Machine, Error: %s", WaitResponseError)
+		Logger.Error("Failed to Configure Virtual Machine", zap.Error(WaitResponseError))
 		return nil, WaitResponseError
 	}
 
 	// Waiting for OS Customization Response
 	WaitCustomizationResponseError := HostSystemCustomizationTask.Wait(ConfigureTimeoutContext)
 	if WaitCustomizationResponseError != nil {
-		ErrorLogger.Printf("Failed to Configure OS Customization Specification for the VM Server, Error: %s", WaitCustomizationResponseError)
+		Logger.Error("Failed to Configure OS Customization Specification for the VM Server", zap.Error(WaitCustomizationResponseError))
 		return nil, WaitCustomizationResponseError
 	}
 
 	// Waiting for the Network Customization Response
 	WaitNetworkCustomizationError := NetworkCustomizationTask.Wait(ConfigureTimeoutContext)
 	if WaitNetworkCustomizationError != nil {
-		ErrorLogger.Printf("Failed to Apply Network Configuration, Error: %s", WaitNetworkCustomizationError)
+		Logger.Error("Failed to Apply Network Configuration", zap.Error(WaitNetworkCustomizationError))
 		return nil, WaitNetworkCustomizationError
 	}
 
@@ -501,14 +512,14 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 
 	VmIPAddress, VmIPError := NewVirtualMachine.WaitForIP(TimeoutContext, true)
 	if VmIPError != nil {
-		ErrorLogger.Printf("Failed to Fetch IP Addresses for the VM, Errors: [%s]", VmIPError)
+		Logger.Error("Failed to Fetch IP Addresses for the VM", zap.Error(VmIPError))
 	}
 
 	// Setting up SSH Credentials for the Virtual Machine
 
 	SshCredentials, ApplyError := Configuration.ApplySshConfig(this.VimClient, VirtualMachine)
 	if ApplyError != nil {
-		ErrorLogger.Printf("Failed to Apply SSH to the VM")
+		Logger.Error("Failed to Apply SSH to the VM", zap.Error(ApplyError))
 	}
 
 	// Defining which type of the SSH has been Applied to Virtual Machine,
@@ -569,12 +580,13 @@ func (this *VirtualMachineManager) StartVirtualMachine(VirtualMachine *object.Vi
 
 	switch {
 	case DeployError != nil || AppliedError != nil:
-		ErrorLogger.Printf("Failed to Start Virtual Machine, Errors: [%s, %s]",
-			DeployError, AppliedError)
+		Logger.Error("Failed to Start Virtual Machine",
+			zap.Errors("Deployment and Configuration Apply Errors", []error{DeployError, AppliedError}))
 		return exceptions.VMDeployFailure()
 
 	case DeployError == nil && AppliedError == nil:
-		DebugLogger.Printf("Virtual Machine with ItemPath: %s, has been Started Successfully", VirtualMachine.InventoryPath)
+		Logger.Debug("Virtual Machine has been Started Successfully",
+			zap.String("ItemPath", VirtualMachine.InventoryPath))
 		return nil
 	default:
 		return nil
@@ -589,8 +601,8 @@ func (this *VirtualMachineManager) RebootVirtualMachine(VirtualMachine *object.V
 
 	RebootError := VirtualMachine.RebootGuest(TimeoutContext)
 	if RebootError != nil {
-		ErrorLogger.Printf("Failed to Reboot Guest OS, on VM: %s",
-			VirtualMachine.Reference().Value)
+		Logger.Error("Failed to Reboot Guest OS, on VM: %s",
+			zap.Error(RebootError))
 		return true
 	} else {
 		return false
@@ -608,16 +620,19 @@ func (this *VirtualMachineManager) ShutdownVirtualMachine(VirtualMachine *object
 
 	switch {
 	case DeployError != nil || AppliedError != nil:
-		ErrorLogger.Printf("Failed to Shutdown Virtual Machine, with ItemPath: %s Errors: [%s, %s]",
-			VirtualMachine.InventoryPath, DeployError, AppliedError)
+		Logger.Error("Failed to Shutdown Virtual Machine, with ItemPath: %s Errors: [%s, %s]",
+			zap.String("ItemPath", VirtualMachine.InventoryPath),
+			zap.NamedError("DeployError", DeployError),
+			zap.NamedError("ApplyError", AppliedError))
 		return exceptions.VMShutdownFailure()
 
 	case DeployError == nil && AppliedError == nil:
-		DebugLogger.Printf("Virtual Machine with ItemPath: %s, has been Shutdown.", VirtualMachine.InventoryPath)
+		Logger.Debug("Virtual Machine has been Shutdown.",
+			zap.String("ItemPath", VirtualMachine.InventoryPath))
 		return nil
 	default:
-		ErrorLogger.Printf("Unknown State has been Occurred, while Shutting Down Virtual Machine with ItemPath: %s",
-			VirtualMachine.InventoryPath)
+		Logger.Error("Unknown State has been Occurred, while Shutting Down Virtual Machine",
+			zap.String("ItemPath", VirtualMachine.InventoryPath))
 		return nil
 	}
 }
@@ -629,15 +644,17 @@ func (this *VirtualMachineManager) DestroyVirtualMachine(VirtualMachine *object.
 	defer CancelFunc()
 
 	DestroyTask, DestroyError := VirtualMachine.Destroy(TimeoutContext)
-	DeletedError := DestroyTask.Wait(TimeoutContext)
+	TaskError := DestroyTask.Wait(TimeoutContext)
 
-	if DestroyError != nil || DeletedError != nil {
-		ErrorLogger.Printf("Failed to Destroy Virtual Machine with ItemPath %s, Errors: [%s, %s]",
-			VirtualMachine.InventoryPath, DestroyError, DeletedError)
+	if DestroyError != nil || TaskError != nil {
+		Logger.Error("Failed to Destroy Virtual Machine",
+			zap.String("ItemPath", VirtualMachine.InventoryPath),
+			zap.NamedError("DestroyError", DestroyError),
+			zap.NamedError("TaskError", TaskError))
 		return false, exceptions.DestroyFailure()
 	}
-	InfoLogger.Printf("Virtual Machine with ItemPath: %s has been Destroyed",
-		VirtualMachine.InventoryPath)
+	Logger.Info("Virtual Machine has been Destroyed",
+		zap.String("ItemPath", VirtualMachine.InventoryPath))
 	return true, nil
 }
 

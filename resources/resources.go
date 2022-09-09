@@ -3,11 +3,13 @@ package resources
 import (
 	"context"
 	"encoding/json"
+
 	"errors"
 	"fmt"
-	"log"
+
 	"os"
 	"reflect"
+
 	_ "reflect"
 	"strings"
 	"time"
@@ -15,6 +17,9 @@ import (
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/view"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/vim25"
@@ -24,19 +29,22 @@ import (
 )
 
 var (
-	DebugLogger *log.Logger
-	InfoLogger  *log.Logger
-	ErrorLogger *log.Logger
+	Logger *zap.Logger
 )
 
+func InitializeProductionLogger() {
+
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(config)
+	file, _ := os.OpenFile("ResourcesLog.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logWriter := zapcore.AddSync(file)
+
+	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	Logger = zap.New(Core)
+}
 func init() {
-	LogFile, Error := os.OpenFile("Resources.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	DebugLogger = log.New(LogFile, "DEBUG:", log.Ldate|log.Ltime|log.Lshortfile)
-	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
-	if Error != nil {
-		panic(Error)
-	}
+	InitializeProductionLogger()
 }
 
 // Package consists of API Classes, that is responsible for Providing info about
@@ -215,7 +223,7 @@ func (this *DatacenterResourceManager) GetAvailableDatacenters(Requirements Data
 	Collector := property.DefaultCollector(this.Client)
 
 	if FindError != nil {
-		ErrorLogger.Printf("Failed to Find Datacenters, Error: %s", FindError)
+		Logger.Error("Failed to Find Datacenters", zap.Error(FindError))
 		return Datacenters
 	}
 
@@ -224,7 +232,7 @@ func (this *DatacenterResourceManager) GetAvailableDatacenters(Requirements Data
 		var MoDatacenter mo.Datacenter
 		CollectError := Collector.RetrieveOne(TimeoutContext, Datacenter.Reference(), []string{"*"}, &MoDatacenter)
 		if CollectError != nil {
-			DebugLogger.Printf("Failed to Get Mo Interface of the Datacenter, Error: %s", CollectError)
+			Logger.Debug("Failed to Get Mo Interface of the Datacenter", zap.Error(CollectError))
 			continue
 		}
 
@@ -252,7 +260,7 @@ func (this *NetworkResourceManager) HasEnoughResources(Network *mo.Network, Requ
 		return true
 	} else {
 		return false
-	} 
+	}
 }
 
 func (this *NetworkResourceManager) GetAvailableResources(Datacenter *mo.Datacenter, Requirements *NetworkResourceRequirements) []*object.Network {
@@ -262,25 +270,28 @@ func (this *NetworkResourceManager) GetAvailableResources(Datacenter *mo.Datacen
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*20)
 	defer CancelFunc()
 
-	// Checking if Customer Has Specified Any Configuration for the Private Network 
-	// If so, instead of picking up existing one from the Public List, we are going to craete 
+	// Checking if Customer Has Specified Any Configuration for the Private Network
+	// If so, instead of picking up existing one from the Public List, we are going to craete
 	// a new one, and make it Isolated from others
 
 	if !reflect.ValueOf(Requirements.Private).IsNil() {
 		// Creating New Private Network if Customer Decided to Create One
 		Manager := view.NewManager(&this.Client)
 		Network, NetworkError := Manager.CreateContainerView(TimeoutContext,
-		this.Client.ServiceContent.RootFolder, []string{"Network"}, false) 
+			this.Client.ServiceContent.RootFolder, []string{"Network"}, false)
 
-		if NetworkError != nil {ErrorLogger.Printf(
-		"Failed to Initialize New Network, Error: %s", NetworkError); return Networks}
+		if NetworkError != nil {
+			Logger.Error(
+				"Failed to Initialize New Network", zap.Error(NetworkError))
+			return Networks
+		}
 
 		Networks = append(Networks, object.NewReference(
-		&this.Client, Network.Reference()).(*object.Network))
+			&this.Client, Network.Reference()).(*object.Network))
 	}
 
-	// if the Customer has chosen the Public Network, looking for the Public One 
-	// that matches specified Requirements 
+	// if the Customer has chosen the Public Network, looking for the Public One
+	// that matches specified Requirements
 
 	for _, Network := range Datacenter.Network {
 		var MoNetwork mo.Network
@@ -288,7 +299,7 @@ func (this *NetworkResourceManager) GetAvailableResources(Datacenter *mo.Datacen
 		CollectError := Collector.RetrieveOne(TimeoutContext, Network.Reference(), []string{"*"}, &MoNetwork)
 
 		if CollectError != nil {
-			ErrorLogger.Printf("Failed to Collect Network Resource, Error: %s", CollectError)
+			Logger.Error("Failed to Collect Network Resource", zap.Error(CollectError))
 			continue
 		}
 		if HasEnough := this.HasEnoughResources(&MoNetwork, Requirements); HasEnough != false {
@@ -314,17 +325,17 @@ func (this *DatastoreResourceManager) HasEnoughResources(Datastore *mo.Datastore
 
 	// Checking If Datastore Has Enough Capacity
 	if !(Datastore.Summary.Capacity >= Requirements.Capacity) {
-		DebugLogger.Printf("Datastore with Name: `%s` Does not Have Enough Capacity, according to the Resource Requirements", Datastore.Name)
+		Logger.Debug("Datastore Does not Have Enough Capacity, according to the Resource Requirements", zap.String("Name", Datastore.Name))
 		return false
 	}
 	// Checking if Datastore Is Accessible
 	if !(Datastore.Summary.Accessible) {
-		DebugLogger.Printf("Datastore with Name: `%s` is not accessible", Datastore.Name)
+		Logger.Debug("Datastore is not accessible", zap.String("Name", Datastore.Name))
 		return false
 	}
 	// Checking if Datastore has enough Free Space, to Run the Customer Application
 	if !(Datastore.Summary.FreeSpace >= int64(Requirements.FreeSpace)) {
-		DebugLogger.Printf("Datastore with Name: `%s` does not Have Enough Free space, according to Resource Requirements", Datastore.Name)
+		Logger.Debug("Datastore does not Have Enough Free space, according to Resource Requirements", zap.String("Name", Datastore.Name))
 		return false
 	}
 	return true
@@ -348,8 +359,8 @@ func (this *DatastoreResourceManager) GetAvailableResources(Cluster *mo.Datacent
 		}
 
 		if RetrieveError != nil {
-			DebugLogger.Printf(
-				"Failed to Retrieve Datastore, Error: %s", RetrieveError)
+			Logger.Error(
+				"Failed to Retrieve Datastore, Error: %s", zap.Error(RetrieveError))
 		}
 	}
 	return Resources
@@ -371,12 +382,12 @@ func (this *StorageResourceManager) HasEnoughResources(StoragePod *mo.StoragePod
 
 	// Checking if Storage Has Enough Capacity
 	if !(StoragePod.Summary.Capacity >= Requirements.Capacity) {
-		DebugLogger.Printf("Storage Pod with Name `%s` Does not Have Enough Capacity", StoragePod.Name)
+		Logger.Debug("Storage Pod Does not Have Enough Capacity", zap.String("StorageName", StoragePod.Name))
 		return false
 	}
 	// Checking if Storage has enough Free Space
 	if !(StoragePod.Summary.FreeSpace >= int64(Requirements.FreeSpace)) {
-		DebugLogger.Printf("Storage Pod with Name: `%s` does not Have Enough FreeSpace to Perform an Action", StoragePod.Name)
+		Logger.Debug("Storage Pod does not Have Enough FreeSpace to Perform an Action", zap.String("StorageName", StoragePod.Name))
 		return false
 	}
 	return true
@@ -406,8 +417,8 @@ func (this *StorageResourceManager) GetAvailableResources(Datacenter *mo.Datacen
 		}
 
 		if RetrieveError != nil {
-			DebugLogger.Printf(
-				"Failed to Retrieve Datastore, Error: %s", RetrieveError)
+			Logger.Error(
+				"Failed to Retrieve Datastore, Error: %s", zap.Error(RetrieveError))
 		}
 	}
 	return StorageResources
@@ -452,8 +463,8 @@ func (this *ClusterComputeResourceManager) GetAvailableResources(Datacenter *mo.
 		TimeoutContext, fmt.Sprintf("%s", Datacenter.Name))
 
 	if FindError != nil {
-		ErrorLogger.Printf(
-			"Failed to Retrieve Cluster Compute Resources, Error : %s", FindError)
+		Logger.Error(
+			"Failed to Retrieve Cluster Compute Resources, Error : %s", zap.Error(FindError))
 		return ClusterComputeResources
 	}
 
@@ -468,8 +479,8 @@ func (this *ClusterComputeResourceManager) GetAvailableResources(Datacenter *mo.
 		}
 
 		if RetrieveError != nil {
-			DebugLogger.Printf(
-				"Failed to Retrieve Datastore, Error: %s", RetrieveError)
+			Logger.Debug(
+				"Failed to Retrieve Datastore, Error: %s", zap.Error(RetrieveError))
 		}
 	}
 	return ClusterComputeResources
@@ -515,8 +526,8 @@ func (this *HostSystemResourceManager) GetAvailableResources(Datacenter *mo.Data
 		}
 
 		if RetrieveError != nil {
-			DebugLogger.Printf(
-				"Failed to Retrieve Datastore, Error: %s", RetrieveError)
+			Logger.Debug(
+				"Failed to Retrieve Datastore, Error: %s", zap.Error(RetrieveError))
 		}
 	}
 	return HostSystemResources

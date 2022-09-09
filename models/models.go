@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"log"
 	"os"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
@@ -16,9 +18,7 @@ import (
 )
 
 var (
-	DebugLogger *log.Logger
-	InfoLogger  *log.Logger
-	ErrorLogger *log.Logger
+	Logger *zap.Logger
 )
 
 var (
@@ -35,6 +35,18 @@ var (
 	DATABASE_USER     = os.Getenv("DATABASE_USER")
 	DATABASE_PASSWORD = os.Getenv("DATABASE_PASSWORD")
 )
+
+func InitializeProductionLogger() {
+
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(config)
+	file, _ := os.OpenFile("Main.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logWriter := zapcore.AddSync(file)
+
+	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	Logger = zap.New(Core)
+}
 
 func init() {
 	DatabaseInstance, ConnectionError := gorm.Open(postgres.New(postgres.Config{
@@ -56,25 +68,19 @@ func init() {
 
 	Database = DatabaseInstance
 	Database.AutoMigrate(&Customer{}, &VirtualMachine{})
-	LogFile, Error := os.OpenFile("Models.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
-	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
-	if Error != nil {
-		panic(Error)
-	}
+	InitializeProductionLogger()
 }
 
 type Customer struct {
-	// Customer Database ORM Model 
+	// Customer Database ORM Model
 	ID       int
 	Username string `json:"Username" gorm:"<-:create;type:varchar(100); not null; unique;"`
 	Email    string `json:"Email" gorm:"<-:create;type:varchar(100); not null; unique;"`
 	Password string `json:"Password" gorm:"type:varchar(100); not null;"`
 
 	BillAddress string `json:"BillAddress" xml:"BillAddress" gorm:"type:varchar(100); not null;"`
-	Country string `json:"Country" xml:"Country" gorm:"type:varchar(100); not null;"`
-	ZipCode string `json:"ZipCode" xml:"ZipCode" gorm:"type:varchar(100); not null;"`
+	Country     string `json:"Country" xml:"Country" gorm:"type:varchar(100); not null;"`
+	ZipCode     string `json:"ZipCode" xml:"ZipCode" gorm:"type:varchar(100); not null;"`
 }
 
 func NewCustomer(Username string, Password string, Email string) *Customer {
@@ -193,67 +199,66 @@ type VirtualMachineConfiguration struct {
 	// Metadata about the Virtual Machine
 
 	Metadata struct {
-		VirtualMachineId 			string `json:"VirtualMachineId" xml:"VirtualMachineId"`
-		VmOwnerId        			string `json:"VmOwnerId" xml:"VmOwnerId"`
+		VirtualMachineId string `json:"VirtualMachineId" xml:"VirtualMachineId"`
+		VmOwnerId        string `json:"VmOwnerId" xml:"VmOwnerId"`
 	} `json:"Metadata" xml:"Metadata"`
 
 	// Load Balancer Configuration
 
 	LoadBalancer struct {
 
-		// Proxies Traffic From... 
-		
-		LoadBalancerServiceName     string `json:"LoadBalancerName" xml:"LoadBalancerName"`
-		LoadBalancerHost 			string `json:"LoadBalancerHost,omitempty;" xml:"LoadBalancerHost"`
-		LoadBalancerPort 			string `json:"LoadBalancerPort" xml:"LoadBalancerPort"`
+		// Proxies Traffic From...
 
-		// Proxies Traffic to... 
-		VirtualMachineHost 			string `json:"ProxyHost" xml:"ProxyHost"`
-		VirtualMachinePort 			string `json:"ProxyPort" xml:"ProxyPort"`
+		LoadBalancerServiceName string `json:"LoadBalancerName" xml:"LoadBalancerName"`
+		LoadBalancerHost        string `json:"LoadBalancerHost,omitempty;" xml:"LoadBalancerHost"`
+		LoadBalancerPort        string `json:"LoadBalancerPort" xml:"LoadBalancerPort"`
 
+		// Proxies Traffic to...
+		VirtualMachineHost string `json:"ProxyHost" xml:"ProxyHost"`
+		VirtualMachinePort string `json:"ProxyPort" xml:"ProxyPort"`
 	} `json:"LoadBalancer" xml:"LoadBalancer"`
 
 	// Host System Configuration
 
 	HostSystem struct {
-		Type             			string `json:"Type"` // OS Distribution Type Like: Linux, Windows etc....
-		DistributionName 			string `json:"DistributionName"`
-		Bit              			int64  `json:"Bit;omitempty"`
+		Type             string `json:"Type"` // OS Distribution Type Like: Linux, Windows etc....
+		DistributionName string `json:"DistributionName"`
+		Bit              int64  `json:"Bit;omitempty"`
 	} `json:"HostSystem" xml:"HostSystem"`
 
 	// Internal Network Configuration
 
 	Network struct {
-		IP       					string `json:"IP,omitempty"`
-		Netmask  					string `json:"Netmask,omitempty"`
-		Hostname 					string `json:"Hostname,omitempty"`
-		Gateway  					string `json:"Gateway,omitempty"`
-		Enablev6 					bool   `json:"Enablev6,omitempty"`
-		Enablev4 					bool   `json:"Enablev4,omitempty"`
+		IP       string `json:"IP,omitempty"`
+		Netmask  string `json:"Netmask,omitempty"`
+		Hostname string `json:"Hostname,omitempty"`
+		Gateway  string `json:"Gateway,omitempty"`
+		Enablev6 bool   `json:"Enablev6,omitempty"`
+		Enablev4 bool   `json:"Enablev4,omitempty"`
 	} `json:"Network" xml:"Network"`
 
 	// Extra Tools, that is going to be Installed on the VM automatically
 	// Things Like Docker, Docker-Compose, VirtualBox or Podman etc....
 
 	ExtraTools struct {
-		Tools 						[]string `json:"Tools" xml:"Tools"` // Names of the Tools
+		Tools []string `json:"Tools" xml:"Tools"` // Names of the Tools
 	} `json:"ExtraTools;omitempty" xml:"ExtraTools"`
 
 	// Hardware Resourcs for the VM Configuration
 
 	Resources struct {
-		CpuNum            			int32 `json:"CpuNum" xml:"CpuNum"`
-		MemoryInMegabytes 			int64 `json:"MemoryInMegabytes" xml:"MemoryInMegabytes"`
-		MaxMemoryUsage    			int64 `json:"MaxMemoryUsage,omitempty;" xml:"MaxMemoryUsage"`
-		MaxCpuUsage       			int64 `json:"MaxCpuUsage,omitempty;" xml:"MaxCpuUsage"`
+		CpuNum            int32 `json:"CpuNum" xml:"CpuNum"`
+		MemoryInMegabytes int64 `json:"MemoryInMegabytes" xml:"MemoryInMegabytes"`
+		MaxMemoryUsage    int64 `json:"MaxMemoryUsage,omitempty;" xml:"MaxMemoryUsage"`
+		MaxCpuUsage       int64 `json:"MaxCpuUsage,omitempty;" xml:"MaxCpuUsage"`
 	} `json:"Resources" xml:"Resources"`
 
 	Ssh struct {
-		Type 						string `json:"Type" xml:"Type"`
+		Type string `json:"Type" xml:"Type"`
 	} `json:"Ssh" xml:"Ssh"`
 
 	Disk struct {
-		CapacityInKB 				int `json:"CapacityInKB" xml:"CapacityInKB"`
+		CapacityInKB int `json:"CapacityInKB" xml:"CapacityInKB"`
 	} `json:"Disk"`
 }
 

@@ -2,29 +2,34 @@ package authentication
 
 import (
 	"errors"
-	"log"
 	"os"
 	"time"
 
-	"github.com/LovePelmeni/Infrastructure/models"
 	"github.com/dgrijalva/jwt-go"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var (
-	DebugLogger *log.Logger
-	InfoLogger  *log.Logger
-	ErrorLogger *log.Logger
+	Logger *zap.Logger
 )
 var secretKey = []byte(os.Getenv("JWT_SECRET_KEY"))
 
+func InitializeProductionLogger() {
+
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(config)
+	file, _ := os.OpenFile("AuthenticationLog.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logWriter := zapcore.AddSync(file)
+
+	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	Logger = zap.New(Core)
+}
+
 func init() {
-	LogFile, LogError := os.OpenFile("Authentication.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if LogError != nil {
-		panic(LogError)
-	}
-	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
-	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+	InitializeProductionLogger()
 }
 
 // Packege, that Is Responsible for handling Customer Authentication Policy
@@ -52,7 +57,7 @@ func CreateJwtToken(UserId int, Username string, Email string) (string, error) {
 	newTokenClaims["exp"] = time.Now().Add(10000 * time.Minute).Unix()
 	stringToken, Error := newToken.SignedString(secretKey)
 	if Error != nil {
-		ErrorLogger.Printf("Failed to Stringify JWT Token. Error: %s", Error)
+		Logger.Error("Failed to Stringify JWT Token. Error: %s", zap.Error(Error))
 		return "", Error
 	}
 	return stringToken, nil
@@ -77,12 +82,6 @@ func CheckValidJwtToken(token string) error {
 		func(token *jwt.Token) (interface{}, error) { return secretKey, nil })
 
 	if Error != nil {
-		InfoLogger.Printf("Jwt Error: %s", Error.Error())
-		return InvalidJwt()
-	}
-
-	if customer := models.Database.Table("customers").Where("username = ? AND email = ?",
-		DecodedData.Username, DecodedData.Email); customer.Error != nil {
 		return InvalidJwt()
 	}
 	return nil

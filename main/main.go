@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
 
 	"fmt"
 	"net/http"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"os"
 	"os/signal"
@@ -19,6 +21,7 @@ import (
 	customer_rest "github.com/LovePelmeni/Infrastructure/customer_rest"
 	load_balancer_rest "github.com/LovePelmeni/Infrastructure/load_balancer_rest"
 	suggestion_rest "github.com/LovePelmeni/Infrastructure/suggestion_rest"
+
 	vm_rest "github.com/LovePelmeni/Infrastructure/vm_rest"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -33,19 +36,24 @@ var (
 )
 
 var (
-	DebugLogger *log.Logger
-	InfoLogger  *log.Logger
-	ErrorLogger *log.Logger
+	Logger *zap.Logger
 )
 
+func InitializeProductionLogger() {
+
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(config)
+	file, _ := os.OpenFile("Main.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logWriter := zapcore.AddSync(file)
+
+	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	Logger = zap.New(Core)
+}
+
 func init() {
-	LogFile, Error := os.OpenFile("Main.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
-	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
-	if Error != nil {
-		panic(Error)
-	}
+	// Initializing Production Logger using Uber SDK
+	InitializeProductionLogger()
 }
 
 type Server struct {
@@ -188,9 +196,9 @@ func (this *Server) Run() {
 	if errors.Is(Exception, http.ErrServerClosed) {
 		ServerShutDownContext.Done()
 	} else {
-		fmt.Print("Server has been Shutdown For Some Reason, Check `Main.log` for more info")
-		ErrorLogger.Printf(
-			"Error while Running the Server: %s", Exception.Error())
+		fmt.Print("Server has been Shutdown For Some Reason, Check `MainLog.json` for more info")
+		Logger.Error(
+			"Error while Running the Server", zap.NamedError("RuntimeError", Exception))
 		ServerShutDownContext.Done()
 	}
 }
@@ -200,12 +208,12 @@ func (this *Server) Shutdown(Context context.Context, CancelFunc context.CancelF
 	case <-Context.Done():
 		defer CancelFunc()
 		ShutdownError := ServerInstance.Shutdown(context.Background())
-		DebugLogger.Printf("Server has been Shutdown, Errors: %s", ShutdownError)
+		Logger.Info("Server has been Shutdown", zap.NamedError("ShutdownError", ShutdownError))
 	}
 }
 
 func main() {
-	DebugLogger.Printf("Running Http Application Server...")
+	Logger.Debug("Running Http Application Server...")
 	httpServer := NewServer(APPLICATION_HOST, APPLICATION_PORT)
 	httpServer.Run()
 }
