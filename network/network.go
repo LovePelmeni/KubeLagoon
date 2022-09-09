@@ -174,6 +174,12 @@ func (this *VirtualMachinePrivateNetworkManager) ConnectVirtualMachineToNetwork(
 	// Obtaining Network Resource Key
 
 	PrivateNetworkDeviceConfig := types.VirtualDevice{
+		Backing: &types.VirtualDeviceBackingInfo{}, 
+		Connectable: &types.VirtualDeviceConnectInfo{
+			Connected: *types.NewBool(true), 
+			StartConnected: *types.NewBool(true),
+			AllowGuestControl: *types.NewBool(true),
+		},
 	}
 
 	// Applying New Network Device, so Application can access Private Network 

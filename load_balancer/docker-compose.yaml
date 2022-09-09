@@ -1,0 +1,7 @@
+version: 3.8 
+
+# Configuration of the Load Balancer which is used on Every Host Machine 
+# And Is Used to Proxy Traffic to all of the Virtual Machines within this Host Machine 
+
+services:
+  traefik:

@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/LovePelmeni/Infrastructure.git"><img src="./logo/logos.png" alt="Infrastructure"></a>
+  <a href="https://github.com/LovePelmeni/Infrastructure.git"><img src="./logos/crown_logo.svg" alt="Infrastructure"></a>
 </p>
 
 <p align="center">

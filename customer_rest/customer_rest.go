@@ -13,7 +13,7 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/models"
-	
+
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
@@ -97,6 +97,9 @@ func CreateCustomerRestController(RequestContext *gin.Context) {
 	Username := RequestContext.PostForm("Username")
 	Email := RequestContext.PostForm("Email")
 	Password := RequestContext.PostForm("Password")
+	BillingAddress := RequestContext.PostForm("BillingAddress")
+	Country := RequestContext.PostForm("Country")
+	ZipCode := RequestContext.PostForm("ZipCode")
 
 	// Checking If Customer is Already Exists...
 	var Customer models.Customer
@@ -109,6 +112,10 @@ func CreateCustomerRestController(RequestContext *gin.Context) {
 	}
 
 	NewCustomer := models.NewCustomer(Username, Password, Email)
+	NewCustomer.BillAddress = BillingAddress
+	NewCustomer.Country = Country
+	NewCustomer.ZipCode = ZipCode
+
 	Created, Error := NewCustomer.Create()
 
 	if reflect.ValueOf(Created).IsNil() || Error != nil {

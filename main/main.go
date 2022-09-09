@@ -102,8 +102,8 @@ func (this *Server) Run() {
 		middlewares.InfrastructureHealthCircuitBreakerMiddleware(),
 	)
 	{
-		LoadBalancerGroup.POST("/create/", load_balancer_rest.AddWebserverVirtualMachineRouteRestController)
-		LoadBalancerGroup.DELETE("/delete/", load_balancer_rest.RemoveWebServerVirtualMachineRouteRestController)
+		LoadBalancerGroup.POST("/create/", load_balancer_rest.AddProxyRouteRestController)
+		LoadBalancerGroup.DELETE("/delete/", load_balancer_rest.RemoveProxyRouteRestController)
 	}
 
 	// Virtual Machines Rest API Endpoints

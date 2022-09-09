@@ -1,10 +1,12 @@
 package loadbalancer
 
 import (
-	"errors"
 	"fmt"
+
 	"log"
+
 	"net/http"
+
 	"os"
 
 	"github.com/docker/docker/client"
@@ -71,16 +73,19 @@ func NewRouteParams(Headers map[string]string, UpstreamConfig struct {
 
 type LoadBalancerInfoServiceManager struct {
 	// Service, that provides info about the given load balancer service
+	LoadBalancerHost string `json:"LoadBalancerHost"`
+	LoadBalancerPort string `json:"LoadBalancerPort"`
 }
 
 func NewLoadBalancerInfoServiceManager() *LoadBalancerInfoServiceManager {
 	return &LoadBalancerInfoServiceManager{}
 }
 
-func (this *LoadBalancerInfoServiceManager) GetServices() {
-
+func (this *LoadBalancerInfoServiceManager) GetService(ServiceName string) (*LoadBalancerService, error) {
+	// Returns the Array of the Avaiablle Services for the Load Balancer
 }
-func (this *LoadBalancerInfoServiceManager) GetRoutes() {
+
+func (this *LoadBalancerInfoServiceManager) GetRoutes(ServiceName string) ([]LoadBalancerRoute, error) {
 	// Returns List of the Routes
 }
 
@@ -109,7 +114,7 @@ func NewLoadBalancerRouteManager() *LoadBalancerRouteManager {
 	return &LoadBalancerRouteManager{}
 }
 
-func (this *LoadBalancerRouteManager) AddNewRoute(RouteParams RouteParams) {
+func (this *LoadBalancerRouteManager) AddNewRoute(RouteParams RouteParams) (LoadBalancerRoute, error) {
 	// Adds new Route to the Traefik Load Balancer Service
 }
 func (this *LoadBalancerRouteManager) RemoveRoute(ServiceName string, RouteName string) (bool, error) {
@@ -146,12 +151,6 @@ func (this *InternalLoadBalancerManager) AddNewDomainRoute(HostMachineIP string,
 	// and Simply Adds New Route
 
 	// Receiving Traefik Connection
-	TraefikLoadBalancerServer, ConnectionError := this.GetHostConnection(HostMachineIP)
-	if ConnectionError != nil {
-		return false, errors.New(
-			"Failed to Connect to the Load Balancer Instance within the Host Machine, is it available")
-	}
-
 }
 func (this *InternalLoadBalancerManager) RemoveDomainRoute(RouteParams RouteParams) {
 	// Parsing Configuration of the Existing Load Balancer
