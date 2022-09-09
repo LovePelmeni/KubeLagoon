@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/LovePelmeni/Infrastructure.git"><img src="./logos/crown_logo.svg" alt="Infrastructure"></a>
+  <a href="https://github.com/LovePelmeni/Infrastructure.git"><img src="./logo/crown_logo.svg" alt="Infrastructure"></a>
 </p>
 
 <p align="center">
@@ -9,9 +9,9 @@
 
 ---
 
-**Documentation**: [https://github.com/LovePelmeni/Web-CloudInfrastructure/README.md]("https://github.com/LovePelmeni/Web-Cloud-Infrastructure/README.md")
+**Documentation**: [https://github.com/LovePelmeni/Web-CloudInfrastructure/README.md]("https://github.com/LovePelmeni/KubeLagoon/README.md")
 
-**Source Code**: ["https://github.com/LovePelmeni/Web-Cloud-Infrastructure.git]("http://github.com/LovePelmeni/Web-Cloud-Infrastructure.git")
+**Source Code**: ["https://github.com/LovePelmeni/Web-Cloud-Infrastructure.git]("http://github.com/LovePelmeni/KubeLagoon.git")
 
 
 --- 
