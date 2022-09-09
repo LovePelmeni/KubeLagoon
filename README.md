@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/LovePelmeni/Infrastructure.git"><img src="./logo/crown_logo.svg" style="width: 50%; height: 50%" alt="Infrastructure"></a>
+  <a href="https://github.com/LovePelmeni/KubeLagoon.git"><img src="./logo/crown_logo.svg" style="width: 50%; height: 50%" alt="Infrastructure"></a>
 </p>
 
 <p align="center">
