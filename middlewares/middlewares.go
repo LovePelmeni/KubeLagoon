@@ -3,6 +3,7 @@ package middlewares
 import (
 	"context"
 	"fmt"
+
 	"net/http"
 	"net/url"
 
@@ -14,15 +15,37 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/models"
+
 	"github.com/vmware/govmomi"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
 )
 
-var RedisClient *redis.Client
+var (
+	Logger *zap.Logger
+)
+
+var (
+	RedisClient *redis.Client
+)
+
+func InitializeProductionLogger() {
+	// Initializing Zap Logger
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(config)
+	file, _ := os.OpenFile("Main.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logWriter := zapcore.AddSync(file)
+
+	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	Logger = zap.New(Core)
+}
 
 func init() {
+	InitializeProductionLogger()
 	DatabaseNumber, _ := strconv.Atoi(os.Getenv("CACHE_STORAGE_DATABASE_NUMBER"))
 	Client := redis.NewClient(&redis.Options{
 		Password: os.Getenv("CACHE_STORAGE_DATABASE_PASSWORD"),
@@ -114,7 +137,6 @@ func IsReadyToPerformOperationMiddleware() gin.HandlerFunc {
 
 		default:
 			Context.Next()
-
 		}
 	}
 }

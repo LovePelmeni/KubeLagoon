@@ -86,4 +86,3 @@ spec:
   hostPath: /mnt/jenkins 
   capacity: 
     - storage: 5Gi 
-
