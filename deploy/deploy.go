@@ -297,6 +297,7 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 		VirtualMachineInstanceReference, DeployError := vcenter.NewManager(rest.NewClient(&VimClient)).DeployLibraryItem(DeployTimeoutContext, Item.ID, Deployment)
 
 		switch {
+
 		case DeployError != nil:
 			Logger.Error("Failed to Deploy Virtual Machine From Library",
 				zap.NamedError("DeployError", DeployError))
@@ -557,15 +558,7 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 	// Installed, InstallError := DepInstaller.InstallDependencies(VirtualMachine)
 	// if InstallError != nil {return nil, InstallError}
 
-	return &struct {
-		SshType   string `json:"SshType"`
-		IPAddress string `json:"IPAddress"`
-		SshInfo   string `json:"SshInfo"`
-	}{
-		SshType:   SshType,
-		IPAddress: VmIPAddress,
-		SshInfo:   string(SshInfo),
-	}, nil
+	return
 }
 
 func (this *VirtualMachineManager) StartVirtualMachine(VirtualMachine *object.VirtualMachine) error {

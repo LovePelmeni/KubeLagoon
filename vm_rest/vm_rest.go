@@ -30,6 +30,7 @@ import (
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vapi/rest"
 	_ "github.com/vmware/govmomi/vapi/rest"
+	"github.com/vmware/govmomi/vim25/mo"
 )
 
 // Insfrastructure API Environment Variables
@@ -141,7 +142,7 @@ func GetCustomerVirtualMachines(RequestContext *gin.Context) {
 
 func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 
-	//Rest Controller, that Initializes New Empty Virtual Machine
+	//Rest Controller, that Initializes New Empty Virtual Machine + Load Balancer
 
 	// Receiving Extra Info, that is going to be Necessary to Initialize New VM Server
 
@@ -216,12 +217,55 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 			RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to Initialize Virtual Machine"})
 			return
 		}
+
+		// Getting Initial Configuration for the new Virtual Machine, (only adding with hardware Configuration)
+		// All Customer Customization will be added after all.
+
+		NewVirtualMachineConfiguration := models.VirtualMachineConfiguration{
+
+			Metadata: struct {
+				VirtualMachineName    string "json:\"VirtualMachineId\" xml:\"VirtualMachineId\""
+				VirtualMachineOwnerId string "json:\"VmOwnerId\" xml:\"VmOwnerId\""
+			}{
+				VirtualMachineName:    VirtualMachineName,
+				VirtualMachineOwnerId: strconv.Itoa(CustomerId),
+			},
+
+			Datacenter: struct {
+				DatacenterName     string `json:"DatacenterName" xml:"DatacenterName"`
+				DatacenterItemPath string `json:"DatacenterItemPath" xml:"DatacenterItemPath"`
+			}{
+				DatacenterName:     Datacenter.Name,
+				DatacenterItemPath: object.NewReference(Client.Client, Datacenter.Reference()).(*object.Datacenter).InventoryPath,
+			},
+
+			LoadBalancer: struct {
+				LoadBalancerPort string "json:\"LoadBalancerPort\" xml:\"LoadBalancerPort\""
+				HostMachineIP    string "json:\"HostMachineIP\" xml:\"HostMachineIP\""
+			}{
+				LoadBalancerPort: "",
+				HostMachineIP:    "",
+			},
+
+			Network: struct {
+				IP       string "json:\"IP,omitempty\" xml:\"IP\""
+				Netmask  string "json:\"Netmask,omitempty\" xml:\"Netmask\""
+				Hostname string "json:\"Hostname,omitempty\" xml:\"Hostname\""
+				Gateway  string "json:\"Gateway,omitempty\" xml:\"Gateway\""
+				Enablev6 bool   "json:\"Enablev6,omitempty\" xml:\"Enablev6\""
+			}{
+
+				IP:       ParsedResourceInstances["Network"].(*object.Network),
+				Hostname: ParsedResourceInstances["Network"].(*mo.Network),
+				Enablev6: ParsedResourceInstances["Network"].(*mo.Network),
+			},
+		}
 		// Define Initial ORM Model Object for the Virtual Machine
 		NewVirtualMachine := models.VirtualMachine{
-			SshInfo:            models.SSHInfo{},
+			SshInfo:            models.SSHConfiguration{},
 			IPAddress:          IPAddress,
 			ItemPath:           InitializedInstance.InventoryPath,
-			Configuration:      models.VirtualMachineConfiguration{},
+			Configuration:      NewVirtualMachineConfiguration,
 			OwnerId:            CustomerId,
 			VirtualMachineName: VirtualMachineName,
 		}

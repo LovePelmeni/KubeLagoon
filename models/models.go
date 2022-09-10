@@ -64,8 +64,8 @@ func init() {
 
 	case gorm.ErrNotImplemented:
 		panic("Please Setup Credentials for the Database, " +
-		"so it knows where to connect, go to `env` " +
-		"directory and fill up `project.env` file with new Database Credentials")
+			"so it knows where to connect, go to `env` " +
+			"directory and fill up `project.env` file with new Database Credentials")
 	}
 
 	Database = DatabaseInstance
@@ -112,36 +112,10 @@ func (this *Customer) Delete(UserId int) (*gorm.DB, error) {
 
 // NOTE: Going to support SSL soon
 
-type LoadBalancerService struct {
-	// Traefik Service, that is used to proxy requests to the Virtual Machine
-	ID               int
-	IPAddress        string `json:"IPAddress" gorm:"type:varchar(100); not null; unique;"`
-	VirtualMachineId int    `json:"VirtualMachineId" gorm:"type:integer"`
-}
-
-func NewLoadBalancer(IPAddress string, VirtualMachineId int) *LoadBalancerService {
-	// Returns New Database instance of the Load Balancer
-	return &LoadBalancerService{
-		IPAddress:        IPAddress,
-		VirtualMachineId: VirtualMachineId,
-	}
-}
-
-func (this *LoadBalancerService) Create() (*gorm.DB, error) {
-	// Creates new Instance of the Load Balancers
-	Created := Database.Create(&this)
-	return Created, Created.Error
-}
-
-func (this *LoadBalancerService) Delete() (*gorm.DB, error) {
-	Deleted := Database.Delete(&this)
-	return Deleted, Deleted.Error
-}
-
 type VirtualMachine struct {
 	ID                 int
 	State              string                      `json:"State" xml:"State" gorm:"type:varchar(10); not null;"`
-	SshInfo            SSHInfo                     `json:"sshKey" xml:"sshKey" gorm:"column:ssh_key;type:text;default:null;"`
+	SshInfo            SSHConfiguration            `json:"sshKey" xml:"sshKey" gorm:"column:ssh_key;type:text;default:null;"`
 	Configuration      VirtualMachineConfiguration `json:"Configuration" xml:"Configuration" gorm:"column:configuration;type:text;default:null;"`
 	OwnerId            int                         `json:"OwnerId" xml:"OwnerId" gorm:"<-:create;type:varchar(100);not null;unique;"`
 	VirtualMachineName string                      `json:"VirtualMachineName" xml:"VirtualMachineName" gorm:"type:varchar(100);not null;"`
@@ -153,7 +127,7 @@ func NewVirtualMachine(
 
 	OwnerId int, // ID Of the Customer, who Owns this Virtual Machine
 	VirtualMachineName string, // Virtual Machine UniqueName
-	SshInfo *SSHInfo, // SSH Info, defines what method and credentials to use, In Order to Connect to the VM Server
+	SshInfo *SSHConfiguration, // SSH Info, defines what method and credentials to use, In Order to Connect to the VM Server
 	ItemPath string,
 	IPAddress string,
 	Configuration ...*VirtualMachineConfiguration,
@@ -201,50 +175,50 @@ type VirtualMachineConfiguration struct {
 	// Metadata about the Virtual Machine
 
 	Metadata struct {
-		VirtualMachineId string `json:"VirtualMachineId" xml:"VirtualMachineId"`
-		VmOwnerId        string `json:"VmOwnerId" xml:"VmOwnerId"`
+		VirtualMachineName    string `json:"VirtualMachineId" xml:"VirtualMachineId"`
+		VirtualMachineOwnerId string `json:"VmOwnerId" xml:"VmOwnerId"`
 	} `json:"Metadata" xml:"Metadata"`
+
+	// Datacenter Info
+	Datacenter struct {
+		DatacenterName     string `json:"DatacenterName" xml:"DatacenterName"`
+		DatacenterItemPath string `json:"DatacenterItemPath" xml:"DatacenterItemPath"`
+	} `json:"Datacenter" xml:"Datacenter"`
 
 	// Load Balancer Configuration
 
 	LoadBalancer struct {
 
-		// Proxies Traffic From...
-
-		LoadBalancerServiceName string `json:"LoadBalancerName" xml:"LoadBalancerName"`
-		LoadBalancerHost        string `json:"LoadBalancerHost,omitempty;" xml:"LoadBalancerHost"`
-		LoadBalancerPort        string `json:"LoadBalancerPort" xml:"LoadBalancerPort"`
-
-		// Proxies Traffic to...
-		VirtualMachineHost string `json:"ProxyHost" xml:"ProxyHost"`
-		VirtualMachinePort string `json:"ProxyPort" xml:"ProxyPort"`
+		// Load Balancer Port and the Host
+		LoadBalancerPort string `json:"LoadBalancerPort" xml:"LoadBalancerPort"`
+		HostMachineIP    string `json:"HostMachineIP" xml:"HostMachineIP"`
 	} `json:"LoadBalancer" xml:"LoadBalancer"`
 
 	// Host System Configuration
 
 	HostSystem struct {
-		Type             string `json:"Type"` // OS Distribution Type Like: Linux, Windows etc....
-		DistributionName string `json:"DistributionName"`
-		Bit              int64  `json:"Bit;omitempty"`
-	} `json:"HostSystem" xml:"HostSystem"`
+		Type             string `json:"Type" xml:"Type"` // OS Distribution Type Like: Linux, Windows etc....
+		DistributionName string `json:"DistributionName" xml:"DistributionName"`
+		Version          string `json:"Version" xml:"Version"`
+		Bit              int64  `json:"Bit;omitempty" xml:"Bit"`
+	} `json:"HostSystem" xml:"HostSystem"` // Operational System Name
 
 	// Internal Network Configuration
 
 	Network struct {
-		IP       string `json:"IP,omitempty"`
-		Netmask  string `json:"Netmask,omitempty"`
-		Hostname string `json:"Hostname,omitempty"`
-		Gateway  string `json:"Gateway,omitempty"`
-		Enablev6 bool   `json:"Enablev6,omitempty"`
-		Enablev4 bool   `json:"Enablev4,omitempty"`
-	} `json:"Network" xml:"Network"`
+		IP       string `json:"IP,omitempty" xml:"IP"`             // IP of the Network
+		Netmask  string `json:"Netmask,omitempty" xml:"Netmask"`   // Netmask of the Network
+		Hostname string `json:"Hostname,omitempty" xml:"Hostname"` // Hostname of the Network
+		Gateway  string `json:"Gateway,omitempty" xml:"Gateway"`   // Gateway IP of the Network
+		Enablev6 bool   `json:"Enablev6,omitempty" xml:"Enablev6"` // Enable v6 IP's for the Network or not
+	} `json:"Network" xml:"Network"` // Network Info
 
 	// Extra Tools, that is going to be Installed on the VM automatically
 	// Things Like Docker, Docker-Compose, VirtualBox or Podman etc....
 
 	ExtraTools struct {
 		Tools []string `json:"Tools" xml:"Tools"` // Names of the Tools
-	} `json:"ExtraTools;omitempty" xml:"ExtraTools"`
+	} `json:"ExtraTools;omitempty" xml:"ExtraTools"` // Extra Tools Info
 
 	// Hardware Resourcs for the VM Configuration
 
@@ -253,15 +227,16 @@ type VirtualMachineConfiguration struct {
 		MemoryInMegabytes int64 `json:"MemoryInMegabytes" xml:"MemoryInMegabytes"`
 		MaxMemoryUsage    int64 `json:"MaxMemoryUsage,omitempty;" xml:"MaxMemoryUsage"`
 		MaxCpuUsage       int64 `json:"MaxCpuUsage,omitempty;" xml:"MaxCpuUsage"`
-	} `json:"Resources" xml:"Resources"`
+	} `json:"Resources" xml:"Resources"` // Resources Info
 
 	Ssh struct {
-		Type string `json:"Type" xml:"Type"`
-	} `json:"Ssh" xml:"Ssh"`
+		Type           string `json:"Type" xml:"Type"`                     // type of the SSH  (By root Credentials or By Private / Public Key)
+		SshCredentials string `json:"SshCredentials" xml:"SshCredentials"` // Serialized Ssh Credentials
+	} `json:"Ssh" xml:"Ssh"` // Ssh Info
 
 	Disk struct {
 		CapacityInKB int `json:"CapacityInKB" xml:"CapacityInKB"`
-	} `json:"Disk"`
+	} `json:"Disk" xml:"Disk"` // Disk Info
 }
 
 func NewVirtualMachineConfiguration(SerializedConfiguration []byte) (*VirtualMachineConfiguration, error) {
@@ -282,11 +257,12 @@ func (this *VirtualMachineConfiguration) Value() (driver.Value, error) {
 	return string(EncodedData), Error
 }
 
-const TypeByRootCredentials = "ByRootCredentials"
+// SSH Configuration
 
+const TypeByRootCredentials = "ByRootCredentials"
 const TypeByRootCertificate = "ByRootCertificate"
 
-type SSHInfo struct {
+type SSHConfiguration struct {
 	// Depending on the Type of the SSH Info, it can be via SSL Certificate or via Root Credentials
 	// So the Info Going to be Serialzied into json and put inside the `SshCredentialsInfo` Field
 	Type               string `json:"Type" xml:"Type"`
@@ -294,18 +270,18 @@ type SSHInfo struct {
 	VirtualMachineId   int    `json:"VirtualMachineId" xml:"VirtualMachineId"`
 }
 
-func NewSshPublicKey(Type string, SshInfo []byte, VirtualMachineId int) *SSHInfo {
-	return &SSHInfo{
+func NewSshPublicKey(Type string, SshInfo []byte, VirtualMachineId int) *SSHConfiguration {
+	return &SSHConfiguration{
 		Type:               Type,
 		SshCredentialsInfo: string(SshInfo),
 		VirtualMachineId:   VirtualMachineId,
 	}
 }
-func (this *SSHInfo) Scan(inter interface{}) error {
+func (this *SSHConfiguration) Scan(inter interface{}) error {
 	return json.Unmarshal(inter.([]byte), this)
 }
 
-func (this *SSHInfo) Value() ([]byte, error) {
+func (this *SSHConfiguration) Value() ([]byte, error) {
 	Serialized, Error := json.Marshal(this)
 	return Serialized, Error
 }

@@ -28,12 +28,33 @@ spec:
       labels:
         app: application-service 
     spec:
+      volumes: 
+        - name: nginx-configuration-map 
+          configMap: 
+            - name: nginx-configuration-map 
+              items:
+                - key: nginx.conf 
+                  subPath: nginx.conf 
+
+      initContainers: 
+        - name: nginx-server 
+          image: nginx 
+          volumeMounts:
+            - name: nginx-configuration-map
+              subPath: nginx.conf 
+              path: /etc/nginx/nginx.conf
+              readOnly: true
+          ports:
+            - containerPort: 8000
+              protocol: TCP 
+          imagePullPolicy: IfNotPresent
+
       terminationGracePeriodSeconds: 60
       containers:
         - name: application-container 
           image: crazycoderrr/infrastracture 
           ports:
-            - containerPort: 8000 
+            - containerPort: 8001
               protocol: TCP 
           envFrom:
             - configMapRef:
@@ -98,4 +119,36 @@ stringData:
   CACHE_STORAGE_PASSWORD: redis-password 
 
 
-  
+--- 
+
+apiVersion: v1
+kind: ConfigMap 
+metadata:
+  name: nginx-configuration-map 
+  namespace: app-namespace 
+data:
+  nginx.conf: | 
+    events {
+      worker_connections 1024;
+    }
+    http {
+      upstream application_upstream {
+        server localhost:8001;
+      }
+      server {
+        listen 8000; 
+        location / {
+          proxy_pass http://application_upstream; 
+          proxy_set_header Host $http_host; 
+          proxy_set_header Upgrade $http_upgrade; 
+
+          if ($request_method = "OPTIONS") {
+            add_header Access-Control-Allow-Origin "*"; 
+            add_header Access-Control-Allow-Credentials "true"; 
+            return 200;
+          }
+          add_header Access-Control-Allow-Origin "*"; 
+          add_header Access-Control-Allow-Credentials "true"; 
+        }
+      }
+    }
