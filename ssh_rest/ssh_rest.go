@@ -1,7 +1,6 @@
 package ssh_rest
 
 import (
-	"log"
 	"net/http"
 
 	"os"
@@ -9,6 +8,8 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/deploy"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/LovePelmeni/Infrastructure/models"
 	"github.com/LovePelmeni/Infrastructure/ssh_config"
@@ -18,19 +19,22 @@ import (
 )
 
 var (
-	DebugLogger *log.Logger
-	InfoLogger  *log.Logger
-	ErrorLogger *log.Logger
+	Logger *zap.Logger
 )
 
+func InitializeProductionLogger() {
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(config)
+	file, _ := os.OpenFile("ResourcesLog.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logWriter := zapcore.AddSync(file)
+
+	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
+	Logger = zap.New(Core)
+}
+
 func init() {
-	LogFile, Error := os.OpenFile("SshRest.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	DebugLogger = log.New(LogFile, "DEBUG: ", log.Ldate|log.Ltime|log.Lshortfile)
-	InfoLogger = log.New(LogFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-	ErrorLogger = log.New(LogFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
-	if Error != nil {
-		panic(Error)
-	}
+	InitializeProductionLogger()
 }
 
 func UpdateVirtualMachineSshKeysRestController(RequestContext *gin.Context) {
@@ -71,7 +75,9 @@ func UpdateVirtualMachineSshKeysRestController(RequestContext *gin.Context) {
 
 		if Gorm.Error != nil {
 			Gorm.Rollback()
-			ErrorLogger.Printf("Failed to Update SSH keys for the VM wit ID: %s", VirtualMachineId)
+			Logger.Error("Failed to Update SSH keys for the VM wit ID: %s",
+				zap.String("Virtual Machine ID", VirtualMachineId),
+				zap.String("Virtual Machine Owner", jwtCredentials.Id))
 		}
 	default:
 		RequestContext.JSON(http.StatusBadGateway,

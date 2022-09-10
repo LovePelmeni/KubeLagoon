@@ -43,6 +43,7 @@ func InitializeProductionLogger() {
 	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
 	Logger = zap.New(Core)
 }
+
 func init() {
 	InitializeProductionLogger()
 }

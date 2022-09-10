@@ -328,9 +328,14 @@ func DeployVirtualMachineRestController(RequestContext *gin.Context) {
 
 		var VirtualMachine models.VirtualMachine
 		var VirtualMachineCustomConfiguration models.VirtualMachineConfiguration
-		var VirtualMachineSshConfiguration models.SSHInfo
+		var VirtualMachineSshConfiguration models.SSHConfiguration
 
-		VirtualMachineSshConfiguration = models.SSHInfo{Type: VmInfo.SshType, SshCredentialsInfo: VmInfo.SshInfo, VirtualMachineId: VirtualMachine.ID}
+		VirtualMachineSshConfiguration = models.SSHConfiguration{
+			Type:               VmInfo.SshType,
+			SshCredentialsInfo: VmInfo.SshInfo,
+			VirtualMachineId:   VirtualMachine.ID,
+		}
+
 		json.Unmarshal(VmCustomConfig.ToJson(), &VirtualMachineCustomConfiguration)
 
 		models.Database.Model(&models.VirtualMachine{}).Where("id = ?").Find(&VirtualMachine)

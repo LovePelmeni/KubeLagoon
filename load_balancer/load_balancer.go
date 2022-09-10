@@ -1,11 +1,18 @@
 package loadbalancer
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+
+	"io/ioutil"
 	"net/http"
+	"net/url"
+
 	"os"
 
 	"github.com/docker/docker/client"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -34,38 +41,32 @@ func init() {
 	InitializeProductionLogger()
 }
 
-type LoadBalancerService struct {
-	ServiceName       string
-	ServiceEndpointIP string
+type LoadBalancer struct {
+	LoadBalancerHost string `json:"LoadBalancerHost" xml:"LoadBalancerHost"` // Host of where the Load Balancer is Running (usually the host of the host machine)
+	LoadBalancerPort string `json:"LoadBalancerPort" xml:"LoadBalancerPort"` // Port of the Load Balancer
 }
 
-func NewLoadBalancerService() *LoadBalancerService {
-	return &LoadBalancerService{}
-}
-
-type LoadBalancerRoute struct {
-	RouteUrl    string
-	ServiceName string
-}
-
-func NewRoute() *LoadBalancerRoute {
-	return &LoadBalancerRoute{}
+func NewLoadBalancer(Host string, Port string) *LoadBalancer {
+	return &LoadBalancer{
+		LoadBalancerHost: Host,
+		LoadBalancerPort: Port,
+	}
 }
 
 type RouteParams struct {
 	// Class, that represents info about the proxy route to the Virtual Machine
 	// Server, allows to configure policies, to make a proxy server have a specific behaviour for that
-	LoadBalancerServiceId string            `json:"LoadBalancerServiceId"`
-	Headers               map[string]string `json:"Headers"`
-	UpstreamConfig        struct {
-		UpstreamName       string `json:"UpstreamName"`
-		VirtualMachineHost string `json:"VirtualMachineHost"` // Host of the Virtual Machine to Proxy Traffic to
-	} `json:"UpstreamConfig"`
+	Headers map[string]string `json:"Headers"`
+	// Configuration of where the Load Balancer going to proxy traffic to
+	UpstreamConfig struct {
+		VirtualMachinePort string `json:"VirtualMachinePort" xml:"VirtualMachinePort"`
+		VirtualMachineHost string `json:"VirtualMachineHost" xml:"VirtualMachineHost"` // Host of the Virtual Machine to Proxy Traffic to
+	} `json:"LoadBalancerConfiguration" xml:"LoadBalancerConfiguration"`
 }
 
 func NewRouteParams(Headers map[string]string, UpstreamConfig struct {
-	UpstreamName       string `json:"UpstreamName"`
-	VirtualMachineHost string `json:"VirtualMachineHost"`
+	VirtualMachinePort string `json:"VirtualMachinePort" xml:"VirtualMachinePort"`
+	VirtualMachineHost string `json:"VirtualMachineHost" xml:"VirtualMachineHost"`
 }) *RouteParams {
 	return &RouteParams{
 		Headers:        Headers,
@@ -73,65 +74,15 @@ func NewRouteParams(Headers map[string]string, UpstreamConfig struct {
 	}
 }
 
-type LoadBalancerInfoServiceManager struct {
-	// Service, that provides info about the given load balancer service
-	LoadBalancerHost string `json:"LoadBalancerHost"`
-	LoadBalancerPort string `json:"LoadBalancerPort"`
-}
-
-func NewLoadBalancerInfoServiceManager() *LoadBalancerInfoServiceManager {
-	return &LoadBalancerInfoServiceManager{}
-}
-
-func (this *LoadBalancerInfoServiceManager) GetService(ServiceName string) (*LoadBalancerService, error) {
-	// Returns the Array of the Avaiablle Services for the Load Balancer
-}
-
-func (this *LoadBalancerInfoServiceManager) GetRoutes(ServiceName string) ([]LoadBalancerRoute, error) {
-	// Returns List of the Routes
-}
-
-type LoadBalancerServiceManager struct {
-	// Manages the Services of the Specific Load Balancer
-	HostMachineIPAddress string
-}
-
-func NewLoadBalancerServiceManager() *LoadBalancerServiceManager {
-	return &LoadBalancerServiceManager{}
-}
-
-func (this *LoadBalancerServiceManager) ExposeNewService() LoadBalancerService {
-	// Exposes new Load Balancer Traefik Service
-}
-func (this *LoadBalancerServiceManager) DestroyService() (bool, error) {
-	// Destroy the Load Balancer Traefik Service
-}
-
-type LoadBalancerRouteManager struct {
-	// Manages the Routes of the Specific Service
-	HostMachineIPAddress string
-}
-
-func NewLoadBalancerRouteManager() *LoadBalancerRouteManager {
-	return &LoadBalancerRouteManager{}
-}
-
-func (this *LoadBalancerRouteManager) AddNewRoute(RouteParams RouteParams) (LoadBalancerRoute, error) {
-	// Adds new Route to the Traefik Load Balancer Service
-}
-func (this *LoadBalancerRouteManager) RemoveRoute(ServiceName string, RouteName string) (bool, error) {
-	// Removes the Existing Route from the Traefik Load Balancer Service
-}
-
-type InternalLoadBalancerManager struct {
+type LoadBalancerManager struct {
 	Client client.Client
 }
 
-func NewInternalLoadBalancer(Host string, Port string) *InternalLoadBalancerManager {
-	return &InternalLoadBalancerManager{}
+func NewLoadBalancerManager() *LoadBalancerManager {
+	return &LoadBalancerManager{}
 }
 
-func (this *InternalLoadBalancerManager) GetHostConnection(HostMachineIPAddress string) (client.Client, error) {
+func (this *LoadBalancerManager) GetHostConnection(HostMachineIPAddress string) (client.Client, error) {
 	// Returns The Connection to the Host Machine, where the Customer's Virtual Machine Is Running on
 	httpClient := http.DefaultClient
 	HttpHeaders := map[string]string{
@@ -146,14 +97,52 @@ func (this *InternalLoadBalancerManager) GetHostConnection(HostMachineIPAddress 
 	return *DockerClient, DockerErr
 }
 
-func (this *InternalLoadBalancerManager) AddNewDomainRoute(HostMachineIP string, RouteParams RouteParams) (bool, error) {
-	// Adds New Virtual Machine Domain Route to the Global Web server to make it available
-	// Goes to the Host Machine, where the Customer Deployed their application
-	// Finding the Global Host Webserver, that serves all of the virtual machines across this Host Machine
-	// and Simply Adds New Route
+func (this *LoadBalancerManager) AddNewDomainRoute(HostMachineIP string, RouteParams RouteParams) (*LoadBalancer, error) {
+	// Creates New Load Balancer Service on the Remote Host Machine, where Customer's Virtual Machine Server
+	// Is Being run,
+	// This method calls, once the new Virtual Machine Server is being created
 
-	// Receiving Traefik Connection
+	newClient := http.DefaultClient
+	var APIUrl = url.URL{
+		Path: "/create/web/server/",
+		Host: HostMachineIP,
+	}
+	newHttpRequest, _ := http.NewRequest("POST", APIUrl.String(), io.MultiReader())
+	newHttpRequest.PostForm.Set("ProxyHost", RouteParams.UpstreamConfig.VirtualMachineHost)
+	newHttpRequest.PostForm.Set("ProxyPort", RouteParams.UpstreamConfig.VirtualMachinePort)
+	Response, ResponseError := newClient.Do(newHttpRequest)
+
+	if ResponseError != nil {
+		Logger.Error(
+			"Load Balancer Initialization Service Responded With Error",
+			zap.Error(ResponseError))
+		return nil, ResponseError
+	}
+
+	var NewLoadBalancer LoadBalancer
+	decodedResponseData, _ := ioutil.ReadAll(Response.Body)
+	DeserializationError := json.Unmarshal(decodedResponseData, &NewLoadBalancer)
+	return &NewLoadBalancer, DeserializationError
+
 }
-func (this *InternalLoadBalancerManager) RemoveDomainRoute(RouteParams RouteParams) {
-	// Parsing Configuration of the Existing Load Balancer
+func (this *LoadBalancerManager) RemoveDomainRoute(HostMachineIP string, RouteParams RouteParams) (bool, error) {
+	// Removes the Existing Load Balancer Server, that serves Virtual Machine Server
+	// This method usually being called, once the Virtual Machine is being deleted or removed by Customer
+	newClient := http.DefaultClient
+	var APIUrl = url.URL{
+		Path: "/remove/web/server/",
+		Host: HostMachineIP,
+	}
+	newHttpRequest, _ := http.NewRequest("POST", APIUrl.String(), io.MultiReader())
+	newHttpRequest.PostForm.Set("ProxyHost", RouteParams.UpstreamConfig.VirtualMachineHost)
+	newHttpRequest.PostForm.Set("ProxyPort", RouteParams.UpstreamConfig.VirtualMachinePort)
+	Response, ResponseError := newClient.Do(newHttpRequest)
+
+	if ResponseError != nil || Response.StatusCode != 201 {
+		Logger.Error(
+			"Load Balancer Initialization Service Responded With Error",
+			zap.Error(ResponseError))
+		return false, ResponseError
+	}
+	return true, nil
 }

@@ -240,7 +240,7 @@ func (this *VirtualMachineManager) InitializeNewVirtualMachine(
 	// If Failed to Get Clusters Resource Pool, returning Exception
 	if ResourcePoolError != nil {
 		Logger.Debug("Failed to Get Cluster Resource Pool", zap.NamedError("FindError", ResourcePoolError))
-		return *new(*object.VirtualMachine), errors.New("Failed to Get Cluster Resource Pool")
+		return nil, errors.New("Failed to Get Cluster Resource Pool")
 	}
 
 	// Initializing Virtual Machine Resource Key Manager, that Is Going to Obtain Necessasy Keys
