@@ -6,8 +6,6 @@ import (
 	"strings"
 
 	"github.com/vmware/govmomi/object"
-	"github.com/vmware/govmomi/vim25"
-
 	"github.com/vmware/govmomi/vim25/types"
 
 	"golang.org/x/exp/maps"
@@ -73,8 +71,9 @@ func (this *VirtualMachineHostSystemManager) SelectWindowsSystemGuest(SystemName
 	// Returning Windows Guest Interface, depending on the Distribution version of the Operational System
 
 	for OsName, Identifier := range WindowsDistributions {
-		if HasPrefix := strings.HasPrefix(strings.ToLower(OsName),
-			strings.ToLower(OsName)) && strings.HasSuffix(OsName, strconv.Itoa(int(Bit[0]))); HasPrefix != false {
+		if SelectedSystemMatches := strings.HasPrefix(strings.ToLower(OsName),
+			strings.ToLower(SystemName)) && strings.HasSuffix(OsName, strconv.Itoa(int(Bit[0]))) && strings.Contains(
+			Version, strings.ToLower(OsName)); SelectedSystemMatches != false {
 			return &Identifier, nil
 		} else {
 			continue
@@ -146,14 +145,4 @@ func (this *VirtualMachineHostSystemManager) GetAvailableLinuxOsSystems() map[st
 
 func (this *VirtualMachineHostSystemManager) GetAvailableWindowsOsSystems() map[string]types.VirtualMachineGuestOsIdentifier {
 	return WindowsDistributions
-}
-
-type HostSystemNetworkManager struct {
-	// Class for Managing Host System Network
-	Client         vim25.Client
-	VirtualMachine *object.VirtualMachine
-}
-
-func NewHostSystemNetworkManager() *HostSystemNetworkManager {
-	return &HostSystemNetworkManager{}
 }

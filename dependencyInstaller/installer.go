@@ -28,7 +28,7 @@ func InitializeProductionLogger() {
 	config := zap.NewProductionEncoderConfig()
 	config.EncodeTime = zapcore.ISO8601TimeEncoder
 	fileEncoder := zapcore.NewJSONEncoder(config)
-	file, _ := os.OpenFile("Main.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, _ := os.OpenFile("DependencyInstallerLog.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	logWriter := zapcore.AddSync(file)
 
 	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))

@@ -1,4 +1,4 @@
-package loadbalancer
+package load_balancer
 
 import (
 	"encoding/json"
@@ -30,7 +30,7 @@ func InitializeProductionLogger() {
 	config := zap.NewProductionEncoderConfig()
 	config.EncodeTime = zapcore.ISO8601TimeEncoder
 	fileEncoder := zapcore.NewJSONEncoder(config)
-	file, _ := os.OpenFile("Main.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, _ := os.OpenFile("LoadBalancerLog.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	logWriter := zapcore.AddSync(file)
 
 	Core := zapcore.NewTee(zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel))
@@ -64,12 +64,12 @@ type RouteParams struct {
 	} `json:"LoadBalancerConfiguration" xml:"LoadBalancerConfiguration"`
 }
 
-func NewRouteParams(Headers map[string]string, UpstreamConfig struct {
+func NewRouteParams(UpstreamConfig struct {
 	VirtualMachinePort string `json:"VirtualMachinePort" xml:"VirtualMachinePort"`
 	VirtualMachineHost string `json:"VirtualMachineHost" xml:"VirtualMachineHost"`
-}) *RouteParams {
+}, Headers ...map[string]string) *RouteParams {
 	return &RouteParams{
-		Headers:        Headers,
+		Headers:        Headers[0],
 		UpstreamConfig: UpstreamConfig,
 	}
 }

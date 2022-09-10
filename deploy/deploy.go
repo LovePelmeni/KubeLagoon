@@ -42,7 +42,7 @@ func InitializeProductionLogger() {
 	config := zap.NewProductionEncoderConfig()
 	config.EncodeTime = zapcore.ISO8601TimeEncoder
 	fileEncoder := zapcore.NewJSONEncoder(config)
-	file, Error := os.OpenFile("Main.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, Error := os.OpenFile("DeployLog.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if Error != nil {
 		panic(Error)
 	}
