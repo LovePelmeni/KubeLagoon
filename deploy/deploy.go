@@ -558,7 +558,15 @@ func (this *VirtualMachineManager) ApplyConfiguration(VirtualMachine *object.Vir
 	// Installed, InstallError := DepInstaller.InstallDependencies(VirtualMachine)
 	// if InstallError != nil {return nil, InstallError}
 
-	return
+	return &struct {
+		SshType   string "json:\"SshType\""
+		IPAddress string "json:\"IPAddress\""
+		SshInfo   string "json:\"SshInfo\""
+	}{
+		SshType:   SshType,
+		IPAddress: VmIPAddress,
+		SshInfo:   string(SshInfo),
+	}, nil
 }
 
 func (this *VirtualMachineManager) StartVirtualMachine(VirtualMachine *object.VirtualMachine) error {

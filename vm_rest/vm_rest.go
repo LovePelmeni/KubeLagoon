@@ -16,6 +16,7 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/deploy"
+	"github.com/LovePelmeni/Infrastructure/load_balancer"
 	"github.com/LovePelmeni/Infrastructure/models"
 
 	"go.uber.org/zap"
@@ -30,7 +31,6 @@ import (
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vapi/rest"
 	_ "github.com/vmware/govmomi/vapi/rest"
-	"github.com/vmware/govmomi/vim25/mo"
 )
 
 // Insfrastructure API Environment Variables
@@ -210,11 +210,34 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 		TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
 		defer CancelFunc()
 
+		// Receiving IP Address of the Initialized Virtual Machine
 		IPAddress, IPError := InitializedInstance.WaitForIP(TimeoutContext)
 		if IPError != nil {
 			Logger.Error(
 				"Failed to Parse the IP Address of the Virtual Machine, Timeout: Error: %s", zap.Error(IPError))
 			RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to Initialize Virtual Machine"})
+			return
+		}
+
+		// Initializing New Load Balancer
+
+		NewLoadBalancerManager := load_balancer.NewLoadBalancerManager()
+		newRouteParams := load_balancer.NewRouteParams(
+			struct {
+				VirtualMachinePort string "json:\"VirtualMachinePort\" xml:\"VirtualMachinePort\""
+				VirtualMachineHost string "json:\"VirtualMachineHost\" xml:\"VirtualMachineHost\""
+			}{
+				VirtualMachineHost: IPAddress,
+			},
+			nil,
+		)
+		NewLoadBalancerInfo, LoadBalancerError := NewLoadBalancerManager.AddNewDomainRoute(IPAddress, *newRouteParams)
+
+		if LoadBalancerError != nil {
+			Logger.Error(
+				"Failed to Create New Load Balancer", zap.Error(LoadBalancerError))
+			RequestContext.JSON(http.StatusBadGateway,
+				gin.H{"Error": "Failed to Create New Load Balancer for the Server"})
 			return
 		}
 
@@ -243,25 +266,22 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 				LoadBalancerPort string "json:\"LoadBalancerPort\" xml:\"LoadBalancerPort\""
 				HostMachineIP    string "json:\"HostMachineIP\" xml:\"HostMachineIP\""
 			}{
-				LoadBalancerPort: "",
-				HostMachineIP:    "",
+				LoadBalancerPort: NewLoadBalancerInfo.LoadBalancerPort,
+				HostMachineIP:    NewLoadBalancerInfo.LoadBalancerHost,
 			},
 
 			Network: struct {
-				IP       string "json:\"IP,omitempty\" xml:\"IP\""
-				Netmask  string "json:\"Netmask,omitempty\" xml:\"Netmask\""
-				Hostname string "json:\"Hostname,omitempty\" xml:\"Hostname\""
-				Gateway  string "json:\"Gateway,omitempty\" xml:\"Gateway\""
-				Enablev6 bool   "json:\"Enablev6,omitempty\" xml:\"Enablev6\""
+				Name     string `json:"Name" xml:"Name"`
+				ItemPath string `json:"ItemPath" xml:"ItemPath"`
 			}{
-
-				IP:       ParsedResourceInstances["Network"].(*object.Network),
-				Hostname: ParsedResourceInstances["Network"].(*mo.Network),
-				Enablev6: ParsedResourceInstances["Network"].(*mo.Network),
+				Name:     ParsedResourceInstances["Network"].(*object.Network).Name(),
+				ItemPath: ParsedResourceInstances["Network"].(*object.Network).InventoryPath,
 			},
 		}
 		// Define Initial ORM Model Object for the Virtual Machine
+
 		NewVirtualMachine := models.VirtualMachine{
+
 			SshInfo:            models.SSHConfiguration{},
 			IPAddress:          IPAddress,
 			ItemPath:           InitializedInstance.InventoryPath,
@@ -273,7 +293,7 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 		Created, CreationError := NewVirtualMachine.Create()
 		if CreationError != nil {
 			Created.Rollback()
-			Logger.Error("Failed to Create new ORM VM Object, Error on Creation: %s", zap.Error(CreationError))
+			Logger.Error("Failed to Create new Database VM Record", zap.Error(CreationError))
 		}
 		RequestContext.JSON(http.StatusCreated,
 			gin.H{"Status": "Initialized"})
@@ -337,18 +357,31 @@ func DeployVirtualMachineRestController(RequestContext *gin.Context) {
 		}
 
 		json.Unmarshal(VmCustomConfig.ToJson(), &VirtualMachineCustomConfiguration)
-
 		models.Database.Model(&models.VirtualMachine{}).Where("id = ?").Find(&VirtualMachine)
 
+		// Applying Custom Configuration, that Customer has been Specified Initially
+
+		VirtualMachine.Configuration.Disk = VirtualMachineCustomConfiguration.Disk
+		VirtualMachine.Configuration.Resources = VirtualMachineCustomConfiguration.Resources
+		VirtualMachine.Configuration.HostSystem = VirtualMachineCustomConfiguration.HostSystem
+		VirtualMachine.Configuration.ExtraTools.Tools = VirtualMachineCustomConfiguration.ExtraTools.Tools
 		VirtualMachine.SshInfo = VirtualMachineSshConfiguration
-		VirtualMachine.Configuration = VirtualMachineCustomConfiguration
 		VirtualMachine.State = "Ready" // Changing Availability Status To Ready
+
+		// Saving the Object to the Database....
+
+		Saved, Error := VirtualMachine.Save()
+		if Saved.Error != nil || Error != nil {
+			Logger.Error(
+				"Failed to Save Virtual Machine Database Record with Custom Configuration Resources",
+				zap.Error(Error))
+		}
 
 		RequestContext.JSON(http.StatusOK, gin.H{"Status": "Applied",
 			"IPAddress": VmInfo.IPAddress, "SshInfo": VmInfo.SshInfo})
 
 	default:
-		Logger.Error("Failed to Apply Configuration to the Virtual Machine, Error: %s", zap.Error(ApplyError))
+		Logger.Error("Failed to Apply Configuration to the Virtual Machine", zap.Error(ApplyError))
 		RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": ApplyError})
 	}
 

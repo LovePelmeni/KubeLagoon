@@ -206,11 +206,8 @@ type VirtualMachineConfiguration struct {
 	// Internal Network Configuration
 
 	Network struct {
-		IP       string `json:"IP,omitempty" xml:"IP"`             // IP of the Network
-		Netmask  string `json:"Netmask,omitempty" xml:"Netmask"`   // Netmask of the Network
-		Hostname string `json:"Hostname,omitempty" xml:"Hostname"` // Hostname of the Network
-		Gateway  string `json:"Gateway,omitempty" xml:"Gateway"`   // Gateway IP of the Network
-		Enablev6 bool   `json:"Enablev6,omitempty" xml:"Enablev6"` // Enable v6 IP's for the Network or not
+		Name     string `json:"Name" xml:"Name"`
+		ItemPath string `json:"ItemPath" xml:"ItemPath"`
 	} `json:"Network" xml:"Network"` // Network Info
 
 	// Extra Tools, that is going to be Installed on the VM automatically
