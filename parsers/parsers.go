@@ -95,7 +95,7 @@ type VirtualMachineCustomSpec struct {
 	} `json:"Metadata" xml:"Metadata"`
 
 	LoadBalancer struct {
-		Ssl string `json:"Ssl" xml:"Ssl"`
+		Ssl bool `json:"Ssl" xml:"Ssl"`
 	} `json:"LoadBalancer" xml:"LoadBalancer"`
 
 	HostSystem struct {

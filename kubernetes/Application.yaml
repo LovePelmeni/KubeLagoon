@@ -84,7 +84,7 @@ data:
   # VMware Configuration Source Parameters 
 
   VMWARE_SOURCE_IP: ""
-  VMWARE_SOURCE_USERNAME: ""
+  VMWARE_SOURCE_USERNAME: "root"
   VMWARE_SOURCE_PASSWORD: ""
 
   CACHE_STORAGE_HOST: redis 
@@ -152,3 +152,4 @@ data:
         }
       }
     }
+

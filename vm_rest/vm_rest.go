@@ -112,7 +112,7 @@ func GetCustomerVirtualMachine(RequestContext *gin.Context) {
 		RequestContext.JSON(http.StatusOK,
 			gin.H{"VirtualMachine": VirtualMachine})
 	default:
-		Logger.Error("Failed to Receive Virtual Machine, Error: %s", zap.Error(Gorm.Error))
+		Logger.Error("Failed to Receive Virtual Machine", zap.Error(Gorm.Error))
 		RequestContext.JSON(http.StatusBadRequest,
 			gin.H{"Error": "Virtual Machine Does Not Exist"})
 	}
@@ -214,7 +214,7 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 		IPAddress, IPError := InitializedInstance.WaitForIP(TimeoutContext)
 		if IPError != nil {
 			Logger.Error(
-				"Failed to Parse the IP Address of the Virtual Machine, Timeout: Error: %s", zap.Error(IPError))
+				"Failed to Parse the IP Address of the Virtual Machine", zap.Error(IPError))
 			RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to Initialize Virtual Machine"})
 			return
 		}

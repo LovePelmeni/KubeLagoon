@@ -21,6 +21,7 @@ import (
 	customer_rest "github.com/LovePelmeni/Infrastructure/customer_rest"
 	load_balancer_rest "github.com/LovePelmeni/Infrastructure/load_balancer_rest"
 	suggestion_rest "github.com/LovePelmeni/Infrastructure/suggestion_rest"
+	host_search_rest "github.com/LovePelmeni/Infrastructure/host_search_rest"
 
 	vm_rest "github.com/LovePelmeni/Infrastructure/vm_rest"
 	"github.com/gin-contrib/cors"
@@ -115,6 +116,7 @@ func (this *Server) Run() {
 	}
 
 	// Virtual Machines Rest API Endpoints
+	
 	VirtualMachineGroup := Router.Group("/vm/").Use(
 		middlewares.AuthorizationRequiredMiddleware(),
 		middlewares.IsVirtualMachineOwnerMiddleware(),
@@ -138,6 +140,7 @@ func (this *Server) Run() {
 	}
 
 	// Host System Rest Endpoints
+
 	HostSystemGroup := Router.Group("/host/").Use(
 
 		middlewares.AuthorizationRequiredMiddleware(),
@@ -164,6 +167,7 @@ func (this *Server) Run() {
 	}
 
 	// Suggestions Rest Endpoints
+
 	SuggestionsGroup := Router.Group("/suggestions/").Use(
 		middlewares.AuthorizationRequiredMiddleware(),
 		middlewares.InfrastructureHealthCircuitBreakerMiddleware())
@@ -173,6 +177,15 @@ func (this *Server) Run() {
 		SuggestionsGroup.GET("/load/balancer/", suggestion_rest.GetAvailableLoadBalancersRestController)
 		SuggestionsGroup.GET("/pre/installed/tool/", suggestion_rest.GetAvailableInstallationToolsRestController)
 	}
+
+
+	// Host Machine Search Engine Rest Endpoints 
+
+	SearchEngineGroup := Router.Group("/host/machine/")
+	{
+		SearchEngineGroup.POST("/search/", host_search_rest.FindHostMachineRestController)
+	}
+
 
 	// Support Rest API Endpoints
 
