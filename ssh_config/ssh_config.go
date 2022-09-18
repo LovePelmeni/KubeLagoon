@@ -72,12 +72,12 @@ func NewSshCertificateCredentials(Content []byte, FileName string) *SshCertifica
 	}
 }
 
-type VirtualMachineSshManager interface {
+type VirtualMachineSshManagerInterface interface {
 	// Interface, represents base SSH Manager Interface for the Virtual Machine Server
 }
 
 type VirtualMachineSshCertificateManager struct {
-	VirtualMachineSshManager
+	VirtualMachineSshManagerInterface
 	Client         vim25.Client
 }
 
@@ -164,7 +164,7 @@ func (this *VirtualMachineSshCertificateManager) GenerateSshKeys(VirtualMachine 
 type VirtualMachineSshRootCredentialsManager struct {
 	// SSH Manager Class, that performs Type of the SSH Connection
 	// Via Root Credentials
-	VirtualMachineSshManager
+	VirtualMachineSshManagerInterface
 	Client vim25.Client
 }
 

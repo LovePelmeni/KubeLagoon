@@ -104,6 +104,7 @@ func CreateCustomerRestController(RequestContext *gin.Context) {
 	BillingAddress := RequestContext.PostForm("BillingAddress")
 	Country := RequestContext.PostForm("Country")
 	ZipCode := RequestContext.PostForm("ZipCode")
+	Street := RequestContext.PostForm("Street")
 
 	// Checking If Customer is Already Exists...
 	var Customer models.Customer
@@ -111,8 +112,8 @@ func CreateCustomerRestController(RequestContext *gin.Context) {
 		&models.Customer{}).Where("username = ? OR email = ?",
 		Username, Email).Find(&Customer); &Transact.Error == nil || len(Customer.Username) != 0 {
 		RequestContext.AbortWithStatusJSON(
-		http.StatusBadRequest, 
-		gin.H{"Error": "Customer with this Username or Email already exists, Wanna Login?"})
+			http.StatusBadRequest,
+			gin.H{"Error": "Customer with this Username or Email already exists, Wanna Login?"})
 		return
 	}
 
