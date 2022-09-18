@@ -20,5 +20,3 @@ spec:
               serviceName: front-app-service 
               servicePort:
                 number: 3000
-
-    

@@ -16,7 +16,6 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/deploy"
-	load_balancer "github.com/LovePelmeni/Infrastructure/load_balancer"
 	"github.com/LovePelmeni/Infrastructure/models"
 
 	"go.uber.org/zap"
@@ -218,32 +217,6 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 			RequestContext.JSON(http.StatusBadGateway, gin.H{"Error": "Failed to Initialize Virtual Machine"})
 			return
 		}
-
-		// Initializing New Load Balancer
-
-		NewLoadBalancerManager := load_balancer.NewLoadBalancerManager()
-
-		InitialHeaders := make(map[string]string) // Empty List of Headers for the Load Balancer
-
-		VirtualMachineAddressCredentials := struct {
-			VirtualMachinePort string `json:"VirtualMachinePort" xml:"VirtualMachinePort"`
-			VirtualMachineHost string `json:"VirtualMachineHost" xml:"VirtualMachineHost"`
-		}{
-			VirtualMachineHost: IPAddress,           // IP Address of the Virtual Machine (not Host Machine)
-			VirtualMachinePort: strconv.Itoa(10000), // Port of the Virtual Machine Server
-		}
-
-		// Setting up Route Credentials for the Load Balancer
-		newRouteParams := load_balancer.NewRouteParams(VirtualMachineAddressCredentials, InitialHeaders)
-		NewLoadBalancerInfo, LoadBalancerError := NewLoadBalancerManager.AddNewDomainRoute(IPAddress, *newRouteParams)
-
-		if LoadBalancerError != nil {
-			Logger.Error("Failed to Create New Load Balancer", zap.Error(LoadBalancerError))
-			RequestContext.JSON(http.StatusBadGateway,
-				gin.H{"Error": "Failed to Create New Load Balancer for the Server"})
-			return
-		}
-
 		// Getting Initial Configuration for the new Virtual Machine, (only adding with hardware Configuration)
 		// All Customer Customization will be added after all.
 
@@ -263,14 +236,6 @@ func InitializeVirtualMachineRestController(RequestContext *gin.Context) {
 			}{
 				DatacenterName:     Datacenter.Name,
 				DatacenterItemPath: object.NewReference(Client.Client, Datacenter.Reference()).(*object.Datacenter).InventoryPath,
-			},
-
-			LoadBalancer: struct {
-				LoadBalancerPort string "json:\"LoadBalancerPort\" xml:\"LoadBalancerPort\""
-				HostMachineIP    string "json:\"HostMachineIP\" xml:\"HostMachineIP\""
-			}{
-				LoadBalancerPort: NewLoadBalancerInfo.LoadBalancerPort,
-				HostMachineIP:    NewLoadBalancerInfo.LoadBalancerHost,
 			},
 
 			Network: struct {

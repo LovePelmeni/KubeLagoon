@@ -4,10 +4,10 @@ import (
 	"net/http"
 
 	"os"
-	"strconv"
 
 	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/deploy"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -34,53 +34,39 @@ func InitializeProductionLogger() {
 }
 
 func init() {
+	// Initializing Logger 
 	InitializeProductionLogger()
 }
 
-func UpdateVirtualMachineSshKeysRestController(RequestContext *gin.Context) {
-	// Rest Controller, that Allows to Update SSH Key Pairs with new Ones
+func GetDownloadPublicSshCertificateRestController(Context *gin.Context) {
+	// Rest Controller, that returns Download File for the Virtual Machine Server Ssh Option 
 
-	jwtCredentials, _ := authentication.GetCustomerJwtCredentials(
-		RequestContext.Request.Header.Get("Authentication"))
+	JwtCustomerCredentials, _ := authentication.GetCustomerJwtCredentials(Context.GetHeader("Authorization"))
+	VirtualMachineId := Context.Query("VirtualMachineId")
+	VirtualMachineOwnerId := JwtCustomerCredentials.Id
+	Client := vim25.Client{}
 
-	VirtualMachineId := RequestContext.Query("VirtualMachineId")
-	VmOwnerId := jwtCredentials.UserId
+	SshManager := ssh_config.NewVirtualMachineSshCertificateManager(Client)
+	VmManager := deploy.NewVirtualMachineManager(Client)
 
-	var VirtualMachineModel models.VirtualMachine
-	models.Database.Model(&models.VirtualMachine{}).Where("id = ?", VirtualMachineId).Find(&VirtualMachineModel)
-	VmManager := deploy.NewVirtualMachineManager(vim25.Client{})
-	VirtualMachine, FindError := VmManager.GetVirtualMachine(VirtualMachineId, strconv.Itoa(VmOwnerId))
+	// Retrieving Virtual Machine Instance 
+	VirtualMachineInstance, FindError := VmManager.GetVirtualMachine(VirtualMachineId, VirtualMachineOwnerId)
+	if FindError != nil {Logger.Debug("Failed to Retrieve Virtual Machine", zap.Error(FindError))}
 
-	if FindError != nil {
-		RequestContext.JSON(http.StatusBadRequest,
-			gin.H{"Error": "Virtual Machine Server not Found"})
-		return
-	}
+	// Retrieving Virtual Machine Model Record 
 
-	SshManager := ssh_config.NewVirtualMachineSshCertificateManager(vim25.Client{}, VirtualMachine)
-	PublicKey, GenerateError := SshManager.GenerateSshKeys()
+	var VirtualMachine models.VirtualMachine 
+	models.Database.Select("SshInfo").Model(&models.VirtualMachine{}).Where(
+	"id = ? AND owner_id = ?", VirtualMachineId, VirtualMachineOwnerId).Find(&VirtualMachine)
 
-	if GenerateError != nil {
-		RequestContext.JSON(http.StatusBadGateway,
-			gin.H{"Error": "Failed to Generate New SSH Keys"})
-		return
-	}
 
-	switch GenerateError {
-	case nil:
+	// Retrieving Certificate Public Ssh Key
+	SshPublicCertificateContent, CertificateError := SshManager.GetSshPublicCertificate(
+	VirtualMachineInstance, VirtualMachine.SshInfo.SshCredentialsInfo)
 
-		Gorm := models.Database.Model(
-			&models.VirtualMachine{}).Where(
-			"id = ? AND owner_id = ?").Unscoped().Update("ssh_public_key", PublicKey)
+	if CertificateError != nil {Logger.Error("Certificate Error"); Context.JSON(http.StatusBadGateway,
+    gin.H{"Error": "Failed to Retrieve Certificate"}); return}
 
-		if Gorm.Error != nil {
-			Gorm.Rollback()
-			Logger.Error("Failed to Update SSH keys for the VM wit ID: %s",
-				zap.String("Virtual Machine ID", VirtualMachineId),
-				zap.String("Virtual Machine Owner", jwtCredentials.Id))
-		}
-	default:
-		RequestContext.JSON(http.StatusBadGateway,
-			gin.H{"Error": "Failed to Generate New SSH Keys"})
-	}
-}
+	// Returning Response
+	Context.JSON(http.StatusOK, gin.H{"CertificateContent": SshPublicCertificateContent})
+} 

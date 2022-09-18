@@ -19,9 +19,8 @@ import (
 	"github.com/LovePelmeni/Infrastructure/ssh_rest"
 
 	customer_rest "github.com/LovePelmeni/Infrastructure/customer_rest"
-	load_balancer_rest "github.com/LovePelmeni/Infrastructure/load_balancer_rest"
-	suggestion_rest "github.com/LovePelmeni/Infrastructure/suggestion_rest"
 	host_search_rest "github.com/LovePelmeni/Infrastructure/host_search_rest"
+	suggestion_rest "github.com/LovePelmeni/Infrastructure/suggestion_rest"
 
 	vm_rest "github.com/LovePelmeni/Infrastructure/vm_rest"
 	"github.com/gin-contrib/cors"
@@ -104,19 +103,8 @@ func (this *Server) Run() {
 		CustomerGroup.GET("/get/profile/", customer_rest.GetCustomerProfileRestController, middlewares.AuthorizationRequiredMiddleware())
 	}
 
-	// Load Balancers Rest API Endpoints
-
-	LoadBalancerGroup := Router.Group("/route/").Use(
-		middlewares.AuthorizationRequiredMiddleware(),
-		middlewares.InfrastructureHealthCircuitBreakerMiddleware(),
-	)
-	{
-		LoadBalancerGroup.POST("/create/", load_balancer_rest.AddProxyRouteRestController)
-		LoadBalancerGroup.DELETE("/delete/", load_balancer_rest.RemoveProxyRouteRestController)
-	}
-
 	// Virtual Machines Rest API Endpoints
-	
+
 	VirtualMachineGroup := Router.Group("/vm/").Use(
 		middlewares.AuthorizationRequiredMiddleware(),
 		middlewares.IsVirtualMachineOwnerMiddleware(),
@@ -163,7 +151,7 @@ func (this *Server) Run() {
 		middlewares.IsReadyToPerformOperationMiddleware(),
 	)
 	{
-		SshSystemGroup.PUT("/recover/", ssh_rest.UpdateVirtualMachineSshKeysRestController)
+		SshSystemGroup.GET("/get/ssh/certificate/", ssh_rest.GetDownloadPublicSshCertificateRestController)
 	}
 
 	// Suggestions Rest Endpoints
@@ -178,14 +166,12 @@ func (this *Server) Run() {
 		SuggestionsGroup.GET("/pre/installed/tool/", suggestion_rest.GetAvailableInstallationToolsRestController)
 	}
 
-
-	// Host Machine Search Engine Rest Endpoints 
+	// Host Machine Search Engine Rest Endpoints
 
 	SearchEngineGroup := Router.Group("/host/machine/")
 	{
 		SearchEngineGroup.POST("/search/", host_search_rest.FindHostMachineRestController)
 	}
-
 
 	// Support Rest API Endpoints
 

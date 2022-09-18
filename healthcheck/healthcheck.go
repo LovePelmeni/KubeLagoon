@@ -2,7 +2,6 @@ package healthcheck
 
 import (
 	"time"
-
 	"github.com/vmware/govmomi/vim25/mo"
 )
 

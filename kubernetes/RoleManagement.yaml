@@ -27,4 +27,3 @@ subjects:
     type: ServiceAccount 
     name: infrastructure-app-service-account 
     namespace: app-namespace 
---- 

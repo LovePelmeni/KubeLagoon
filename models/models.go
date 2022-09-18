@@ -83,6 +83,7 @@ type Customer struct {
 	BillAddress string `json:"BillAddress" xml:"BillAddress" gorm:"type:varchar(100); not null;"`
 	Country     string `json:"Country" xml:"Country" gorm:"type:varchar(100); not null;"`
 	ZipCode     string `json:"ZipCode" xml:"ZipCode" gorm:"type:varchar(100); not null;"`
+	Street      string `json:"Street" xml:"Street" gorm:"type:varchar(100); not null;"`
 }
 
 func NewCustomer(Username string, Password string, Email string) *Customer {
@@ -99,6 +100,10 @@ func NewCustomer(Username string, Password string, Email string) *Customer {
 
 func (this *Customer) Create() (*gorm.DB, error) {
 	// Creates New Customer Profile
+
+	PasswordHash, _ := bcrypt.GenerateFromPassword([]byte(this.Password), 14)
+	this.Password = string(PasswordHash)
+
 	CreatedCustomer := Database.Model(&Customer{}).Create(this)
 	return CreatedCustomer, CreatedCustomer.Error
 }

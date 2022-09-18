@@ -2,7 +2,6 @@ package installer
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 
 	"net/url"
@@ -43,10 +42,10 @@ type OSDeploymentToolsInstallCommandReturnerInterface interface {
 	// Class, that returns specific commands to install docker, docker-compose, podman ....
 	// Depending on the Operational System Specified
 	GetCommands(DistributionName string, Version ...string)
-	GetDockerCommand() string
-	GetDockerComposeCommand() string
-	GetPodmanCommand() string
-	GetVirtualBoxCommand() string
+	GetDockerCommand() string        // returns Docker Installation Instructions for the Specific OS
+	GetDockerComposeCommand() string // returns Docker-Compose Installation Instructions for the Specific OS
+	GetPodmanCommand() string        // returns the Podman Installation Instructions for the Specific OS
+	GetVirtualBoxCommand() string    // returns the Virtual Box Installation Instructions for the Specific OS
 }
 
 type WindowsDeploymentToolsInstallCommandReturner struct {
@@ -229,8 +228,11 @@ func NewEnviromentDependencyInstaller() *EnviromentDependencyInstaller {
 
 func (this *EnviromentDependencyInstaller) GetSshConnection(VirtualMachineId string) (*ssh.Client, error) {
 	// Returns SSH Connection to the VM Server
+
 	var VirtualMachine models.VirtualMachine
-	models.Database.Model(&models.VirtualMachine{}).Where("id = ?", VirtualMachineId).Find(&VirtualMachine)
+	models.Database.Model(&models.VirtualMachine{}).Where(
+		"id = ?", VirtualMachineId).Find(&VirtualMachine)
+
 	ClientConfig := &ssh.ClientConfig{
 		Timeout: 10,
 		User:    "root",
@@ -245,17 +247,19 @@ func (this *EnviromentDependencyInstaller) GetDependency(PackageName string, Ins
 	return NewDependency(PackageName, url.URL{Path: InstallUrl}), nil
 }
 
-func (this *EnviromentDependencyInstaller) InstallDeploymentDependencies(SshConnection ssh.Client) error {
+func (this *EnviromentDependencyInstaller) InstallDeploymentDependencies(SshConnection ssh.Client) []error {
 	// Installs deployment Dependencies such as Docker and Docker-Compose and Kubectl
+
+	var InstallationErrors []error
 	var Responses []string
 	var stdOut bytes.Buffer
 
 	NewSession, SSHError := SshConnection.NewSession()
 	if SSHError != nil {
-		return SSHError
+		return []error{SSHError}
 	}
-	NewSession.Stdout = &stdOut
 
+	NewSession.Stdout = &stdOut
 	InstallationCommands := []string{}
 
 	for _, Command := range InstallationCommands {
@@ -264,8 +268,8 @@ func (this *EnviromentDependencyInstaller) InstallDeploymentDependencies(SshConn
 			Responses = append(Responses)
 		}
 		if strings.Contains(stdOut.String(), "error") || ResponseError != nil {
-			return errors.New(ResponseError.Error())
+			InstallationErrors = append(InstallationErrors, ResponseError)
 		}
 	}
-	return nil
+	return InstallationErrors
 }

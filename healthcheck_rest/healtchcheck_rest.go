@@ -118,3 +118,4 @@ func GetVirtualMachineHealthMetricRestController(RequestContext *gin.Context) {
 	}
 	RequestContext.JSON(http.StatusOK, gin.H{"Metrics": HealthCheckMetrics})
 }
+

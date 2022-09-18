@@ -146,3 +146,4 @@ func (this *VirtualMachineHostSystemManager) GetAvailableLinuxOsSystems() map[st
 func (this *VirtualMachineHostSystemManager) GetAvailableWindowsOsSystems() map[string]types.VirtualMachineGuestOsIdentifier {
 	return WindowsDistributions
 }
+

@@ -79,6 +79,7 @@ func (this *DatacenterConfig) GetDatacenter(Client vim25.Client) (*mo.Datacenter
 	Datacenter, FindError := Finder.FindByInventoryPath(TimeoutContext, this.Datacenter.ItemPath)
 	Collector := property.DefaultCollector(&Client)
 	RetrieveError := Collector.RetrieveOne(TimeoutContext, Datacenter.Reference(), []string{"*"}, &MoDatacenter)
+	
 	if FindError != nil || RetrieveError != nil {
 		return nil, errors.New("Datacenter Does Not Exist")
 	} else {
@@ -227,13 +228,13 @@ func (this *VirtualMachineCustomSpec) ApplySshConfig(Client vim25.Client, Virtua
 	// That Customer Has Specified
 	switch {
 	case this.Ssh.Type == models.TypeByRootCredentials:
-		newCertificateManager := ssh_config.NewVirtualMachineSshCertificateManager(Client, VirtualMachine)
-		PublicKey, SslCertificateError := newCertificateManager.GenerateSshKeys()
+		newCertificateManager := ssh_config.NewVirtualMachineSshCertificateManager(Client)
+		PublicKey, SslCertificateError := newCertificateManager.GenerateSshKeys(VirtualMachine)
 		return PublicKey, SslCertificateError
 
 	case this.Ssh.Type == models.TypeByRootCertificate:
-		newRootCredentialsManager := ssh_config.NewVirtualMachineSshRootCredentialsManager(Client, VirtualMachine)
-		RootCredentials, SslRootError := newRootCredentialsManager.GetSshRootCredentials()
+		newRootCredentialsManager := ssh_config.NewVirtualMachineSshRootCredentialsManager(Client)
+		RootCredentials, SslRootError := newRootCredentialsManager.GetSshRootCredentials(VirtualMachine)
 		return RootCredentials, SslRootError
 	default:
 		return nil, errors.New("SSH Disabled")

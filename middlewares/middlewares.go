@@ -242,3 +242,4 @@ func InfrastructureHealthCircuitBreakerMiddleware() gin.HandlerFunc {
 		RequestContext.Next()
 	}
 }
+

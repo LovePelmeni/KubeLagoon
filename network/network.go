@@ -121,7 +121,6 @@ func (this *VirtualMachinePublicNetworkManager) SetupPublicNetwork(IPCredentials
 			SubnetMask: IPCredentials.Netmask,                                      // Setting UP Subnet Mask
 			Gateway:    []string{IPCredentials.Gateway},                            // Setting up Gateway
 			IpV6Spec: &types.CustomizationIPSettingsIpV6AddressSpec{
-
 				Ip: []types.BaseCustomizationIpV6Generator{
 					&types.CustomizationAutoIpV6Generator{}},
 			},
@@ -204,4 +203,49 @@ func (this *VirtualMachinePrivateNetworkManager) ConnectVirtualMachineToNetwork(
 			zap.String("Virtual Machine Name", VirtualMachine.Name()), zap.Error(ApplyError))
 		return false, ApplyError
 	}
+}
+
+type NetworkBridgeLink struct {
+	// Represents Base Network Link for the Virtual Machine Server
+	VirtualMachineId   string `json:"VirtualMachineId"`
+	VirtualMachineName string `json:"VirtualMachineName"`
+}
+
+func NewNetworkBridgeLink(VirtualMachineId string, VirtualMachineName string) *NetworkBridgeLink {
+	return &NetworkBridgeLink{
+		VirtualMachineId:   VirtualMachineId,
+		VirtualMachineName: VirtualMachineName,
+	}
+}
+
+type NetworkBridgeCredentials struct {
+	BridgeIpAddress string `json:"BridgeIpAddress"`
+}
+
+func NewNetworkBridgeCredentials(IPAddress string) *NetworkBridgeCredentials {
+	return &NetworkBridgeCredentials{
+		BridgeIpAddress: IPAddress,
+	}
+}
+
+type NetworkBridgeManagerInterface interface {
+	// Interface implements Network Bridge Manager
+	// That allows to expose the Virtual Machines to Outside Network from the Host Machine
+	AddVirtualMachineLink(VirtualMachineLink string, NetworkBridgeCredentials NetworkBridgeCredentials)
+	RemoveVirtualMachineLink(VirtualMachineLink string, NetworkBridgeCredentials NetworkBridgeCredentials)
+}
+
+type NetworkBridgeManager struct {
+	NetworkBridgeManagerInterface
+}
+
+func NewNetworkBridgeManager() *NetworkBridgeManager {
+	return &NetworkBridgeManager{}
+}
+func (this *NetworkBridgeManager) AddVirtualMachineLink(VirtualMachineLink NetworkBridgeLink, NetworkBridgeInfo NetworkBridgeCredentials) (bool, error) {
+	// Adds the Link of the Virtual Machine Server to the Network Bridge
+}
+
+func (this *NetworkBridgeManager) RemoveVirtualMachineLink(VirtualMachineLink NetworkBridgeLink, NetworkBridgeInfo NetworkBridgeCredentials) (bool, error) {
+	// Removes the Link of the Virtual Machine Server from the Network Bridge
 }
