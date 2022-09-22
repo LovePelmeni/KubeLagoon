@@ -80,13 +80,13 @@ type Customer struct {
 	Email    string `json:"Email" gorm:"<-:create;type:varchar(100); not null; unique;"`
 	Password string `json:"Password" gorm:"type:varchar(100); not null;"`
 
-	BillAddress string `json:"BillAddress" xml:"BillAddress" gorm:"type:varchar(100); not null;"`
-	Country     string `json:"Country" xml:"Country" gorm:"type:varchar(100); not null;"`
-	ZipCode     string `json:"ZipCode" xml:"ZipCode" gorm:"type:varchar(100); not null;"`
-	Street      string `json:"Street" xml:"Street" gorm:"type:varchar(100); not null;"`
+	City    string `json:"City" xml:"City" gorm:"varchar(100); not null;"`
+	Country string `json:"Country" xml:"Country" gorm:"type:varchar(100); not null;"`
+	ZipCode string `json:"ZipCode" xml:"ZipCode" gorm:"type:varchar(100); not null;"`
+	Street  string `json:"Street" xml:"Street" gorm:"type:varchar(100); not null;"`
 }
 
-func NewCustomer(Username string, Password string, Email string) *Customer {
+func NewCustomer(Username string, Password string, Email string, City string, Country string, ZipCode string, Street string) *Customer {
 	PasswordHash, HashError := bcrypt.GenerateFromPassword([]byte(Password), 14)
 	if HashError != nil {
 		return nil
@@ -95,6 +95,10 @@ func NewCustomer(Username string, Password string, Email string) *Customer {
 		Username: Username,
 		Email:    Email,
 		Password: string(PasswordHash),
+		City:     City,
+		Country:  Country,
+		ZipCode:  ZipCode,
+		Street:   Street,
 	}
 }
 

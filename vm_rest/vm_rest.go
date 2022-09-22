@@ -94,24 +94,91 @@ func init() {
 
 // VM Rest API Controllers
 
+type VirtualMachineSchemaStructure struct {
+	// Completed Structure of the Virtual Machine Server JSON Schema
+
+	// Metadata
+	VirtualMachineName string `json:"VirtualMachineName"`
+	VirtualMachineId   string `json:"VirtualMachineId"`
+
+	// Resources
+	CpuNum          string `json:"CpuNum"`
+	Memory          string `json:"Memory"`
+	StorageCapacity string `json:"StorageCapacity"`
+
+	// Payment Due Parameters
+	PaymentDueDate  string `json:"paymentDueDate"`
+	PaymentDueTerms string `json:"paymentDueTerms"`
+
+	// Deploying Status Parameters
+	Deploying bool `json:"Deploying"`
+	Running   bool `json:"Running"`
+	Shutdown  bool `json:"Shutdown"`
+
+	// Owner Information
+
+	Owner struct {
+		Username string `json:"Username"`
+		Email    string `json:"Email"`
+		City     string `json:"City"`
+		Country  string `json:"Country"`
+		ZipCode  string `json:"ZipCode"`
+		Street   string `json:"Street"`
+	} `json:"Owner"`
+}
+
 func GetCustomerVirtualMachine(RequestContext *gin.Context) {
+
 	// Returns Extended Info about Virtual Machine Server Owned by the Customer
 
-	var VirtualMachine models.VirtualMachine
+	var VirtualMachineDatabaseObject models.VirtualMachine
+	var CustomerDatabaseObject models.Customer
+
 	jwtCredentials, _ := authentication.GetCustomerJwtCredentials(
 		RequestContext.Request.Header.Get("jwt-token"))
-
 	CustomerId := jwtCredentials.UserId
-	VirtualMachineId := RequestContext.Query("VirtualMachineId")
-	Gorm := models.Database.Model(&VirtualMachine).Where(
-		"owner_id = ? AND id = ?", CustomerId, VirtualMachineId).Find(&VirtualMachine)
 
-	switch Gorm.Error {
-	case nil:
+	// Receiving Customer's Virtual Machine Server Object
+
+	VirtualMachineId := RequestContext.Query("VirtualMachineId")
+	models.Database.Model(&VirtualMachineDatabaseObject).Where(
+		"owner_id = ? AND id = ?", CustomerId, VirtualMachineId).Find(&VirtualMachineDatabaseObject)
+
+	// Receiving the Customer
+	models.Database.Model(&models.Customer{}).Where(
+		"id = ?", CustomerId).Find(&CustomerDatabaseObject)
+
+	VirtualMachine := VirtualMachineSchemaStructure{
+
+		VirtualMachineName: VirtualMachineDatabaseObject.VirtualMachineName,
+		VirtualMachineId:   strconv.Itoa(VirtualMachineDatabaseObject.ID),
+
+		CpuNum:          strconv.Itoa(int(VirtualMachineDatabaseObject.Configuration.Resources.CpuNum)),
+		Memory:          strconv.Itoa(int(VirtualMachineDatabaseObject.Configuration.Resources.MemoryInMegabytes)),
+		StorageCapacity: strconv.Itoa(int(VirtualMachineDatabaseObject.Configuration.Disk.CapacityInKB)),
+
+		Owner: struct {
+			Username string "json:\"Username\""
+			Email    string "json:\"Email\""
+			City     string "json:\"City\""
+			Country  string "json:\"Country\""
+			ZipCode  string "json:\"ZipCode\""
+			Street   string "json:\"Street\""
+		}{
+			Username: CustomerDatabaseObject.Username,
+			Email:    CustomerDatabaseObject.Email,
+			City:     CustomerDatabaseObject.City,
+			Country:  CustomerDatabaseObject.Country,
+			ZipCode:  CustomerDatabaseObject.ZipCode,
+			Street:   CustomerDatabaseObject.Street,
+		},
+	}
+
+	switch reflect.ValueOf(VirtualMachine).IsNil() {
+	case false:
 		RequestContext.JSON(http.StatusOK,
 			gin.H{"VirtualMachine": VirtualMachine})
-	default:
-		Logger.Error("Failed to Receive Virtual Machine", zap.Error(Gorm.Error))
+	case true:
 		RequestContext.JSON(http.StatusBadRequest,
 			gin.H{"Error": "Virtual Machine Does Not Exist"})
 	}

@@ -181,7 +181,7 @@ func (this *VirtualMachineSshCertificateManager) GetSshRootUserCredentials(Virtu
 
 	var VirtualMachine models.VirtualMachine
 	models.Database.Model(&models.VirtualMachine{}).Where(
-		"id = ?", VirtualMachineId).Find(&VirtualMachine)
+	"id = ?", VirtualMachineId).Find(&VirtualMachine)
 	return VirtualMachine.SshInfo
 }
 
