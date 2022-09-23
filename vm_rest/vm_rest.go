@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"net/http"
 
@@ -186,13 +187,50 @@ func GetCustomerVirtualMachine(RequestContext *gin.Context) {
 
 func GetCustomerVirtualMachines(RequestContext *gin.Context) {
 	// Returns List of the VM's that Customer Owns
-
+	var VirtualMachineQuerySet []VirtualMachineSchemaStructure
 	var VirtualMachines []models.VirtualMachine
+	var VirtualMachineServerOwner models.Customer
 	jwtCredentials, _ := authentication.GetCustomerJwtCredentials(
 		RequestContext.Request.Header.Get("jwt-token"))
 
 	CustomerId := jwtCredentials.UserId
-	Gorm := models.Database.Model(&Customer).Where("id = ?", CustomerId).Preload("Vms").Find(&VirtualMachines)
+	Gorm := models.Database.Model(&Customer).Where(
+		"id = ?", CustomerId).Find(VirtualMachineServerOwner).Preload("Vms").Find(&VirtualMachines)
+	group := sync.WaitGroup{}
+
+	for _, VirtualMachineServer := range VirtualMachines {
+
+		go func() {
+			group.Add(1)
+			VirtualMachine := VirtualMachineSchemaStructure{
+				// Virtual Machine Server Metadata
+				VirtualMachineName: VirtualMachineServer.VirtualMachineName,
+				VirtualMachineId:   strconv.Itoa(VirtualMachineServer.ID),
+
+				// Resources Configuration
+				CpuNum:          strconv.Itoa(int(VirtualMachineServer.Configuration.Resources.CpuNum)),
+				Memory:          strconv.Itoa(int(VirtualMachineServer.Configuration.Resources.MemoryInMegabytes)),
+				StorageCapacity: strconv.Itoa(VirtualMachineServer.Configuration.Disk.CapacityInKB),
+				Owner: struct {
+					Username string "json:\"Username\""
+					Email    string "json:\"Email\""
+					City     string "json:\"City\""
+					Country  string "json:\"Country\""
+					ZipCode  string "json:\"ZipCode\""
+					Street   string "json:\"Street\""
+				}{
+					Username: VirtualMachineServerOwner.Username,
+					Email:    VirtualMachineServerOwner.Email,
+					City:     VirtualMachineServerOwner.City,
+					Country:  VirtualMachineServerOwner.Country,
+					Street:   VirtualMachineServerOwner.Street,
+				},
+			}
+			VirtualMachineQuerySet = append(VirtualMachineQuerySet, VirtualMachine)
+			group.Done()
+		}()
+	}
+	group.Wait()
 	switch Gorm.Error {
 	case nil:
 		RequestContext.JSON(http.StatusOK,
