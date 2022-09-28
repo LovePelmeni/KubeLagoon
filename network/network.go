@@ -237,15 +237,30 @@ type NetworkBridgeManagerInterface interface {
 
 type NetworkBridgeManager struct {
 	NetworkBridgeManagerInterface
+	// Entity, that manages network bridge Configuration for the Virtual Machine Server
+	// to make it accessible
 }
 
 func NewNetworkBridgeManager() *NetworkBridgeManager {
 	return &NetworkBridgeManager{}
 }
-func (this *NetworkBridgeManager) AddVirtualMachineLink(VirtualMachineLink NetworkBridgeLink, NetworkBridgeInfo NetworkBridgeCredentials) (bool, error) {
-	// Adds the Link of the Virtual Machine Server to the Network Bridge
-}
 
-func (this *NetworkBridgeManager) RemoveVirtualMachineLink(VirtualMachineLink NetworkBridgeLink, NetworkBridgeInfo NetworkBridgeCredentials) (bool, error) {
-	// Removes the Link of the Virtual Machine Server from the Network Bridge
+func (this *NetworkBridgeManager) GetVirtualMachineNetworkBridgeConfiguration(VirtualMachineLink NetworkBridgeLink, NetworkBridgeInfo NetworkBridgeCredentials) (types.HostVirtualSwitchSpec, error) {
+
+	// Returns the Basic Configuration for the Network Bridge for the Virtual Machine Server
+	// It is used to make the Virtual Server Available Within the Public Network, so people can get access to it, without setting up external load balancers
+	// to do that job
+
+	networkBridgeConfiguration := types.HostVirtualSwitchSpec{
+		NumPorts: 10,
+		Bridge:   &types.HostVirtualSwitchAutoBridge{},
+		Policy: &types.HostNetworkPolicy{
+			Security:      &types.HostNetworkSecurityPolicy{},
+			NicTeaming:    &types.HostNicTeamingPolicy{},
+			OffloadPolicy: &types.HostNetOffloadCapabilities{},
+			ShapingPolicy: &types.HostNetworkTrafficShapingPolicy{},
+		},
+		Mtu: 10,
+	}
+	return networkBridgeConfiguration, nil
 }

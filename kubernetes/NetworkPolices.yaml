@@ -1,0 +1,39 @@
+# Network Policy for Managing the Traffic Between Kubernetes Cluster (where this application is basically running)
+# and the Datacenter Network, so we can have a isolated Connection with them
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy 
+metadata:
+  name: ingress-network-policy 
+  namespace: app-namespace 
+spec:
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    from: 
+      - ipBlock: 
+          cidr:  10.0.12.1/24 # Cidr block of the External Network 
+      - namespaceSelector:
+          matchLabels:
+            app: cloud-infrastructure-app 
+
+        podSelector:
+          matchLabels:
+            app: cloud-infrastructure-app 
+
+    ports: # Setting up ports for the Ingress Traffic Policies
+      - name: http 
+        port: 8000
+        protocol: TCP 
+
+  egress:
+    - in: 
+        - ipBlock:
+            cidr: 10.0.12.1/20 # Cidr block of the Subnet / Network, where our Host Machines is located at 
+
+    ports:
+      - name: http 
+        port: 8000
+        protocol: TCP 
+        targetPort: 8000
