@@ -11,6 +11,7 @@ spec:
       secretName: tls-ssl-secret 
       hosts:  
         - www.cloud-infrastructure.com 
+        
     host: www.cloud-infrastructure.com 
       http:
         paths:

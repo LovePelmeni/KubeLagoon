@@ -119,6 +119,7 @@ func (this *Customer) Delete(UserId int) (*gorm.DB, error) {
 	return DeletedCustomer, DeletedCustomer.Error
 }
 
+
 // NOTE: Going to support SSL soon
 
 type VirtualMachine struct {
