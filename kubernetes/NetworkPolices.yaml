@@ -8,32 +8,19 @@ metadata:
   namespace: app-namespace 
 spec:
   policyTypes:
-    - Ingress
     - Egress
-  ingress:
-    from: 
-      - ipBlock: 
-          cidr:  10.0.12.1/24 # Cidr block of the External Network 
+  egress:
+    to: 
       - namespaceSelector:
           matchLabels:
-            app: cloud-infrastructure-app 
+            networking/namespace: application-namepspace
 
         podSelector:
           matchLabels:
-            app: cloud-infrastructure-app 
-
+            k8s-app: cloud-infrastructure-app 
+            networking/allow-internet-egress: "true"
+          
     ports: # Setting up ports for the Ingress Traffic Policies
       - name: http 
-        port: 8000
+        port: 9000 
         protocol: TCP 
-
-  egress:
-    - in: 
-        - ipBlock:
-            cidr: 10.0.12.1/20 # Cidr block of the Subnet / Network, where our Host Machines is located at 
-
-    ports:
-      - name: http 
-        port: 8000
-        protocol: TCP 
-        targetPort: 8000

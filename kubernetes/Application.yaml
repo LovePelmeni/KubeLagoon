@@ -69,7 +69,7 @@ metadata:
   namespace: app-namespace 
 data: 
   APPLICATION_HOST: localhost 
-  APPLICATION_PORT: 8000 
+  APPLICATION_PORT: 8001
 
   FRONT_APPLICATION_HOST: frontapp 
   FRONT_APPLICATION_PORT: 3000
@@ -83,13 +83,14 @@ data:
 
   # VMware Configuration Source Parameters 
 
-  VMWARE_SOURCE_IP: ""
-  VMWARE_SOURCE_USERNAME: "root"
-  VMWARE_SOURCE_PASSWORD: ""
+  VMWARE_SOURCE_IP: "" # IP address of the VMWARE Host Machine, Make sure it running in the same network
+  VMWARE_SOURCE_USERNAME: "root" # Username of the VMWARE User's name
+  VMWARE_SOURCE_PASSWORD: "" # Password of the VMWARE User's password
 
-  CACHE_STORAGE_HOST: redis 
-  CACHE_STORAGE_PORT: 6379 
-  CACHE_STORAGE_PASSWORD: redis-password 
+  # Cache Storage Parameters
+  CACHE_STORAGE_HOST: "redis" 
+  CACHE_STORAGE_PORT: "6379" 
+  CACHE_STORAGE_PASSWORD: "redis-password"
 
 
 --- 
@@ -110,10 +111,10 @@ stringData:
   SUPPORT_CLIENT_EMAIL_PASSWORD: "email_infra_server_password"
 
   VMWARE_SOURCE_IP: "192.268.0.10" # WARNING, DEPENDING ON THE HOST MACHINE, THIS MIGHT BE DIFFERENT
-  VMWARE_SOURCE_USER: "vmware_api_user"
-  VMWARE_SOURCE_PASSWORD: "vmware_api_password"
+  VMWARE_SOURCE_USER: "vmware_api_user" # VMWARE API USER NAME
+  VMWARE_SOURCE_PASSWORD: "vmware_api_password" # VMWARE API USER PASSWORD
 
-  CACHE_STORAGE_HOST: redis 
+  CACHE_STORAGE_HOST: "redis"
   CACHE_STORAGE_PORT: 6379 
   CACHE_STORAGE_DATABASE_NUMBER: 0 
   CACHE_STORAGE_PASSWORD: redis-password 

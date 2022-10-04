@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"os"
 
@@ -119,7 +120,6 @@ func (this *Customer) Delete(UserId int) (*gorm.DB, error) {
 	return DeletedCustomer, DeletedCustomer.Error
 }
 
-
 // NOTE: Going to support SSL soon
 
 type VirtualMachine struct {
@@ -131,6 +131,7 @@ type VirtualMachine struct {
 	VirtualMachineName string                      `json:"VirtualMachineName" xml:"VirtualMachineName" gorm:"type:varchar(15);not null;"`
 	ItemPath           string                      `json:"ItemPath" xml:"ItemPath" gorm:"<-:create;type:varchar(100);not null;"`
 	IPAddress          string                      `json:"IPAddress" xml:"IPAddress" gorm:"<-:create;type:varchar(100);not null;unique;"`
+	CreatedAt          time.Time                   `json:"CreatedAt" xml:"CreatedAt" gorm:"<-:create; default:"`
 }
 
 func NewVirtualMachine(
@@ -232,8 +233,12 @@ type VirtualMachineConfiguration struct {
 	Resources struct {
 		CpuNum            int32 `json:"CpuNum" xml:"CpuNum"`
 		MemoryInMegabytes int64 `json:"MemoryInMegabytes" xml:"MemoryInMegabytes"`
-		MaxMemoryUsage    int64 `json:"MaxMemoryUsage,omitempty;" xml:"MaxMemoryUsage"`
-		MaxCpuUsage       int64 `json:"MaxCpuUsage,omitempty;" xml:"MaxCpuUsage"`
+
+		MaxMemoryUsage int64 `json:"MaxMemoryUsage,omitempty;" xml:"MaxMemoryUsage"`
+		MaxCpuUsage    int64 `json:"MaxCpuUsage,omitempty;" xml:"MaxCpuUsage"`
+
+		StorageCapacity    int64 `json:"StorageCapacity" xml:"StorageCapacity"`
+		MaxStorageCapacity int64 `json:"MaxStorageCapacity" xml:"MaxStorageCapacity"`
 	} `json:"Resources" xml:"Resources"` // Resources Info
 
 	Ssh struct {
@@ -269,21 +274,50 @@ func (this *VirtualMachineConfiguration) Value() (driver.Value, error) {
 const TypeByRootCredentials = "ByRootCredentials"
 const TypeByRootCertificate = "ByRootCertificate"
 
+type SshCredentialsInfo struct {
+	// SSH Configuration for the Virtual Machine Server, to connect by the Root Credentials
+	RootUsername string `json:"RootUsername" xml:"RootUsername"`
+	RootPassword string `json:"RootPassword" xml:"RootPassword"`
+}
+
+func NewSshCredentialsInfo(RootUsername string, RootPassword string) *SshCredentialsInfo {
+	return &SshCredentialsInfo{
+		RootUsername: RootUsername,
+		RootPassword: RootPassword,
+	}
+}
+
+type SshPublicKeyInfo struct {
+	// SSH Configuration for the Virtual Machine Server, to connect by the Root Public Key
+	Content  []byte `json:"Content" xml:"Content"`
+	Filename string `json:"Filename" xml:"Filename"`
+}
+
+func NewSshPublicKeyInfo(Content []byte, Filename string) *SshPublicKeyInfo {
+	return &SshPublicKeyInfo{
+		Content:  Content,
+		Filename: Filename,
+	}
+}
+
 type SSHConfiguration struct {
 	// Depending on the Type of the SSH Info, it can be via SSL Certificate or via Root Credentials
 	// So the Info Going to be Serialzied into json and put inside the `SshCredentialsInfo` Field
-	Type               string `json:"Type" xml:"Type"`
-	SshCredentialsInfo string `json:"SshCredentialsInfo" xml:"SshCredentialsInfo"`
-	VirtualMachineId   int    `json:"VirtualMachineId" xml:"VirtualMachineId"`
+	Type                 string             `json:"Type" xml:"Type"`
+	SshPublicKeyMethod   SshPublicKeyInfo   `json:"SshCredentialsInfo" xml:"SshCredentialsInfo"`
+	SshCredentialsMethod SshCredentialsInfo `json:"SshPublicKeyInfo" xml:"SshPublicKeyInfo"`
+	VirtualMachineId     int                `json:"VirtualMachineId" xml:"VirtualMachineId"`
 }
 
-func NewSshPublicKey(Type string, SshInfo []byte, VirtualMachineId int) *SSHConfiguration {
+func NewSshConfiguration(Type string, SshCredentialsMethod *SshCredentialsInfo, SshPublicKeyMethod *SshPublicKeyInfo, VirtualMachineId int) *SSHConfiguration {
 	return &SSHConfiguration{
-		Type:               Type,
-		SshCredentialsInfo: string(SshInfo),
-		VirtualMachineId:   VirtualMachineId,
+		Type:                 Type,
+		SshPublicKeyMethod:   *SshPublicKeyMethod,
+		VirtualMachineId:     VirtualMachineId,
+		SshCredentialsMethod: *SshCredentialsMethod,
 	}
 }
+
 func (this *SSHConfiguration) Scan(inter interface{}) error {
 	return json.Unmarshal(inter.([]byte), this)
 }

@@ -225,7 +225,7 @@ func (this *VirtualMachineCustomSpec) ApplySshConfig(Client vim25.Client, Virtua
 	switch {
 	case this.Ssh.Type == models.TypeByRootCredentials:
 		newCertificateManager := ssh_config.NewVirtualMachineSshCertificateManager(Client)
-		PublicKey, SslCertificateError := newCertificateManager.GenerateSshKeys(VirtualMachine)
+		PublicKey, SslCertificateError := newCertificateManager.GenerateSshKeys(VirtualMachine, this.Metadata.VirtualMachineId)
 		return PublicKey, SslCertificateError
 
 	case this.Ssh.Type == models.TypeByRootCertificate:

@@ -2,20 +2,12 @@ package ssh_rest
 
 import (
 	"net/http"
-
 	"os"
-
 	"github.com/LovePelmeni/Infrastructure/authentication"
-	"github.com/LovePelmeni/Infrastructure/deploy"
-
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-
 	"github.com/LovePelmeni/Infrastructure/models"
-	"github.com/LovePelmeni/Infrastructure/ssh_config"
-
 	"github.com/gin-gonic/gin"
-	"github.com/vmware/govmomi/vim25"
 )
 
 var (
@@ -44,29 +36,22 @@ func GetDownloadPublicSshCertificateRestController(Context *gin.Context) {
 	JwtCustomerCredentials, _ := authentication.GetCustomerJwtCredentials(Context.GetHeader("Authorization"))
 	VirtualMachineId := Context.Query("VirtualMachineId")
 	VirtualMachineOwnerId := JwtCustomerCredentials.Id
-	Client := vim25.Client{}
-
-	SshManager := ssh_config.NewVirtualMachineSshCertificateManager(Client)
-	VmManager := deploy.NewVirtualMachineManager(Client)
-
-	// Retrieving Virtual Machine Instance 
-	VirtualMachineInstance, FindError := VmManager.GetVirtualMachine(VirtualMachineId, VirtualMachineOwnerId)
-	if FindError != nil {Logger.Debug("Failed to Retrieve Virtual Machine", zap.Error(FindError))}
 
 	// Retrieving Virtual Machine Model Record 
 
 	var VirtualMachine models.VirtualMachine 
-	models.Database.Select("SshInfo").Model(&models.VirtualMachine{}).Where(
+	models.Database.Model(&models.VirtualMachine{}).Where(
 	"id = ? AND owner_id = ?", VirtualMachineId, VirtualMachineOwnerId).Find(&VirtualMachine)
 
 
-	// Retrieving Certificate Public Ssh Key
-	SshPublicCertificateContent, CertificateError := SshManager.GetSshPublicCertificate(
-	VirtualMachineInstance, VirtualMachine.SshInfo.SshCredentialsInfo)
+	// Obtaining Info about the Initializing the SSH Certificates 
 
-	if CertificateError != nil {Logger.Error("Certificate Error"); Context.JSON(http.StatusBadGateway,
-    gin.H{"Error": "Failed to Retrieve Certificate"}); return}
+	CertificateContent := VirtualMachine.SshInfo.SshPublicKeyMethod.Content 
+	CertificateFilename := VirtualMachine.SshInfo.SshPublicKeyMethod.Filename
 
 	// Returning Response
-	Context.JSON(http.StatusOK, gin.H{"CertificateContent": SshPublicCertificateContent})
+	Context.JSON(http.StatusOK, gin.H{
+		"CertificateContent": CertificateContent,
+	    "CertificateFilename": CertificateFilename,
+	})
 } 

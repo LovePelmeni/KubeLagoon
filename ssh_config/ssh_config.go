@@ -60,7 +60,7 @@ func NewSshRootCredentials(Username string, Password string) *SshRootCredentials
 }
 
 type SshCertificateCredentials struct {
-	FilePath string `json:"FilePath" xml:"FilePath"`
+	// SSH Certificate Credentials for the Virtual Server
 	FileName string `json:"FileName" xml:"FileName"`
 	Content  []byte `json:"Content" xml:"Content"`
 }
@@ -78,34 +78,13 @@ type VirtualMachineSshManagerInterface interface {
 
 type VirtualMachineSshCertificateManager struct {
 	VirtualMachineSshManagerInterface
-	Client         vim25.Client
+	Client vim25.Client
 }
 
 func NewVirtualMachineSshCertificateManager(Client vim25.Client) *VirtualMachineSshCertificateManager {
 	return &VirtualMachineSshCertificateManager{
-		Client:         Client,
+		Client: Client,
 	}
-}
-
-func (this *VirtualMachineSshCertificateManager) GetSshPublicCertificate(VirtualMachine *object.VirtualMachine, SshKeyFileName string) (*object.HostCertificateInfo, error) {
-	// Returns the File with the Public Key, which can potentially be downloaded on the customer's machine
-	var CertificateHostManager *types.ManagedObjectReference
-	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*20)
-	defer CancelFunc()
-
-	// Receiving the SSH Public Key File and returns it back as a file
-	HostSystem, FindError := VirtualMachine.HostSystem(TimeoutContext)
-	if FindError != nil {
-		Logger.Error("Failed to Determine VM Server Host System", zap.Error(FindError))
-	}
-	Manager := object.NewHostCertificateManager(&this.Client, *CertificateHostManager, HostSystem.Reference())
-	CertificateInfo, DownloadedFileError := Manager.CertificateInfo(TimeoutContext)
-	if DownloadedFileError != nil {
-		Logger.Error(
-			"Failed to Download the Ssh Key File", zap.Error(DownloadedFileError))
-		return nil, DownloadedFileError
-	}
-	return CertificateInfo, nil
 }
 
 func (this *VirtualMachineSshCertificateManager) UploadSshKeys(VirtualMachine *object.VirtualMachine, Key SshCertificateCredentials) error {
@@ -136,15 +115,12 @@ func (this *VirtualMachineSshCertificateManager) UploadSshKeys(VirtualMachine *o
 	}
 }
 
-func (this *VirtualMachineSshCertificateManager) GenerateSshKeys(VirtualMachine *object.VirtualMachine) (*SshCertificateCredentials, error) {
+func (this *VirtualMachineSshCertificateManager) GenerateSshKeys(VirtualMachine *object.VirtualMachine, VirtualMachineId string) (*SshCertificateCredentials, error) {
 
 	// Returns Generated SSH Keys for the Virtual Machine Server
 
 	// Certificate will be Generated with the Specific Name and will be Stored on the Host System
 	// Of the Virtual Machine Server
-
-	// SSL Certificate Distinguish Name Consists of the Following Pattern:
-	// `VirtualMachine-<VirtualMachine's Name>`
 
 	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Minute*1)
 	defer CancelFunc()
@@ -153,12 +129,20 @@ func (this *VirtualMachineSshCertificateManager) GenerateSshKeys(VirtualMachine 
 	if HostSystemError != nil {
 		return nil, errors.New("Failed to Get OS Info")
 	}
+	// Initializing Manager for the SSH Management
 	Manager := object.NewHostCertificateManager(
 		&this.Client, *types.NewReference(this.Client.ServiceContent.RootFolder), HostSystem.Reference())
 
-	SSLCertificateDistinguishName := fmt.Sprintf("VirtualMachine-%s", VirtualMachine.Name())
+	SSLCertificateDistinguishName := fmt.Sprintf("%s-%s", VirtualMachine.Name(), VirtualMachineId)
+	Manager.Client().Certificate().Leaf.MaxPathLen = 30 // Initializing Max Path len for the Virtual Machine Server
 	GeneratedCertificate, GenerationError := Manager.GenerateCertificateSigningRequestByDn(TimeoutContext, SSLCertificateDistinguishName)
-	return NewSshCertificateCredentials([]byte(GeneratedCertificate), "ssh_key.pub"), GenerationError
+
+	// Returning the Response
+	currentTime := time.Now()
+	return NewSshCertificateCredentials(
+		[]byte(GeneratedCertificate),
+		fmt.Sprintf("%s.%s.pub", VirtualMachineId, currentTime),
+	), GenerationError
 }
 
 type VirtualMachineSshRootCredentialsManager struct {
@@ -181,7 +165,7 @@ func (this *VirtualMachineSshCertificateManager) GetSshRootUserCredentials(Virtu
 
 	var VirtualMachine models.VirtualMachine
 	models.Database.Model(&models.VirtualMachine{}).Where(
-	"id = ?", VirtualMachineId).Find(&VirtualMachine)
+		"id = ?", VirtualMachineId).Find(&VirtualMachine)
 	return VirtualMachine.SshInfo
 }
 

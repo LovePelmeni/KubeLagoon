@@ -17,6 +17,7 @@ import (
 
 	"github.com/LovePelmeni/Infrastructure/authentication"
 	"github.com/LovePelmeni/Infrastructure/deploy"
+	"github.com/LovePelmeni/Infrastructure/healthcheck"
 	"github.com/LovePelmeni/Infrastructure/models"
 
 	"go.uber.org/zap"
@@ -29,8 +30,10 @@ import (
 	"github.com/vmware/govmomi"
 
 	"github.com/vmware/govmomi/object"
+	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/vapi/rest"
 	_ "github.com/vmware/govmomi/vapi/rest"
+	"github.com/vmware/govmomi/vim25/mo"
 )
 
 // Insfrastructure API Environment Variables
@@ -95,6 +98,41 @@ func init() {
 
 // VM Rest API Controllers
 
+// VirtualMachineDataSchema := {
+// 	"VirtualMachineId": "1567",
+// 	"VirtualMachineName": "Virtual Machine",
+// 	"Running": true,
+// 	"Deploying": false,
+// 	"Shutdown": false,
+// 	"paymentDueDate": "2020-20-02",
+// 	"CreatedAt": "1/2/2020",
+// 	"Ssh": {
+// 	  "byRootCredentials": false,
+// 	  "byRootCertificate": true,
+// 	  "RootUsername": "root",
+// 	  "RootPassword": "root_password",
+// 	  "IpAddress": "127.235.11.28", // IP Address of the Virtual Machine Server
+// 	},
+// 	"Owner": {
+// 	  "Username": "some-user",
+// 	  "Email": "email@gmail.com",
+// 	  "City": "Vancouver",
+// 	  "Country": "Canada",
+// 	  "Street": "Smith's Street, 4",
+// 	  "ZipCode": "125167",
+// 	},
+// 	"Capacities": { // Capacities, specified by the Customer
+// 	  "MaxMemory": 1000,
+// 	  "MaxCpuNum": 1000,
+// 	  "MaxStorageCapacity": 1000,
+// 	},
+// 	"Resources": { // Used Resources by the Virtual Machine Server by now
+// 	  "CpuNum": 10,
+// 	  "Memory": 100,
+// 	  "StorageCapacity": 100,
+// 	},
+//   },
+
 type VirtualMachineSchemaStructure struct {
 	// Completed Structure of the Virtual Machine Server JSON Schema
 
@@ -102,14 +140,10 @@ type VirtualMachineSchemaStructure struct {
 	VirtualMachineName string `json:"VirtualMachineName"`
 	VirtualMachineId   string `json:"VirtualMachineId"`
 
-	// Resources
-	CpuNum          string `json:"CpuNum"`
-	Memory          string `json:"Memory"`
-	StorageCapacity string `json:"StorageCapacity"`
-
 	// Payment Due Parameters
 	PaymentDueDate  string `json:"paymentDueDate"`
 	PaymentDueTerms string `json:"paymentDueTerms"`
+	CreatedAt       string `json:"CreatedAt"`
 
 	// Deploying Status Parameters
 	Deploying bool `json:"Deploying"`
@@ -117,6 +151,14 @@ type VirtualMachineSchemaStructure struct {
 	Shutdown  bool `json:"Shutdown"`
 
 	// Owner Information
+
+	Ssh struct {
+		byRootCredentials bool   `json:"byRootCredentials" xml:"byRootCredentials"`
+		byRootCertificate bool   `json:"byRootCertificate" xml:"byRootCertificate"`
+		RootUsername      string `json"RootUsername" xml:"RootUsername"`
+		RootPassword      string `json:"RootPassword" xml:"RootPassword"`
+		IpAddress         string `json:"IpAddress" xml:"IpAddress"`
+	} `json:"Ssh" xml:"Ssh"`
 
 	Owner struct {
 		Username string `json:"Username"`
@@ -126,6 +168,18 @@ type VirtualMachineSchemaStructure struct {
 		ZipCode  string `json:"ZipCode"`
 		Street   string `json:"Street"`
 	} `json:"Owner"`
+
+	Capacities struct {
+		MaxMemory          int `json:"MaxMemory" xml:"MaxMemory"`
+		MaxCpuNum          int `json:"MaxCpuNum" xml:"MaxCpuNum"`
+		MaxStorageCapacity int `json:"MaxStorageCapacity" xml:"MaxStorageCapacity"`
+	} `json:"Capacities" xml:"Capacities"`
+
+	Resources struct {
+		CpuNum          int `json:"CpuNum" xml:"CpuNum"`
+		Memory          int `json:"Memory" xml:"Memory"`
+		StorageCapacity int `json:"StorageCapacity" xml:"StorageCapacity"`
+	} `json:"Resources" xml:"Resources"`
 }
 
 func GetCustomerVirtualMachine(RequestContext *gin.Context) {
@@ -137,9 +191,9 @@ func GetCustomerVirtualMachine(RequestContext *gin.Context) {
 
 	jwtCredentials, _ := authentication.GetCustomerJwtCredentials(
 		RequestContext.Request.Header.Get("jwt-token"))
-	CustomerId := jwtCredentials.UserId
 
-	// Receiving Customer's Virtual Machine Server Object
+	// Initializing Base Parameters to perform the Action
+	CustomerId := jwtCredentials.UserId
 
 	VirtualMachineId := RequestContext.Query("VirtualMachineId")
 	models.Database.Model(&VirtualMachineDatabaseObject).Where(
@@ -149,14 +203,48 @@ func GetCustomerVirtualMachine(RequestContext *gin.Context) {
 	models.Database.Model(&models.Customer{}).Where(
 		"id = ?", CustomerId).Find(&CustomerDatabaseObject)
 
+	VirtualMachineManager := deploy.NewVirtualMachineManager(*Client.Client)
+	VirtualMachineInstance, FindError := VirtualMachineManager.GetVirtualMachine(VirtualMachineId, string(CustomerId))
+	if FindError != nil {
+		RequestContext.JSON(http.StatusNotFound, gin.H{"Error": "Virtual Machine Does Not Exist"})
+	}
+
+	TimeoutContext, CancelFunc := context.WithTimeout(context.Background(), time.Second*5)
+	defer CancelFunc()
+
+	// Receiving the Power State
+	PowerState, _ := VirtualMachineInstance.PowerState(TimeoutContext)
+
+	// Receiving the 'Mo' Entity Abstraction of the Virtual Machine Server
+
+	var MoVirtualMachine *mo.VirtualMachine
+	Finder := object.NewSearchIndex(Client.Client)
+	ObjectVirtualMachine, FindError := Finder.FindByInventoryPath(TimeoutContext, VirtualMachineDatabaseObject.ItemPath)
+	Collector := property.DefaultCollector(Client.Client)
+	Collector.RetrieveOne(TimeoutContext, ObjectVirtualMachine.Reference(), []string{"*"}, &MoVirtualMachine)
+
+	// Receiving Virtual Server Usage
+
+	healthManager := healthcheck.NewVirtualMachineHealthCheckManager(MoVirtualMachine)
+	CpuResourceUsage := healthManager.GetCpuMetrics().OverallCpuUsage
+	MemoryResourceUsage := healthManager.GetMemoryUsageMetrics().Active
+	StorageResourceUsage := healthManager.GetStorageUsageMetrics().Committed
+
 	VirtualMachine := VirtualMachineSchemaStructure{
 
 		VirtualMachineName: VirtualMachineDatabaseObject.VirtualMachineName,
 		VirtualMachineId:   strconv.Itoa(VirtualMachineDatabaseObject.ID),
 
-		CpuNum:          strconv.Itoa(int(VirtualMachineDatabaseObject.Configuration.Resources.CpuNum)),
-		Memory:          strconv.Itoa(int(VirtualMachineDatabaseObject.Configuration.Resources.MemoryInMegabytes)),
-		StorageCapacity: strconv.Itoa(int(VirtualMachineDatabaseObject.Configuration.Disk.CapacityInKB)),
+		CreatedAt: fmt.Sprintf("%s-%s-%s",
+			VirtualMachineDatabaseObject.CreatedAt.Day,
+			VirtualMachineDatabaseObject.CreatedAt.Month,
+			VirtualMachineDatabaseObject.CreatedAt.Year()),
+
+		// Active Status
+
+		Running:   PowerState == "Running",
+		Deploying: PowerState == "Deploying",
+		Shutdown:  PowerState == "Shutdown",
 
 		Owner: struct {
 			Username string "json:\"Username\""
@@ -172,6 +260,25 @@ func GetCustomerVirtualMachine(RequestContext *gin.Context) {
 			Country:  CustomerDatabaseObject.Country,
 			ZipCode:  CustomerDatabaseObject.ZipCode,
 			Street:   CustomerDatabaseObject.Street,
+		},
+		Capacities: struct {
+			MaxMemory          int "json:\"MaxMemory\" xml:\"MaxMemory\""
+			MaxCpuNum          int "json:\"MaxCpuNum\" xml:\"MaxCpuNum\""
+			MaxStorageCapacity int "json:\"MaxStorageCapacity\" xml:\"MaxStorageCapacity\""
+		}{
+			MaxCpuNum:          int(VirtualMachineDatabaseObject.Configuration.Resources.MaxCpuUsage),
+			MaxMemory:          int(VirtualMachineDatabaseObject.Configuration.Resources.MaxMemoryUsage),
+			MaxStorageCapacity: int(VirtualMachineDatabaseObject.Configuration.Resources.MaxStorageCapacity),
+		},
+		// Resources, that is being used right now by the Virtual Server, (if it does running)
+		Resources: struct {
+			CpuNum          int "json:\"CpuNum\" xml:\"CpuNum\""
+			Memory          int "json:\"Memory\" xml:\"Memory\""
+			StorageCapacity int "json:\"StorageCapacity\" xml:\"StorageCapacity\""
+		}{
+			CpuNum:          int(CpuResourceUsage),
+			Memory:          int(MemoryResourceUsage),
+			StorageCapacity: int(StorageResourceUsage),
 		},
 	}
 
@@ -208,9 +315,6 @@ func GetCustomerVirtualMachines(RequestContext *gin.Context) {
 				VirtualMachineId:   strconv.Itoa(VirtualMachineServer.ID),
 
 				// Resources Configuration
-				CpuNum:          strconv.Itoa(int(VirtualMachineServer.Configuration.Resources.CpuNum)),
-				Memory:          strconv.Itoa(int(VirtualMachineServer.Configuration.Resources.MemoryInMegabytes)),
-				StorageCapacity: strconv.Itoa(VirtualMachineServer.Configuration.Disk.CapacityInKB),
 				Owner: struct {
 					Username string "json:\"Username\""
 					Email    string "json:\"Email\""
@@ -424,9 +528,10 @@ func DeployVirtualMachineRestController(RequestContext *gin.Context) {
 		var VirtualMachineSshConfiguration models.SSHConfiguration
 
 		VirtualMachineSshConfiguration = models.SSHConfiguration{
-			Type:               VmInfo.SshType,
-			SshCredentialsInfo: VmInfo.SshInfo,
-			VirtualMachineId:   VirtualMachine.ID,
+			Type:                 VmInfo.SshType,
+			SshCredentialsMethod: *models.NewSshCredentialsInfo(),
+			SshPublicKeyMethod:   *models.NewSshPublicKeyInfo(),
+			VirtualMachineId:     VirtualMachine.ID,
 		}
 
 		json.Unmarshal(VmCustomConfig.ToJson(), &VirtualMachineCustomConfiguration)

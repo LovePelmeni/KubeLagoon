@@ -43,6 +43,7 @@ func init() {
 	InitializeProductionLogger()
 }
 
+
 type VirtualMachineIPAddress struct {
 	// Struct, Representing Virtual Machine IP Address
 	Options  types.BaseCustomizationOptions
